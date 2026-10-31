@@ -238,7 +238,10 @@ the business payload hash matches a stored transaction found by key, or by exter
 The hash is SHA-256 over canonical JSON of the business fields, with keys sorted, and it
 excludes transport metadata. A replay returns the original result, including the balance
 observed at that time (`resultingBalance`), even if the wallet has changed since. A held
-transaction replays the balance it was held with (migration 7). A different payload is
+transaction replays the balance it was held with (migration 7). A replay therefore reports the
+status, and the balance, that the transaction reached when its state last changed. It is never the live
+wallet balance, which `GET /wallets/:id` reports. Once a held transaction is resolved, a replay reports
+the processed result with the balance after that processing. A different payload is
 `IDEMPOTENCY_CONFLICT`, also when the new request names a wallet that does not exist, since
 the key was already used. The conflict is checked before the wallet. Decision: [ADR 0003](docs/adr/0003-idempotency-scope-and-payload-hash.md).
 
@@ -471,7 +474,8 @@ These are choices the specification leaves open. Each one is tested.
   of the specification says "pelo mesmo tipo de operação", which would allow a REFUND and then a
   ROLLBACK of the same BET, and that credits the stake twice. This breaks the global rule that
   credits are never duplicated, so the stricter reading is adopted. Enforced in code and by the
-  partial unique index `wager_one_processed_reversal_per_reference`. The specification owner
+  partial unique index `wager_one_processed_reversal_per_reference`. A rolled-back refund does not free
+  its BET: a second reversal of the BET is `REFERENCE_ALREADY_REVERSED` (tested). The specification owner
   should confirm this reading.
 - `playerId` is the provider's identifier. It is text, not a UUID, although the specification's examples
   use UUIDs. A value that is not a UUID is accepted, and it cannot cause a server error. Control

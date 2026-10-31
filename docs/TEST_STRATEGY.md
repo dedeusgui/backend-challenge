@@ -137,6 +137,23 @@ Two weaknesses in the tests were found and fixed. A lease assertion proved nothi
 reading the test. A two-worker race test did not reach its race window, found when a mutant
 survived.
 
+Mutants of this review, against the unit, wagering and schema suites. Each one changes one line of a
+committed file, runs the suites, and restores the file. The concurrency suite was not run for these
+mutants, because one run takes about a minute.
+
+| Mutant | Change                                                   | Result                                                                                      |
+| ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| M1     | the reversal check in `TransactionSettlement` removed    | **Killed** by 5 tests: a refund credited once, one reversal per BET, a ROLLBACK of a REFUND |
+| M2     | the unsettled-reference check of a BET removed           | **Killed** by 4 tests: a BET pays once, a REFUND after a WIN or a LOSS                      |
+| M3     | the direction of a ROLLBACK not inverted                 | **Killed** by 7 tests                                                                       |
+| M4     | the wallet comparison in `sharesContextWith` removed     | **Killed** by 1 unit test, a reference from a different wallet                              |
+| M5     | a debit equal to the balance refused (strict comparison) | **Killed** by 2 tests, one unit test that debits the whole balance                          |
+
+No mutant of this round survived. The partial unique indexes also refuse the second row in M1 and M2
+(`wager_one_processed_reversal_per_reference`, `wager_one_processed_settlement_per_reference`), so a
+bypass of the domain check cannot store a second effect. The database gives a unique violation, not the
+business answer (`REFERENCE_ALREADY_REVERSED`), so the business answer is tested in the domain suites.
+
 ## Load
 
 `bun run test:load` measures the stack under a product mix, pinned to a number of CPUs. The stack

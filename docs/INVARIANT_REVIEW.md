@@ -44,7 +44,29 @@ section 13, and each changes behaviour that a provider sees.
 | D4  | A reference is reversed at most once, whatever the kind. Specification rule 4 says "pelo mesmo tipo de operação".                | Rule 4 read literally allows REFUND and then ROLLBACK of one BET, which credits the stake twice.                       | If the owner reads rule 4 literally, the double credit returns. It is blocked by `wager_one_processed_reversal_per_reference`.                                         |
 | D5  | Authentication is API keys with two roles, not an external identity provider. The specification expects an IdP (section 2).      | ADR 0007: a simple scheme that the project needs. A keycloak or zitadel container was judged too heavy for this build. | Keys do not expire, rotate on a schedule, or travel over TLS in this build. A production deployment needs the IdP the specification suggests.                          |
 | D6  | A currency or player mismatch is a persisted REJECTED row, checked only by the domain.                                           | Auditability (ARCHITECTURE section 13). A foreign key would refuse the row.                                            | A writer that bypasses the domain could store a mismatched row without a rejection code. No such writer exists in the code.                                            |
-| D7  | A worker restarts after a crash with a fixed one-second pause. There is no exponential backoff for loops.                        | Simple, and each loop logs its failure.                                                                                | During a long outage each loop logs once a second.                                                                                                                     |
+
+**Re-evaluation of D2, D3 and D4 (this review).** Each one was checked against the code and the tests,
+and against the global invariant that no credit is duplicated.
+
+- **D4, once per reference.** Kept. Read literally, rule 4 allows a REFUND and then a ROLLBACK of one
+  BET, which credits the stake twice, so the invariant prevails. The stricter reading has a consequence
+  that is now tested: a rolled-back refund does not free its BET, and a second reversal of the BET is
+  `REFERENCE_ALREADY_REVERSED`. A finer rule that counts net reversals could allow that case without a
+  double credit. It is not built, because no requirement asks for it.
+- **D3, a REFUND only for a BET with no result.** Kept, and now enforced by the database as well
+  (migration 8). A refund and a result cannot both be processed for one BET, in either order. The
+  reverse order (a WIN after a refund) is refused by the reversal rule.
+- **D2, a ROLLBACK in every state.** Kept as recorded, but its economic effect needs the owner's
+  decision. After a WIN, rolling back the BET returns the stake and keeps the win, so the player keeps
+  both. No credit is duplicated by identity or by amount: the stake returns once (D4), and the win is
+  credited once. The alternative is to refuse a ROLLBACK of a BET that has a processed WIN, so that the
+  provider rolls back the WIN first, as D3 does for refunds. That changes behaviour, so it was not made
+  without the owner.
+
+The duplicate-credit paths that remain are the unnamed WIN (D1): a WIN that names no BET can be
+credited again when the provider resends it under a new external id. That is by design, because each
+external id is an operation (ARCHITECTURE section 7).
+| D7 | A worker restarts after a crash with a fixed one-second pause. There is no exponential backoff for loops. | Simple, and each loop logs its failure. | During a long outage each loop logs once a second. |
 
 ## 3. Invariants
 

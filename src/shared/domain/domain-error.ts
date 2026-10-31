@@ -5,7 +5,9 @@ export type DomainErrorCode =
   | 'INSUFFICIENT_BALANCE'
   | 'INVALID_LEDGER_ENTRY'
   | 'INVALID_TRANSACTION'
-  | 'INVALID_TRANSACTION_TRANSITION';
+  | 'INVALID_TRANSACTION_TRANSITION'
+  | 'INVALID_OUTBOX_TRANSITION'
+  | 'INVALID_INBOX_TRANSITION';
 
 /**
  * Violation of a domain rule on input or on an operation.

@@ -6,15 +6,18 @@ import { fileURLToPath } from 'node:url';
 import { buildSite, countMatrixRows, REVIEW_BASE_COMMIT } from '../../../scripts/build-site';
 
 /**
- * The static showcase is built into a temporary directory and checked as a reader would meet it: every link
- * resolves, every figure is labelled, nothing loads from a service, and the numbers are the ones the
- * repository holds. It is a page that must keep working with the operating environment switched off.
+ * The static showcase, built into a temporary directory and checked the way a reader meets it: every anchor and
+ * file resolves, nothing loads from a service, the diagrams carry their components, every repository link names
+ * the page's commit, and the numbers equal their sources. The page must keep working with the operating
+ * environment switched off, so its one script is checked for the network calls it does not make.
  */
 
 const ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+const REPO = 'https://github.com/dedeusgui/backend-challenge';
 let outDir: string;
 let html: string;
 let commit: string;
+let linksChecked: number;
 
 beforeAll(async () => {
   outDir = await mkdtemp(join(tmpdir(), 'showcase-'));
@@ -25,6 +28,7 @@ beforeAll(async () => {
     branch: 'test-branch',
   });
   commit = result.commit;
+  linksChecked = result.linksChecked;
   html = await readFile(join(outDir, 'index.html'), 'utf8');
 }, 60_000);
 
@@ -63,54 +67,74 @@ describe('the static showcase', () => {
     expect(html).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
   });
 
-  test('it loads nothing from a service: no script, no external style sheet, no external image', () => {
-    expect(html).not.toContain('<script');
-    expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/);
-    for (const source of attributes('src')) {
-      expect(source.startsWith('http')).toBe(false);
+  test('it loads nothing from a service: its style sheet and script are its own files, on the same origin', async () => {
+    expect(html).toMatch(/<link[^>]*rel="stylesheet"[^>]*href="assets\/site\.css"/);
+    expect(html).toMatch(/<script[^>]*src="assets\/site\.js"[^>]*defer/);
+    for (const source of [...attributes('src'), ...attributes('href')]) {
+      if (source.startsWith('http')) {
+        expect(source.startsWith(REPO)).toBe(true);
+      }
     }
+    expect(html).not.toMatch(/<(iframe|object|embed)\b/);
+    expect(html).not.toMatch(/\son[a-z]+="/);
   });
 
-  test('every in-page anchor has its target, and every image file exists', async () => {
+  test('the one script makes no network call and loads nothing', async () => {
+    const script = await readFile(join(outDir, 'assets/site.js'), 'utf8');
+    for (const forbidden of [
+      'fetch(',
+      'XMLHttpRequest',
+      'WebSocket',
+      'import(',
+      'http:',
+      'https:',
+    ]) {
+      expect(script).not.toContain(forbidden);
+    }
+    expect(script).not.toContain('innerHTML');
+  });
+
+  test('every in-page anchor has its target, and every file the page names exists', async () => {
+    // "#" is the placeholder of the detail panel's links: the script points them at the selected component.
     for (const href of attributes('href')) {
-      if (href.startsWith('#')) {
+      if (href.startsWith('#') && href !== '#') {
         expect(html).toContain(`id="${href.slice(1)}"`);
       }
     }
-    for (const source of attributes('src')) {
-      expect((await stat(join(outDir, source))).isFile()).toBe(true);
+    for (const file of [
+      'assets/site.css',
+      'assets/site.js',
+      'diagrams/bet-over-http.svg',
+      'diagrams/queued-command.svg',
+      'diagrams/outcome-entities.svg',
+    ]) {
+      expect((await stat(join(outDir, file))).isFile()).toBe(true);
     }
   });
 
-  test('every figure has alt text, and every chart has a title and a description', () => {
-    const images = [...html.matchAll(/<img\b[^>]*>/g)].map((match) => match[0]);
-    expect(images.length).toBe(3);
-    for (const image of images) {
-      expect(image).toMatch(/alt="[^"]{10,}"/);
-    }
-    expect(html).toContain('<title id="load-chart-title">');
-    expect(html).toContain('<desc id="load-chart-desc">');
-  });
-
-  test('links to files and trees point at this exact commit; links to a listed commit name a full hash', () => {
-    // The link to a CI run is another shape of URL, and is checked on its own below.
-    const links = attributes('href').filter(
-      (href) =>
-        href.includes('github.com/dedeusgui/backend-challenge') && !href.includes('/actions/runs/'),
-    );
-    expect(links.length).toBeGreaterThan(10);
-    for (const link of links) {
-      const match = /backend-challenge\/(blob|tree|commit)\/([0-9a-f]+)/.exec(link);
-      const reference = match?.[2];
-      if (match?.[1] === 'commit') {
-        expect({ link, fullHash: /^[0-9a-f]{40}$/.test(reference ?? '') }).toEqual({
-          link,
-          fullHash: true,
-        });
+  test('every repository link names the page commit, a full hash, and a path that exists in it', () => {
+    const links = [...html.matchAll(new RegExp(`${REPO}/(blob|tree|commit)/([^"\\s<>)]+)`, 'g'))];
+    expect(links.length).toBeGreaterThan(40);
+    expect(linksChecked).toBe(links.length);
+    for (const match of links) {
+      const [, kind, rest = ''] = match;
+      const sha = rest.split('/')[0] ?? '';
+      if (kind === 'commit') {
+        expect(/^[0-9a-f]{40}$/.test(sha)).toBe(true);
       } else {
-        expect({ link, pinned: reference }).toEqual({ link, pinned: commit });
+        expect(sha).toBe(commit);
       }
     }
+  });
+
+  test('the CI run link is the one the gate file names, and no other run', async () => {
+    const gate = JSON.parse(
+      await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(html).toContain(`href="${String(gate.ciRun)}"`);
+    expect(String(gate.ciRun)).toMatch(
+      /^https:\/\/github\.com\/dedeusgui\/backend-challenge\/actions\/runs\/\d+$/,
+    );
   });
 
   test('no link goes to a dashboard, a metrics endpoint, a database or a queue', () => {
@@ -118,26 +142,105 @@ describe('the static showcase', () => {
       expect(href).not.toMatch(/localhost|127\.0\.0\.1|grafana|prometheus|\/metrics|5432|4566/i);
     }
   });
+});
 
-  test('the test counts link to the CI run they were copied from, of the commit they name', async () => {
-    const gate = JSON.parse(
-      await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8'),
-    ) as Record<string, unknown>;
-    expect(html).toContain(`href="${String(gate.ciRun)}"`);
-    expect(html).toContain(`<code>${String(gate.commit).slice(0, 7)}</code>`);
-    expect(String(gate.ciRun)).toMatch(
-      /^https:\/\/github\.com\/dedeusgui\/backend-challenge\/actions\/runs\/\d+$/,
-    );
+describe('the interactive diagrams', () => {
+  test('there are three diagrams, each drawn twice (wide and narrow) with the same number of components', () => {
+    const figures = [
+      ...html.matchAll(/<figure class="diagram" data-diagram="([a-z-]+)">([\s\S]*?)<\/figure>/g),
+    ];
+    expect(figures.map((match) => match[1])).toEqual([
+      'bet-over-http',
+      'queued-command',
+      'outcome-entities',
+    ]);
+    for (const match of figures) {
+      const body = match[2] ?? '';
+      const svgs = [...body.matchAll(/<svg [\s\S]*?<\/svg>/g)].map((svg) => svg[0]);
+      expect(svgs.length).toBe(2);
+      const counts = svgs.map((svg) => (svg.match(/class="node /g) ?? []).length);
+      expect(new Set(counts).size).toBe(1);
+      const listed = (body.match(/<li><strong>/g) ?? []).length;
+      expect(listed).toBe(counts[0] ?? -1);
+    }
   });
 
-  test('the numbers match the files they come from', async () => {
+  test('each component can be selected, and carries the file and the test it names', () => {
+    for (const svg of html.match(/<svg [\s\S]*?<\/svg>/g) ?? []) {
+      if (!svg.includes('class="node ')) continue;
+      expect(svg).toContain('role="group"');
+      for (const node of svg.match(/<g class="node [\s\S]*?">/g) ?? []) {
+        expect(node).toContain('tabindex="0"');
+        expect(node).toContain('data-title="');
+        expect(node).toMatch(
+          /data-proof-href="https:\/\/github\.com\/dedeusgui\/backend-challenge\/blob\/[0-9a-f]{40}\/test\//,
+        );
+      }
+    }
+  });
+
+  test('every attribute the script selects or reads is written into each diagram, or the script silently does nothing', async () => {
+    const script = await readFile(join(outDir, 'assets/site.js'), 'utf8');
+    const names = new Set<string>([
+      ...[...script.matchAll(/\[(data-[a-z-]+)\]/g)].map((match) => match[1] ?? ''),
+      ...[...script.matchAll(/getAttribute\('(data-[a-z-]+)'\)/g)].map((match) => match[1] ?? ''),
+    ]);
+    expect(names.size).toBeGreaterThan(0);
+    const figures = [
+      ...html.matchAll(/<figure class="diagram" data-diagram="[a-z-]+">([\s\S]*?)<\/figure>/g),
+    ];
+    expect(figures.length).toBe(3);
+    for (const match of figures) {
+      const body = match[0];
+      const missing = [...names].filter((name) => !new RegExp(`\\s${name}(=|\\s|>)`).test(body));
+      expect(missing).toEqual([]);
+    }
+  });
+
+  test('each diagram keeps its natural size and scrolls sideways in its canvas, so its text is never shrunk', async () => {
+    const css = await readFile(join(outDir, 'assets/site.css'), 'utf8');
+    const svgs = [...html.matchAll(/<svg viewBox="0 0 (\d+) (\d+)"[^>]*role="group"[^>]*>/g)];
+    expect(svgs.length).toBe(6);
+    for (const match of svgs) {
+      const width = Number(match[1]);
+      expect(match[0]).toContain(`style="min-width:${width}px"`);
+    }
+    expect(css).toMatch(/\.diagram-canvas \{[^}]*overflow-x: auto/);
+  });
+
+  test('the detail panel and the list are both present, so a reader without the script still gets the text', () => {
+    expect(html.match(/class="detail"/g)?.length).toBe(3);
+    expect(html.match(/<details>\s*<summary>Lista dos componentes/g)?.length).toBe(3);
+  });
+});
+
+describe('the numbers match the files they come from', () => {
+  test('the test counts come from the CI run the gate file names', async () => {
     const gate = JSON.parse(
       await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8'),
-    ) as Record<string, unknown>;
+    ) as Record<string, number | string>;
     expect(html).toMatch(new RegExp(`<td>${String(gate.unit)}</td>\\s*<td>0</td>`));
     expect(html).toMatch(new RegExp(`<td>${String(gate.e2e)}</td>\\s*<td>0</td>`));
+    const total =
+      Number(gate.unit) +
+      Number(gate.infra) +
+      Number(gate.integration) +
+      Number(gate.concurrency) +
+      Number(gate.e2e);
+    expect(html).toContain(`<div class="figure">${total}</div>`);
+  });
+
+  test('the requirement count and the OpenAPI operation count match their sources', async () => {
     const matrix = await readFile(join(ROOT, 'docs/REQUIREMENTS_MATRIX.md'), 'utf8');
     expect(html).toContain(`<strong>${countMatrixRows(matrix)}</strong> identificadores`);
+    const openapi = JSON.parse(await readFile(join(ROOT, 'docs/openapi.json'), 'utf8')) as {
+      paths: Record<string, Record<string, unknown>>;
+    };
+    const operations = Object.values(openapi.paths).reduce(
+      (sum, item) => sum + Object.keys(item).length,
+      0,
+    );
+    expect(html).toContain(`<div class="figure">${operations}</div>`);
   });
 
   test('each load run shows its agreed rate, its first failing rate, and the machine it ran on', async () => {
@@ -157,15 +260,24 @@ describe('the static showcase', () => {
 
   test('the commits listed are exactly the ones after the review base, oldest first', async () => {
     const listed = [
-      ...html.matchAll(
-        /<li><a href="https:\/\/github\.com\/dedeusgui\/backend-challenge\/commit\/([0-9a-f]{40})">/g,
-      ),
+      ...html.matchAll(new RegExp(`<li><a href="${REPO}/commit/([0-9a-f]{40})">`, 'g')),
     ].map((match) => match[1] ?? '');
-    const range = `${REVIEW_BASE_COMMIT}..HEAD`;
-    const expected = (await gitLines(['rev-list', '--reverse', range])).map((line) => line.trim());
-
+    const expected = (await gitLines(['rev-list', '--reverse', `${REVIEW_BASE_COMMIT}..HEAD`])).map(
+      (line) => line.trim(),
+    );
     expect(listed.length).toBeGreaterThan(0);
     expect(listed).toEqual(expected);
+  });
+});
+
+describe('the guarantees and the decisions', () => {
+  test('each guarantee card names the test that proves it, and that test exists in the commit', async () => {
+    const cards = html.match(/<article class="guarantee">/g) ?? [];
+    expect(cards.length).toBe(8);
+    for (const match of html.matchAll(/Prova: <a href="([^"]+)">/g)) {
+      const path = (match[1] ?? '').replace(`${REPO}/blob/${commit}/`, '');
+      expect((await stat(join(ROOT, path))).isFile()).toBe(true);
+    }
   });
 });
 

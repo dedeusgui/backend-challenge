@@ -6,220 +6,15 @@
     <title>Processador distribuído de apostas: vitrine técnica</title>
     <meta
       name="description"
-      content="Vitrine estática do Distributed Wagering Processor: arquitetura, garantias financeiras, testes, desempenho medido e limites."
+      content="Vitrine estática do Distributed Wagering Processor: arquitetura, diagramas interativos, garantias financeiras, testes, desempenho medido e limites."
     />
-    <style>
-      :root {
-        --bg: #fbfbf9;
-        --fg: #1d1f1c;
-        --muted: #5a5f57;
-        --line: #d9ddd3;
-        --accent: #1f6f5b;
-        --warn-bg: #fff6df;
-        --warn-fg: #5b4300;
-        --code-bg: #eef1ec;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root:not([data-theme='light']) {
-          --bg: #14170f;
-          --fg: #e8ebe3;
-          --muted: #aab1a3;
-          --line: #3a4134;
-          --accent: #7fd1b5;
-          --warn-bg: #3a300f;
-          --warn-fg: #f5e3b0;
-          --code-bg: #1f241a;
-        }
-      }
-      :root[data-theme='dark'] {
-        --bg: #14170f;
-        --fg: #e8ebe3;
-        --muted: #aab1a3;
-        --line: #3a4134;
-        --accent: #7fd1b5;
-        --warn-bg: #3a300f;
-        --warn-fg: #f5e3b0;
-        --code-bg: #1f241a;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--fg);
-        font:
-          16px/1.6 system-ui,
-          -apple-system,
-          'Segoe UI',
-          Roboto,
-          sans-serif;
-      }
-      .skip {
-        position: absolute;
-        left: -9999px;
-      }
-      .skip:focus {
-        left: 16px;
-        top: 16px;
-        background: var(--bg);
-        padding: 8px;
-        z-index: 1;
-      }
-      main,
-      header,
-      footer {
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 0 16px;
-      }
-      header {
-        padding-top: 32px;
-      }
-      h1 {
-        font-size: 2rem;
-        line-height: 1.2;
-        margin: 0 0 8px;
-      }
-      h2 {
-        font-size: 1.4rem;
-        margin: 48px 0 12px;
-        padding-top: 8px;
-        border-top: 1px solid var(--line);
-      }
-      h3 {
-        font-size: 1.05rem;
-        margin: 24px 0 8px;
-      }
-      p,
-      li {
-        max-width: 72ch;
-      }
-      a {
-        color: var(--accent);
-      }
-      .lede {
-        font-size: 1.1rem;
-        color: var(--muted);
-      }
-      .notice {
-        background: var(--warn-bg);
-        color: var(--warn-fg);
-        padding: 12px 16px;
-        border-radius: 6px;
-      }
-      .meta {
-        font-size: 0.9rem;
-        color: var(--muted);
-      }
-      nav ul {
-        list-style: none;
-        padding: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        margin: 16px 0 0;
-      }
-      .table-wrap {
-        overflow-x: auto;
-        margin: 12px 0;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: 0.92rem;
-      }
-      th,
-      td {
-        text-align: left;
-        padding: 8px 10px;
-        border-bottom: 1px solid var(--line);
-        vertical-align: top;
-      }
-      th {
-        font-weight: 600;
-      }
-      caption {
-        text-align: left;
-        color: var(--muted);
-        padding: 4px 0 8px;
-        font-size: 0.9rem;
-      }
-      code {
-        background: var(--code-bg);
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 0.92em;
-      }
-      pre {
-        background: var(--code-bg);
-        padding: 12px 14px;
-        border-radius: 6px;
-        overflow-x: auto;
-      }
-      pre code {
-        background: none;
-        padding: 0;
-      }
-      figure {
-        margin: 16px 0;
-      }
-      figure img {
-        max-width: 100%;
-        height: auto;
-        background: #fff;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-      }
-      figcaption {
-        color: var(--muted);
-        font-size: 0.9rem;
-        margin-top: 6px;
-      }
-      .chart svg {
-        width: 100%;
-        height: auto;
-        max-width: 720px;
-      }
-      footer {
-        margin-top: 48px;
-        padding-bottom: 32px;
-        color: var(--muted);
-        font-size: 0.9rem;
-        border-top: 1px solid var(--line);
-        padding-top: 16px;
-      }
-      @media (max-width: 600px) {
-        h1 {
-          font-size: 1.6rem;
-        }
-        th,
-        td {
-          padding: 6px 6px;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="assets/site.css" />
   </head>
   <body>
     <a class="skip" href="#conteudo">Ir para o conteúdo</a>
-    <header>
-      <h1>Processador distribuído de apostas</h1>
-      <p class="lede">
-        Um serviço financeiro que aplica operações de apostas de provedores de jogos com saldo
-        exato, idempotência persistente e recuperação após falhas. Esta página é a vitrine técnica
-        do projeto.
-      </p>
-      <p class="notice" role="note">
-        <strong>Esta página é estática.</strong> Ela não depende de API, PostgreSQL, LocalStack nem
-        Grafana, e funciona quando o ambiente operacional está desligado. Os números são de
-        execuções registradas em commits do repositório, não de um serviço ao vivo. Não há
-        disponibilidade contínua nem ambiente de produção.
-      </p>
-      <p class="meta">
-        Versão desta página: commit <code>{{COMMIT_SHORT}}</code>, branch <code>{{BRANCH}}</code>,
-        gerada em {{BUILT_AT}}.
-      </p>
-      <nav aria-label="Seções">
+    <div class="layout">
+      <nav class="toc" aria-label="Seções desta página">
+        <p>Nesta página</p>
         <ul>
           <li><a href="#visao">Visão geral</a></li>
           <li><a href="#arquitetura">Arquitetura</a></li>
@@ -230,511 +25,587 @@
           <li><a href="#decisoes">Decisões</a></li>
           <li><a href="#limitacoes">Limitações</a></li>
           <li><a href="#executar">Executar</a></li>
-          <li><a href="#documentos">Documentos e commits</a></li>
+          <li><a href="#documentos">Commits e documentos</a></li>
         </ul>
       </nav>
-    </header>
 
-    <main id="conteudo">
-      <section id="visao">
-        <h2>Visão geral</h2>
-        <p>
-          O sistema recebe operações <code>BET</code>, <code>WIN</code>, <code>LOSS</code>,
-          <code>REFUND</code> e <code>ROLLBACK</code> de provedores, por HTTP e por uma fila SQS
-          FIFO. Cada operação é aplicada a uma carteira, com um lançamento imutável no ledger. Um
-          saldo nunca fica negativo, e a soma do ledger é sempre o saldo.
-        </p>
-        <ul>
-          <li>
-            <strong>Linguagem e plataforma:</strong> TypeScript estrito sobre Bun 1.4.4, com NestJS
-            12 e MikroORM 7.
-          </li>
-          <li>
-            <strong>Persistência e mensageria:</strong> PostgreSQL 17 e AWS SQS, simulada por
-            LocalStack 4.14 no ambiente local.
-          </li>
-          <li>
-            <strong>Operação:</strong> Docker Compose, migrações versionadas e reversíveis, health
-            checks de liveness e readiness.
-          </li>
-          <li>
-            <strong>Modelo:</strong> DDD com módulos <code>wallet</code>, <code>wagering</code>,
-            <code>messaging</code>, <code>auth</code> e um núcleo compartilhado de
-            <code>Money</code> e eventos de integração.
-          </li>
-        </ul>
-      </section>
+      <main id="conteudo">
+        <header class="hero">
+          <h1>Processador distribuído de apostas</h1>
+          <p class="lede">
+            Um serviço financeiro que aplica operações de apostas de provedores de jogos com saldo
+            exato, idempotência persistente e recuperação após falhas. Esta é a vitrine técnica do
+            projeto.
+          </p>
+          <div class="notice" role="note">
+            <p>
+              <strong>Esta página é estática.</strong> Ela não depende de API, PostgreSQL,
+              LocalStack nem Grafana, e continua no ar quando o ambiente operacional está desligado.
+              Os números vêm de execuções registradas em commits do repositório, não de um serviço
+              ao vivo. Não há disponibilidade contínua nem ambiente de produção.
+            </p>
+          </div>
+          <p class="meta">
+            Versão desta página: commit <code>{{COMMIT_SHORT}}</code>, branch
+            <code>{{BRANCH}}</code>, gerada em {{BUILT_AT}}.
+          </p>
+        </header>
 
-      <section id="arquitetura">
-        <h2>Arquitetura</h2>
-        <p>
-          Uma API HTTP e um worker, duas réplicas de processo independentes, compartilham um
-          PostgreSQL e uma fila. A regra financeira existe em uma única implementação,
-          <code>TransactionSettlement</code>, e a HTTP e o worker chamam a mesma.
-        </p>
-        <p>Os diagramas abaixo são os do repositório, renderizados a partir do Mermaid.</p>
-        <figure>
-          <img
-            src="diagrams/bet-over-http.svg"
-            alt="Fluxo de uma aposta pela HTTP: chave válida, escopo do provedor, idempotência e mesmo payload ou conflito."
-          />
-          <figcaption>
-            Aposta pela HTTP: autenticação, escopo do provedor, replay ou conflito de idempotência.
-          </figcaption>
-        </figure>
-        <figure>
-          <img
-            src="diagrams/queued-command.svg"
-            alt="Fluxo de um comando da fila: aplicado, retido, recusado ou devolvido para nova tentativa."
-          />
-          <figcaption>
-            Comando pela fila: aplicado, retido, reexecutado ou enviado à DLQ, com confirmação só
-            depois do commit.
-          </figcaption>
-        </figure>
-        <figure>
-          <img
-            src="diagrams/outcome-entities.svg"
-            alt="O que muda no banco em cada resultado: saldo e ledger, transação, ou apenas a transação rejeitada."
-          />
-          <figcaption>
-            Resultados e efeitos: saldo, lançamento, transação e eventos, por tipo de resultado.
-          </figcaption>
-        </figure>
-      </section>
-
-      <section id="fluxos">
-        <h2>Fluxos principais</h2>
-        <h3>Abrir carteira e apostar</h3>
-        <ol>
-          <li>
-            Um operador abre a carteira com <code>POST /wallets</code>. O saldo inicial vira uma
-            transação interna <code>OPENING</code> e um lançamento <code>CREDIT</code>, na mesma
-            transação SQL.
-          </li>
-          <li>
-            O provedor envia <code>POST /wagering/transactions</code> com
-            <code>Idempotency-Key</code>. A trava da carteira é tomada, a chave é conferida de novo
-            sob a trava, e a decisão é gravada com o lançamento e o evento.
-          </li>
-          <li>
-            A resposta é <code>201</code> (aplicada), <code>200</code> (replay idêntico),
-            <code>202</code> (aguardando a referência) ou <code>422</code> (recusada, com
-            <code>failureCode</code>).
-          </li>
-        </ol>
-        <h3>Reembolso que chega antes da aposta</h3>
-        <ol>
-          <li>
-            Um <code>REFUND</code> que nomeia uma aposta ainda não recebida fica retido como
-            <code>PENDING_REFERENCE</code>.
-          </li>
-          <li>
-            Um worker reavalia a retenção com backoff exponencial, até seis tentativas. Ao chegar a
-            aposta, o reembolso é aplicado uma única vez.
-          </li>
-          <li>
-            Se a referência nunca chega, a operação é <code>REJECTED</code> com
-            <code>REFERENCE_NOT_FOUND</code>, e o evento correspondente é publicado.
-          </li>
-        </ol>
-        <h3>Evento para o consumidor externo</h3>
-        <ol>
-          <li>
-            O evento é gravado no outbox, na mesma transação do efeito, e publicado depois do
-            commit, em lotes de até dez entradas.
-          </li>
-          <li>
-            O consumidor deduplica por <code>eventId</code> e ordena as alterações de uma carteira
-            por <code>walletVersion</code>.
-          </li>
-          <li>
-            A ordem de chegada não é garantida: um evento recusado é reenviado depois. A garantia
-            está em
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
-              >ARCHITECTURE §8</a
-            >.
-          </li>
-        </ol>
-      </section>
-
-      <section id="garantias">
-        <h2>Garantias financeiras</h2>
-        <p>
-          Cada garantia tem um mecanismo no código, uma constraint ou um índice no banco, e um teste
-          que a prova. A matriz completa, com <strong>{{MATRIX_ROWS}}</strong> identificadores de
-          requisito, está em
-          <a
-            href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REQUIREMENTS_MATRIX.md"
-            >REQUIREMENTS_MATRIX.md</a
-          >.
-        </p>
-        <div class="table-wrap">
-          <table>
-            <caption>
-              Garantias principais, com o mecanismo e a prova
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Garantia</th>
-                <th scope="col">Mecanismo</th>
-                <th scope="col">Prova</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Dinheiro nunca é <code>number</code></td>
-                <td>
-                  <code>Money</code> sobre <code>decimal.js</code>, <code>NUMERIC(20,2)</code>
-                </td>
-                <td><code>test/unit/shared/domain/money.test.ts</code></td>
-              </tr>
-              <tr>
-                <td>Saldo nunca negativo, nem sob corrida</td>
-                <td>Trava de linha por carteira, versão como guarda, <code>CHECK</code></td>
-                <td><code>test/concurrency/hot-wallet.test.ts</code></td>
-              </tr>
-              <tr>
-                <td>Saldo igual à soma do ledger</td>
-                <td>Ledger imutável por trigger; reconciliação em leitura</td>
-                <td>
-                  <code>test/integration/schema</code>, <code>test/e2e/queries-http.test.ts</code>
-                </td>
-              </tr>
-              <tr>
-                <td>Um efeito, qualquer que seja o número de entregas</td>
-                <td>Chave de idempotência por provedor, inbox, <code>UNIQUE</code></td>
-                <td><code>test/integration/messaging/duplicate-deliveries.test.ts</code></td>
-              </tr>
-              <tr>
-                <td>Evento só depois do commit</td>
-                <td>Outbox na transação; publicador com lease</td>
-                <td><code>test/integration/faults</code></td>
-              </tr>
-              <tr>
-                <td>Três processos, sem efeito duplicado</td>
-                <td>Processos reais, um banco, uma fila</td>
-                <td><code>test/concurrency/three-processes.test.ts</code></td>
-              </tr>
-              <tr>
-                <td>Recuperação após morte no meio do caminho</td>
-                <td>Worker morto antes e depois do commit, com reentrega</td>
-                <td><code>test/concurrency/process-crash-and-shutdown.test.ts</code></td>
-              </tr>
-              <tr>
-                <td>Autorização que não vaza dados</td>
-                <td>
-                  Escopo de provedor antes de qualquer escrita; rotas de operador antes da leitura
-                </td>
-                <td><code>test/e2e/authorization-adversarial.test.ts</code></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="testes">
-        <h2>Testes e evidências</h2>
-        <p>
-          Os números abaixo são do <code>check:all</code> da execução de CI do commit
-          <code>{{GATE_COMMIT_SHORT}}</code> (<a href="{{GATE_RUN_URL}}">registro da execução</a>;
-          os valores estão em <code>docs/site/gate-results.json</code>). Cada suíte roda contra
-          PostgreSQL e LocalStack reais; nenhuma substitui esses serviços por mock.
-        </p>
-        <div class="table-wrap">
-          <table>
-            <caption>
-              Resultado do gate completo, por suíte
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Suíte</th>
-                <th scope="col">Comando</th>
-                <th scope="col">Passam</th>
-                <th scope="col">Falham</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Unitários</td>
-                <td><code>bun run test:unit</code></td>
-                <td>{{COUNT_UNIT}}</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>Infraestrutura do Compose</td>
-                <td><code>bun run test:infra</code></td>
-                <td>{{COUNT_INFRA}}</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>Integração</td>
-                <td><code>bun run test:integration</code></td>
-                <td>{{COUNT_INTEGRATION}}</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>Concorrência</td>
-                <td><code>bun run test:concurrency</code></td>
-                <td>{{COUNT_CONCURRENCY}}</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>HTTP de ponta a ponta</td>
-                <td><code>bun run test:e2e</code></td>
-                <td>{{COUNT_E2E}}</td>
-                <td>0</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Modo protegido: <code>bun run test:edge</code>, com 12 casos contra a borda Nginx e a
-          stack em execução.
-        </p>
-      </section>
-
-      <section id="desempenho">
-        <h2>Desempenho medido</h2>
-        <p>
-          Carga por degraus de 20 segundos, com a pilha fixada em 1, 2 e 4 CPUs (<code
-            >taskset</code
-          >
-          e cpuset por contêiner). Cada degrau é aceito apenas se cumprir as restrições: erro até
-          0,1%, nenhuma perda, p95 até 500 ms, p99 até 1000 ms, e saldo igual ao ledger. A taxa
-          acordada é o maior degrau que passou em todas. Os números descrevem a máquina que os
-          produziu.
-        </p>
-        <figure class="chart">
-          {{LOAD_CHART}}
-          <figcaption>
-            Taxa acordada por número de CPUs da pilha. Cada barra vem do campo
-            <code>agreedRate</code> de <code>docs/load/results/cpus-N.json</code>, gravado no commit
-            indicado na tabela.
-          </figcaption>
-        </figure>
-        <div class="table-wrap">
-          <table>
-            <caption>
-              Resultados por execução, com a máquina e o commit de cada uma
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">CPUs da pilha</th>
-                <th scope="col">Taxa acordada (req/s)</th>
-                <th scope="col">Primeira taxa reprovada (req/s)</th>
-                <th scope="col">p50 (ms)</th>
-                <th scope="col">p95 (ms)</th>
-                <th scope="col">p99 (ms)</th>
-                <th scope="col">Erro no degrau</th>
-                <th scope="col">Máquina</th>
-                <th scope="col">Commit do registro</th>
-              </tr>
-            </thead>
-            <tbody>
-              {{LOAD_ROWS}}
-            </tbody>
-          </table>
-        </div>
-        <h3>Como ler estes números</h3>
-        <ul>
-          <li>
-            Provam que a pilha manteve as restrições por um degrau de 20 segundos, numa taxa.
-            <strong>Não provam</strong> uma taxa sustentada por horas: não há teste de soak.
-          </li>
-          <li>
-            A fila é o LocalStack, não o SQS da AWS. O PostgreSQL usa a configuração padrão, sem
-            réplica e sem ajuste.
-          </li>
-          <li>
-            O gerador de carga roda nas CPUs que a pilha não usa. Quando a pilha usa todas, o
-            gerador divide as CPUs, e os números ficam pessimistas.
-          </li>
-          <li>
-            Execuções de máquinas diferentes não são um experimento controlado. Compare apenas as
-            linhas da mesma máquina.
-          </li>
-          <li>
-            O relatório completo, com método e restrições, está em
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_RESULTS.md"
-              >LOAD_TEST_RESULTS.md</a
-            >. Estes números não foram reexecutados nesta rodada.
-          </li>
-        </ul>
-      </section>
-
-      <section id="decisoes">
-        <h2>Decisões arquiteturais</h2>
-        <p>Cada decisão tem o motivo, o custo aceito e a prova. As alternativas estão nas ADRs.</p>
-        <ul>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0001-pessimistic-wallet-lock.md"
-              >ADR 0001</a
-            >: trava pessimista da carteira, com a versão como guarda.
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0002-money-representation.md"
-              >ADR 0002</a
-            >: dinheiro como string decimal, com <code>NUMERIC(20,2)</code>.
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0003-idempotency-scope-and-payload-hash.md"
-              >ADR 0003</a
-            >: escopo da idempotência por provedor, com hash canônico do payload.
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0004-outbox-claim-lease-at-least-once.md"
-              >ADR 0004</a
-            >: outbox com claim e lease, entrega ao menos uma vez.
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0005-reference-hold-and-bounded-retries.md"
-              >ADR 0005</a
-            >: retenção de referências ausentes, com tentativas limitadas.
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0007-api-key-authentication.md"
-              >ADR 0007</a
-            >: chaves de API com dois papéis e escopo de provedor. A ADR 0006 registra a decisão
-            anterior de adiar a autenticação.
-          </li>
-        </ul>
-        <p>
-          As interpretações que o enunciado deixa em aberto estão em
-          <a
-            href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
-            >ARCHITECTURE §13</a
-          >, cada uma com teste.
-        </p>
-      </section>
-
-      <section id="limitacoes">
-        <h2>Limitações</h2>
-        <div class="notice" role="note">
+        <section id="visao">
+          <h2>Visão geral</h2>
           <p>
-            Esta lista é um resumo. A completa está em
+            O sistema recebe operações <code>BET</code>, <code>WIN</code>, <code>LOSS</code>,
+            <code>REFUND</code> e <code>ROLLBACK</code> de provedores, por HTTP e por uma fila SQS
+            FIFO. Cada operação é aplicada a uma carteira, com um lançamento imutável no ledger. O
+            saldo nunca fica negativo, e a soma do ledger é sempre o saldo.
+          </p>
+          <div class="cards">{{FACT_CARDS}}</div>
+          <ul>
+            <li>
+              <strong>Linguagem e plataforma:</strong> TypeScript estrito sobre Bun 1.4.4, com
+              NestJS 12 e MikroORM 7.
+            </li>
+            <li>
+              <strong>Persistência e mensageria:</strong> PostgreSQL 17 e AWS SQS, simulada por
+              LocalStack 4.14 no ambiente local.
+            </li>
+            <li>
+              <strong>Operação:</strong> Docker Compose, migrações versionadas e reversíveis, health
+              checks de liveness e readiness.
+            </li>
+            <li>
+              <strong>Modelo:</strong> DDD com os módulos <code>wallet</code>,
+              <code>wagering</code>, <code>messaging</code> e <code>auth</code>, e um núcleo
+              compartilhado com <code>Money</code> e os eventos de integração.
+            </li>
+          </ul>
+        </section>
+
+        <section id="arquitetura">
+          <h2>Arquitetura</h2>
+          <p>
+            Uma API HTTP e um worker, processos independentes, compartilham um PostgreSQL e uma
+            fila. A regra financeira existe em uma única implementação,
+            <code>TransactionSettlement</code>, e a HTTP e o worker a chamam.
+          </p>
+          <p>
+            Os três diagramas abaixo são interativos. Clique em um componente, ou use Tab e Enter,
+            para ver o que ele faz, onde está no código e qual teste o prova. A lista logo abaixo de
+            cada um traz o mesmo conteúdo.
+          </p>
+          {{DIAGRAMS}}
+          <p class="meta">
+            Versões estáticas, para impressão ou para abrir em outra ferramenta:
+            <a href="diagrams/bet-over-http.svg">aposta pela HTTP</a>,
+            <a href="diagrams/queued-command.svg">comando pela fila</a> e
+            <a href="diagrams/outcome-entities.svg">resultados e efeitos</a>.
+          </p>
+        </section>
+
+        <section id="fluxos">
+          <h2>Fluxos principais</h2>
+          <h3>Abrir carteira e apostar</h3>
+          <ol>
+            <li>
+              Um operador abre a carteira com <code>POST /wallets</code>. O saldo inicial vira uma
+              transação interna <code>OPENING</code> e um lançamento <code>CREDIT</code>, na mesma
+              transação SQL.
+            </li>
+            <li>
+              O provedor envia <code>POST /wagering/transactions</code> com
+              <code>Idempotency-Key</code>. A trava da carteira é tomada, a chave é conferida de
+              novo sob a trava, e a decisão é gravada com o lançamento e o evento.
+            </li>
+            <li>
+              A resposta é <code>201</code> (aplicada), <code>200</code> (replay idêntico),
+              <code>202</code> (aguardando a referência) ou <code>422</code> (recusada, com
+              <code>failureCode</code>).
+            </li>
+          </ol>
+          <h3>Reembolso que chega antes da aposta</h3>
+          <ol>
+            <li>
+              Um <code>REFUND</code> que nomeia uma aposta ainda não recebida fica retido como
+              <code>PENDING_REFERENCE</code>.
+            </li>
+            <li>
+              Um worker reavalia a retenção com backoff exponencial, até 6 tentativas. Ao chegar a
+              aposta, o reembolso é aplicado uma única vez.
+            </li>
+            <li>
+              Se a referência nunca chega, a operação é <code>REJECTED</code> com
+              <code>REFERENCE_NOT_FOUND</code>, e o evento correspondente é publicado.
+            </li>
+          </ol>
+          <h3>Evento para o consumidor externo</h3>
+          <ol>
+            <li>
+              O evento é gravado no outbox, na mesma transação do efeito, e publicado depois do
+              commit, em lotes de até dez entradas.
+            </li>
+            <li>
+              O consumidor deduplica por <code>eventId</code> e ordena as alterações de uma carteira
+              por <code>walletVersion</code>.
+            </li>
+            <li>
+              A ordem de chegada não é garantida: um evento recusado é reenviado depois. A garantia
+              está em
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
+                >ARCHITECTURE §8</a
+              >.
+            </li>
+          </ol>
+        </section>
+
+        <section id="garantias">
+          <h2>Garantias financeiras</h2>
+          <p>
+            Cada garantia tem um mecanismo no código, uma constraint ou um índice no banco, e um
+            teste que a prova. A matriz completa, com
+            <strong>{{MATRIX_ROWS}}</strong> identificadores de requisito, está em
             <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
-              >ARCHITECTURE §14</a
+              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REQUIREMENTS_MATRIX.md"
+              >REQUIREMENTS_MATRIX.md</a
             >.
           </p>
-        </div>
-        <ul>
-          <li>
-            <strong>Autenticação por chave de API</strong>, sem login, sem rotação e sem IdP
-            externo. Uma decisão registrada, não uma omissão.
-          </li>
-          <li>
-            <strong>HTTP simples</strong>: em um deploy, o TLS precisa ficar na frente da API.
-          </li>
-          <li>
-            <strong>Limite de taxa só no modo protegido</strong>, e por endereço. Não é proteção
-            contra ataque distribuído.
-          </li>
-          <li>
-            <strong>Ordem de chegada dos eventos não é garantida</strong>. A garantia é
-            <code>eventId</code> e <code>walletVersion</code>, com aplicação de
-            <code>last + 1</code> pelo consumidor.
-          </li>
-          <li>
-            <strong>Um <code>WIN</code> sem referência não bloqueia o <code>REFUND</code></strong>
-            da sua aposta. É a leitura que o enunciado permite, e o dono deve confirmá-la.
-          </li>
-          <li>
-            <strong>Infraestrutura local</strong>: LocalStack, não AWS. Nenhum deploy na nuvem foi
-            feito.
-          </li>
-          <li>
-            <strong
-              >Sem console de engenharia, sem laboratório de carga e sem Prometheus ou
-              Grafana</strong
-            >
-            nesta rodada. Os motivos estão em
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/AUDITORIA_FINAL.md"
-              >AUDITORIA_FINAL.md</a
-            >.
-          </li>
-        </ul>
-      </section>
+          <div class="guarantees">
+            <article class="guarantee">
+              <h3>Dinheiro nunca é <code>number</code></h3>
+              <p>
+                <code>Money</code> sobre <code>decimal.js</code>, colunas
+                <code>NUMERIC(20,2)</code>, e valores aceitos só como string decimal de duas casas.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/unit/shared/domain/money.test.ts"
+                  >money.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Saldo nunca negativo, nem sob corrida</h3>
+              <p>
+                Trava de linha por carteira, versão como guarda e <code>CHECK</code> no banco.
+                Carteiras diferentes não se bloqueiam.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/concurrency/hot-wallet.test.ts"
+                  >hot-wallet.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Saldo igual à soma do ledger</h3>
+              <p>
+                O ledger é imutável por trigger no banco, e a reconciliação compara os dois sem
+                corrigir nada.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/integration/schema/schema-constraints.test.ts"
+                  >schema-constraints.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Um efeito por operação</h3>
+              <p>
+                Chave de idempotência por provedor, inbox por mensagem e <code>UNIQUE</code> no
+                banco. Vinte cópias, três consumidores, e um só débito.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/integration/messaging/duplicate-deliveries.test.ts"
+                  >duplicate-deliveries.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Evento só depois do commit</h3>
+              <p>
+                O outbox é gravado na transação do efeito. O publicador usa lease, e um envio
+                repetido tem o mesmo <code>eventId</code>.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/integration/faults/fault-injection.test.ts"
+                  >fault-injection.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Processos reais, sem efeito duplicado</h3>
+              <p>
+                Três processos da API e um worker, com um banco e uma fila. Exatamente uma operação
+                tem o efeito.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/concurrency/three-processes.test.ts"
+                  >three-processes.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Recuperação após uma morte no meio do caminho</h3>
+              <p>
+                Um worker morto antes e depois do commit: a reentrega aplica o efeito uma vez, e o
+                saldo continua igual ao ledger.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/concurrency/process-crash-and-shutdown.test.ts"
+                  >process-crash-and-shutdown.test.ts</a
+                >
+              </p>
+            </article>
+            <article class="guarantee">
+              <h3>Autorização sem vazamento</h3>
+              <p>
+                Escopo de provedor antes de qualquer escrita, rotas de operador antes da leitura, e
+                28 tentativas de contornar a regra.
+              </p>
+              <p class="proof">
+                Prova:
+                <a
+                  href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/test/e2e/authorization-adversarial.test.ts"
+                  >authorization-adversarial.test.ts</a
+                >
+              </p>
+            </article>
+          </div>
+        </section>
 
-      <section id="executar">
-        <h2>Como executar</h2>
-        <p>
-          O guia em português está no
-          <a href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/README.md"
-            >README</a
-          >. Os comandos principais:
-        </p>
-        <pre><code>docker compose up --build
+        <section id="testes">
+          <h2>Testes e evidências</h2>
+          <p>
+            Os números abaixo são do <code>check:all</code> da execução de CI do commit
+            <code>{{GATE_COMMIT_SHORT}}</code> (<a href="{{GATE_RUN_URL}}">registro da execução</a>;
+            os valores estão em <code>docs/site/gate-results.json</code>). Cada suíte roda contra
+            PostgreSQL e LocalStack reais; nenhuma substitui esses serviços por mock.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <caption>
+                Resultado do gate completo, por suíte
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Suíte</th>
+                  <th scope="col">Comando</th>
+                  <th scope="col">Passam</th>
+                  <th scope="col">Falham</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Unitários</td>
+                  <td><code>bun run test:unit</code></td>
+                  <td>{{COUNT_UNIT}}</td>
+                  <td>0</td>
+                </tr>
+                <tr>
+                  <td>Infraestrutura do Compose</td>
+                  <td><code>bun run test:infra</code></td>
+                  <td>{{COUNT_INFRA}}</td>
+                  <td>0</td>
+                </tr>
+                <tr>
+                  <td>Integração</td>
+                  <td><code>bun run test:integration</code></td>
+                  <td>{{COUNT_INTEGRATION}}</td>
+                  <td>0</td>
+                </tr>
+                <tr>
+                  <td>Concorrência</td>
+                  <td><code>bun run test:concurrency</code></td>
+                  <td>{{COUNT_CONCURRENCY}}</td>
+                  <td>0</td>
+                </tr>
+                <tr>
+                  <td>HTTP de ponta a ponta</td>
+                  <td><code>bun run test:e2e</code></td>
+                  <td>{{COUNT_E2E}}</td>
+                  <td>0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Modo protegido: <code>bun run test:edge</code>, com 12 casos contra a borda Nginx e a
+            stack em execução.
+          </p>
+        </section>
+
+        <section id="desempenho">
+          <h2>Desempenho medido</h2>
+          <p>
+            Carga por degraus de 20 segundos, com a pilha fixada em 1, 2 e 4 CPUs (<code
+              >taskset</code
+            >
+            e cpuset por contêiner). Um degrau é aprovado só se cumprir as restrições: erro até
+            0,1%, nenhuma perda, p95 até 500 ms, p99 até 1000 ms, saldo igual ao ledger, e nenhuma
+            resposta incorreta. A taxa acordada é o maior degrau aprovado.
+          </p>
+          <figure class="chart">
+            {{LOAD_CHART}}
+            <figcaption>
+              Taxa acordada por número de CPUs da pilha. Cada barra vem do campo
+              <code>agreedRate</code> de <code>docs/load/results/cpus-N.json</code>, medido no
+              commit indicado na tabela.
+            </figcaption>
+          </figure>
+          <details>
+            <summary>Tabela por execução: máquina, commit e números do degrau acordado</summary>
+            <div class="table-wrap">
+              <table>
+                <caption>
+                  Resultados por execução, com a máquina e o commit de cada uma
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">CPUs da pilha</th>
+                    <th scope="col">Taxa acordada (req/s)</th>
+                    <th scope="col">Primeira taxa reprovada (req/s)</th>
+                    <th scope="col">p50 (ms)</th>
+                    <th scope="col">p95 (ms)</th>
+                    <th scope="col">p99 (ms)</th>
+                    <th scope="col">Erro no degrau</th>
+                    <th scope="col">Máquina</th>
+                    <th scope="col">Commit do registro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{LOAD_ROWS}}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <h3>Como ler estes números</h3>
+          <ul>
+            <li>
+              <strong>Latência HTTP</strong> é a espera do cliente pela resposta.
+              <strong>Atraso do gerador</strong> é o quanto tarde o gerador enviou cada requisição.
+              <strong>Outbox lag</strong> é o tempo entre o commit de um evento e o envio dele à
+              fila, e <strong>drenagem</strong> é o tempo até a Outbox ficar vazia depois de um
+              degrau. São quatro medidas diferentes, com unidades diferentes, e o relatório não as
+              soma.
+            </li>
+            <li>
+              Os números provam que a pilha manteve as restrições por um degrau de 20 segundos, numa
+              taxa. <strong>Não provam</strong> uma taxa sustentada por horas: não há teste de soak.
+            </li>
+            <li>
+              A fila é o LocalStack, não o SQS da AWS. O PostgreSQL usa a configuração padrão, sem
+              réplica e sem ajuste.
+            </li>
+            <li>
+              O gerador roda nas CPUs que a pilha não usa. Quando a pilha usa todas, o gerador
+              divide as CPUs, e os números ficam pessimistas.
+            </li>
+            <li>
+              Execuções de máquinas diferentes não são um experimento controlado. Compare apenas as
+              linhas da mesma máquina.
+            </li>
+            <li>
+              Os registros commitados são de <code>b34c198</code>. Não foi reexecutada uma campanha
+              completa no código atual; o smoke de 1 CPU está registrado em
+              <code>docs/load/smoke/</code>. O relatório completo, com método e restrições, está em
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_RESULTS.md"
+                >LOAD_TEST_RESULTS.md</a
+              >.
+            </li>
+          </ul>
+        </section>
+
+        <section id="decisoes">
+          <h2>Decisões arquiteturais</h2>
+          <p>
+            Cada decisão tem o motivo, o custo aceito e a prova. As alternativas estão nas ADRs.
+          </p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0001-pessimistic-wallet-lock.md"
+                >ADR 0001</a
+              >: trava pessimista da carteira, com a versão como guarda.
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0002-money-representation.md"
+                >ADR 0002</a
+              >: dinheiro como string decimal, com <code>NUMERIC(20,2)</code>.
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0003-idempotency-scope-and-payload-hash.md"
+                >ADR 0003</a
+              >: escopo da idempotência por provedor, com hash canônico do payload.
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0004-outbox-claim-lease-at-least-once.md"
+                >ADR 0004</a
+              >: outbox com claim e lease, entrega ao menos uma vez.
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0005-reference-hold-and-bounded-retries.md"
+                >ADR 0005</a
+              >: retenção de referências ausentes, com tentativas limitadas.
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/adr/0007-api-key-authentication.md"
+                >ADR 0007</a
+              >: chaves de API com dois papéis e escopo de provedor. A ADR 0006 registra a decisão
+              anterior de adiar a autenticação.
+            </li>
+          </ul>
+          <p>
+            As interpretações que o enunciado deixa em aberto estão em
+            <a
+              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
+              >ARCHITECTURE §13</a
+            >, cada uma com teste.
+          </p>
+        </section>
+
+        <section id="limitacoes">
+          <h2>Limitações</h2>
+          <div class="notice" role="note">
+            <p>
+              Esta lista é um resumo. A completa está em
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/ARCHITECTURE.md"
+                >ARCHITECTURE §14</a
+              >.
+            </p>
+          </div>
+          <ul>
+            <li>
+              <strong>Autenticação por chave de API</strong>, sem login, sem rotação e sem IdP
+              externo. Uma decisão registrada, não uma omissão.
+            </li>
+            <li>
+              <strong>HTTP simples</strong>: em um deploy, o TLS precisa ficar na frente da API.
+            </li>
+            <li>
+              <strong>Limite de taxa só no modo protegido</strong>, e por endereço. Não é proteção
+              contra ataque distribuído.
+            </li>
+            <li>
+              <strong>A ordem de chegada dos eventos não é garantida</strong>. A garantia é
+              <code>eventId</code> e <code>walletVersion</code>, com aplicação de
+              <code>last + 1</code> pelo consumidor.
+            </li>
+            <li>
+              <strong>Um <code>WIN</code> sem referência não bloqueia o <code>REFUND</code></strong>
+              da sua aposta. É a leitura que o enunciado permite, e o dono deve confirmá-la.
+            </li>
+            <li>
+              <strong>Infraestrutura local</strong>: LocalStack, não AWS. Nenhum deploy na nuvem foi
+              feito.
+            </li>
+            <li>
+              <strong
+                >Sem console de engenharia, sem laboratório de carga e sem Prometheus ou
+                Grafana</strong
+              >
+              nesta entrega. Os motivos estão em
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/AUDITORIA_FINAL.md"
+                >AUDITORIA_FINAL.md</a
+              >.
+            </li>
+          </ul>
+        </section>
+
+        <section id="executar">
+          <h2>Como executar</h2>
+          <p>
+            O guia em português está no
+            <a href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/README.md"
+              >README</a
+            >. Os comandos principais:
+          </p>
+          <pre><code>docker compose up --build
 curl http://localhost:3000/health/ready
 bun run demo:finance
 bun run check:all</code></pre>
-        <p>
-          Para o avaliador, a ordem de leitura de cerca de 30 minutos está em
-          <a
-            href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REVIEWER_GUIDE.md"
-            >REVIEWER_GUIDE.md</a
-          >.
-        </p>
-      </section>
+          <p>
+            Para o avaliador, a ordem de leitura de cerca de 30 minutos está em
+            <a
+              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REVIEWER_GUIDE.md"
+              >REVIEWER_GUIDE.md</a
+            >.
+          </p>
+        </section>
 
-      <section id="documentos">
-        <h2>Documentos e commits desta rodada</h2>
-        <p>
-          Os links apontam para o commit desta página. Os commits abaixo são os desta rodada de
-          revisão, do mais antigo ao mais novo.
-        </p>
-        <ol>
-          {{COMMITS_LIST}}
-        </ol>
-        <ul>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REQUIREMENTS_MATRIX.md"
-              >Matriz de requisitos</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/openapi.json"
-              >Contrato OpenAPI</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/CHALLENGE.md"
-              >Enunciado</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/DOMAIN_GLOSSARY.md"
-              >Glossário do domínio</a
-            >
-          </li>
-          <li>
-            <a href="https://github.com/dedeusgui/backend-challenge/tree/{{COMMIT_FULL}}"
-              >Repositório neste commit</a
-            >
-          </li>
-        </ul>
-      </section>
-    </main>
+        <section id="documentos">
+          <h2>Commits e documentos desta rodada</h2>
+          <p>
+            Os links apontam para o commit desta página. A lista traz os commits da rodada de
+            revisão, do mais antigo ao mais novo.
+          </p>
+          <details open>
+            <summary>Commits da rodada</summary>
+            <ol class="commits">
+              {{COMMITS_LIST}}
+            </ol>
+          </details>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/REQUIREMENTS_MATRIX.md"
+                >Matriz de requisitos</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/openapi.json"
+                >Contrato OpenAPI</a
+              >, com {{OPENAPI_OPERATIONS}} operações
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/CHALLENGE.md"
+                >Enunciado</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/DOMAIN_GLOSSARY.md"
+                >Glossário do domínio</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/dedeusgui/backend-challenge/tree/{{COMMIT_FULL}}"
+                >Repositório neste commit</a
+              >
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
 
     <footer>
       <p>
         Vitrine estática gerada a partir do repositório por <code>bun run site:build</code>. Sem
-        rastreamento, sem scripts e sem chamadas a serviços.
+        rastreamento, sem chamadas a serviços e sem scripts de terceiros: o único script é o desta
+        página, para os diagramas.
       </p>
     </footer>
+    <script src="assets/site.js" defer></script>
   </body>
 </html>

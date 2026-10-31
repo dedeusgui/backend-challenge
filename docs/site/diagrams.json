@@ -1,0 +1,381 @@
+{
+  "diagrams": [
+    {
+      "id": "bet-over-http",
+      "title": "Aposta pela HTTP",
+      "lead": "O caminho de uma aposta que chega por HTTP, da chave de API até a resposta. Cada componente é clicável e leva ao código e ao teste que o prova.",
+      "nodes": [
+        {
+          "id": "entry",
+          "label": "POST /wagering/transactions",
+          "col": 0,
+          "row": 0,
+          "kind": "entry",
+          "summary": "Recebe a submissão. Sem chave válida responde 401 antes de ler o corpo; o limite de 16 kB vale antes da autenticação.",
+          "path": "src/modules/wagering/http/wagering.controller.ts",
+          "proof": "test/e2e/auth-http.test.ts"
+        },
+        {
+          "id": "auth",
+          "label": "Chave de API",
+          "col": 1,
+          "row": 0,
+          "kind": "check",
+          "summary": "A chave é procurada pelo hash SHA-256. Chave desconhecida ou revogada responde 401. A revogação vale na requisição seguinte.",
+          "path": "src/modules/auth/http/api-key.guard.ts",
+          "proof": "test/e2e/authorization-adversarial.test.ts"
+        },
+        {
+          "id": "scope",
+          "label": "Escopo do provedor",
+          "col": 2,
+          "row": 0,
+          "kind": "check",
+          "summary": "Uma chave PROVIDER só age pelo próprio providerId. Outro provedor recebe 403, antes de qualquer escrita.",
+          "path": "src/modules/auth/http/access.ts",
+          "proof": "test/e2e/auth-http.test.ts"
+        },
+        {
+          "id": "contract",
+          "label": "Contrato do corpo e da chave",
+          "col": 3,
+          "row": 0,
+          "kind": "check",
+          "summary": "Valida o JSON, exige Idempotency-Key (400 sem ela) e o Money com duas casas decimais (400 INVALID_MONEY).",
+          "path": "src/modules/wagering/http/process-wager.request.ts",
+          "proof": "test/e2e/input-contract-http.test.ts"
+        },
+        {
+          "id": "dup",
+          "label": "Mesma chave e mesmo payload?",
+          "col": 4,
+          "row": 0,
+          "kind": "check",
+          "summary": "A identidade é por provedor. Chave já conhecida com o mesmo payload é replay; com payload diferente é conflito, não replay.",
+          "path": "src/modules/wagering/application/process-wager-transaction.use-case.ts",
+          "proof": "test/integration/wagering/process-wager-transaction.test.ts"
+        },
+        {
+          "id": "replay",
+          "label": "Replay: resultado original (200)",
+          "col": 5,
+          "row": 0,
+          "kind": "outcome",
+          "summary": "Responde o resultado original, com o saldo observado naquele momento. Não toma a trava e não escreve nada.",
+          "path": "src/modules/wagering/application/process-wager-transaction.use-case.ts",
+          "proof": "test/integration/wagering/process-wager-transaction.test.ts"
+        },
+        {
+          "id": "conflict",
+          "label": "Conflito de idempotência (409)",
+          "col": 5,
+          "row": 1,
+          "kind": "outcome",
+          "summary": "A mesma chave com payload diferente. A checagem acontece antes da carteira, então um id de carteira inexistente também não muda a resposta.",
+          "path": "src/modules/wagering/application/process-wager-transaction.use-case.ts",
+          "proof": "test/e2e/wagering-http.test.ts"
+        },
+        {
+          "id": "lock",
+          "label": "Trava da linha da carteira",
+          "col": 4,
+          "row": 1,
+          "kind": "store",
+          "summary": "SELECT ... FOR UPDATE na carteira. Operações da mesma carteira esperam uma pela outra; carteiras diferentes não se bloqueiam.",
+          "path": "src/modules/wallet/infrastructure/mikro-orm-wallet.repository.ts",
+          "proof": "test/concurrency/hot-wallet.test.ts"
+        },
+        {
+          "id": "settle",
+          "label": "Liquidação (TransactionSettlement)",
+          "col": 4,
+          "row": 2,
+          "kind": "check",
+          "summary": "A única regra financeira. A HTTP e o worker chamam esta mesma implementação, então a regra não existe em dois lugares.",
+          "path": "src/modules/wagering/application/transaction-settlement.ts",
+          "proof": "test/concurrency/distributed-contention.test.ts"
+        },
+        {
+          "id": "bank",
+          "label": "Uma transação SQL",
+          "col": 4,
+          "row": 3,
+          "kind": "store",
+          "summary": "Transação, saldo, lançamento, inbox e outbox são gravados juntos. Se um falhar, nada é gravado.",
+          "path": "src/shared/infrastructure/database/mikro-orm-financial-unit-of-work.ts",
+          "proof": "test/integration/faults/fault-injection.test.ts"
+        },
+        {
+          "id": "response",
+          "label": "Resposta: 201, 202, 422 ou 503",
+          "col": 3,
+          "row": 3,
+          "kind": "outcome",
+          "summary": "201 aplicada, 202 aguardando referência, 422 recusada (não reenviar sem mudança), 503 disputa de carteira (reenviar após Retry-After).",
+          "path": "src/modules/wagering/http/wagering.controller.ts",
+          "proof": "test/e2e/wagering-http.test.ts"
+        }
+      ],
+      "edges": [
+        { "from": "entry", "to": "auth" },
+        { "from": "auth", "to": "scope" },
+        { "from": "scope", "to": "contract" },
+        { "from": "contract", "to": "dup" },
+        { "from": "dup", "to": "replay", "label": "igual" },
+        { "from": "dup", "to": "conflict", "label": "diferente" },
+        { "from": "dup", "to": "lock", "label": "nova" },
+        { "from": "lock", "to": "settle" },
+        { "from": "settle", "to": "bank" },
+        { "from": "bank", "to": "response" }
+      ]
+    },
+    {
+      "id": "queued-command",
+      "title": "Comando pela fila",
+      "lead": "O mesmo caso de uso da HTTP, acionado por uma mensagem SQS. A mensagem só é confirmada depois do commit; uma falha permanente vai para a DLQ.",
+      "nodes": [
+        {
+          "id": "queue",
+          "label": "wager-transactions.fifo",
+          "col": 0,
+          "row": 0,
+          "kind": "queue",
+          "summary": "Fila FIFO de comandos. A política de redrive move a mensagem para a DLQ após 10 entregas (maxReceiveCount).",
+          "path": "docker/localstack/init-sqs.sh",
+          "proof": "test/integration/messaging/broker-redrive.test.ts"
+        },
+        {
+          "id": "consumer",
+          "label": "Consumidor",
+          "col": 1,
+          "row": 0,
+          "kind": "check",
+          "summary": "Lê até 10 mensagens, com long poll de 1 s, e chama o mesmo caso de uso da HTTP.",
+          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "proof": "test/integration/messaging/wager-command-consumer.test.ts"
+        },
+        {
+          "id": "body",
+          "label": "Corpo válido?",
+          "col": 2,
+          "row": 0,
+          "kind": "check",
+          "summary": "Uma mensagem malformada, com identificador que não é UUID ou com chave inválida é falha permanente: vai direto à DLQ, sem efeito.",
+          "path": "src/modules/messaging/application/wager-command-message.ts",
+          "proof": "test/unit/messaging/application/wager-command-message.test.ts"
+        },
+        {
+          "id": "dlq",
+          "label": "DLQ: wager-transactions-dlq.fifo",
+          "col": 2,
+          "row": 1,
+          "kind": "queue",
+          "summary": "Recebe as falhas permanentes e as mensagens que esgotaram as entregas. A cópia é deduplicada pelo corpo na janela de 5 minutos.",
+          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "proof": "test/unit/messaging/application/dead-letter-deduplication.test.ts"
+        },
+        {
+          "id": "usecase",
+          "label": "Mesmo caso de uso da HTTP",
+          "col": 3,
+          "row": 0,
+          "kind": "store",
+          "summary": "A inbox (consumidor, messageId) é gravada na mesma transação do efeito. Uma entrega repetida é replay, sem segundo efeito.",
+          "path": "src/modules/wagering/application/process-wager-transaction.use-case.ts",
+          "proof": "test/integration/messaging/duplicate-deliveries.test.ts"
+        },
+        {
+          "id": "outbox",
+          "label": "Outbox, na mesma transação",
+          "col": 3,
+          "row": 1,
+          "kind": "store",
+          "summary": "Os eventos do efeito são gravados junto com ele, e só são publicados depois do commit.",
+          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "proof": "test/integration/messaging/outbox-publisher.test.ts"
+        },
+        {
+          "id": "commit",
+          "label": "Commit?",
+          "col": 4,
+          "row": 0,
+          "kind": "check",
+          "summary": "Só com o commit feito a mensagem é apagada da fila. Um erro transitório não confirma a mensagem.",
+          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "proof": "test/integration/messaging/wager-command-consumer.test.ts"
+        },
+        {
+          "id": "ack",
+          "label": "DeleteMessage (ACK)",
+          "col": 5,
+          "row": 0,
+          "kind": "outcome",
+          "summary": "Confirmação depois do commit. Uma morte antes dela gera reentrega, e a inbox impede o segundo efeito.",
+          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "proof": "test/concurrency/process-crash-and-shutdown.test.ts"
+        },
+        {
+          "id": "retry",
+          "label": "Visibilidade com backoff",
+          "col": 4,
+          "row": 1,
+          "kind": "outcome",
+          "summary": "Erro transitório: a mensagem volta à fila depois de 2 s, 4 s, 8 s e assim por diante, com teto de 5 minutos.",
+          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "proof": "test/integration/messaging/wager-command-consumer.test.ts"
+        },
+        {
+          "id": "publisher",
+          "label": "Publicador (lease)",
+          "col": 3,
+          "row": 2,
+          "kind": "store",
+          "summary": "Reserva um lote com lease e envia em requisições de até 10 entradas. O envio ocorre fora de qualquer transação.",
+          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "proof": "test/integration/messaging/partial-batch-order.test.ts"
+        },
+        {
+          "id": "events",
+          "label": "wager-events.fifo",
+          "col": 4,
+          "row": 2,
+          "kind": "queue",
+          "summary": "Fila de eventos. O eventId é o id de deduplicação e o agregado é o grupo de mensagens, então cada carteira mantém a sua ordem de envio.",
+          "path": "src/modules/messaging/infrastructure/sqs/sqs-event-transport.ts",
+          "proof": "test/integration/messaging/partial-batch-order.test.ts"
+        }
+      ],
+      "edges": [
+        { "from": "queue", "to": "consumer" },
+        { "from": "consumer", "to": "body" },
+        { "from": "body", "to": "dlq", "label": "não" },
+        { "from": "body", "to": "usecase", "label": "sim" },
+        { "from": "usecase", "to": "commit" },
+        { "from": "usecase", "to": "outbox", "label": "mesma transação" },
+        { "from": "commit", "to": "ack", "label": "sim" },
+        { "from": "commit", "to": "retry", "label": "não" },
+        { "from": "outbox", "to": "publisher", "label": "após o commit" },
+        { "from": "publisher", "to": "events" }
+      ]
+    },
+    {
+      "id": "outcome-entities",
+      "title": "Resultados e efeitos",
+      "lead": "O que cada resultado de uma regra grava. Só a aplicação muda o saldo; a recusa e a espera deixam a carteira como estava.",
+      "nodes": [
+        {
+          "id": "rule",
+          "label": "Regra financeira",
+          "col": 0,
+          "row": 1,
+          "kind": "check",
+          "summary": "A regra decide um de três resultados. A decisão fica em um só lugar, o TransactionSettlement.",
+          "path": "src/modules/wagering/application/transaction-settlement.ts",
+          "proof": "test/concurrency/distributed-contention.test.ts"
+        },
+        {
+          "id": "applied",
+          "label": "Aplicada (PROCESSED)",
+          "col": 1,
+          "row": 0,
+          "kind": "outcome",
+          "summary": "O saldo e a versão mudam, e a versão sobe uma vez. O lançamento e a transação PROCESSED são gravados na mesma transação.",
+          "path": "src/modules/wallet/domain/wallet.ts",
+          "proof": "test/unit/wallet/domain/wallet.test.ts"
+        },
+        {
+          "id": "rejected",
+          "label": "Recusada (REJECTED)",
+          "col": 1,
+          "row": 1,
+          "kind": "outcome",
+          "summary": "Nenhum saldo muda e nenhum lançamento é criado. A resposta traz o failureCode, que diz ao provedor se deve reenviar.",
+          "path": "src/modules/wagering/domain/failure-code.ts",
+          "proof": "test/integration/wagering/process-wager-transaction.test.ts"
+        },
+        {
+          "id": "held",
+          "label": "Aguardando referência",
+          "col": 1,
+          "row": 2,
+          "kind": "outcome",
+          "summary": "A operação fica retida, sem efeito no saldo, até a referência chegar. Nenhum valor é creditado ou debitado enquanto espera.",
+          "path": "src/modules/wagering/application/process-pending-references.use-case.ts",
+          "proof": "test/integration/wagering/pending-reference.test.ts"
+        },
+        {
+          "id": "wallet",
+          "label": "Carteira: saldo e versão +1",
+          "col": 2,
+          "row": 0,
+          "kind": "store",
+          "summary": "A carteira aplica a mudança só com lançamento válido e moeda compatível. O saldo nunca fica negativo: há CHECK no banco.",
+          "path": "src/modules/wallet/domain/wallet.ts",
+          "proof": "test/integration/schema/schema-constraints.test.ts"
+        },
+        {
+          "id": "failure",
+          "label": "Transação REJECTED, com failureCode",
+          "col": 2,
+          "row": 1,
+          "kind": "store",
+          "summary": "Guarda o que foi enviado e o saldo observado na recusa. Não há lançamento.",
+          "path": "src/modules/wagering/domain/failure-code.ts",
+          "proof": "test/integration/wagering/process-wager-transaction.test.ts"
+        },
+        {
+          "id": "retry",
+          "label": "Retentativas: até 6, com backoff",
+          "col": 2,
+          "row": 2,
+          "kind": "store",
+          "summary": "O worker reavalia a retenção com backoff exponencial. O limite de tentativas é MAX_REFERENCE_ATTEMPTS = 6.",
+          "path": "src/modules/wagering/domain/reference-retry-policy.ts",
+          "proof": "test/integration/wagering/pending-reference.test.ts"
+        },
+        {
+          "id": "ledger",
+          "label": "Lançamento imutável",
+          "col": 3,
+          "row": 0,
+          "kind": "store",
+          "summary": "WalletLedgerEntry não tem campos mutáveis. Um trigger no banco recusa UPDATE, DELETE e TRUNCATE.",
+          "path": "src/modules/wallet/domain/wallet-ledger-entry.ts",
+          "proof": "test/integration/schema/schema-constraints.test.ts"
+        },
+        {
+          "id": "events",
+          "label": "Eventos no outbox",
+          "col": 3,
+          "row": 1,
+          "kind": "queue",
+          "summary": "WagerTransactionProcessed, WagerTransactionRejected, WalletBalanceChanged e WagerTransactionPendingReference, publicados depois do commit.",
+          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "proof": "test/integration/messaging/outbox-publisher.test.ts"
+        },
+        {
+          "id": "exhausted",
+          "label": "REFERENCE_NOT_FOUND (422)",
+          "col": 3,
+          "row": 2,
+          "kind": "outcome",
+          "summary": "Esgotado o limite, a operação vira REJECTED com REFERENCE_NOT_FOUND, e o evento correspondente é publicado.",
+          "path": "src/modules/wagering/application/process-pending-references.use-case.ts",
+          "proof": "test/integration/wagering/pending-reference.test.ts"
+        }
+      ],
+      "edges": [
+        { "from": "rule", "to": "applied", "label": "aplicada" },
+        { "from": "rule", "to": "rejected", "label": "recusada" },
+        { "from": "rule", "to": "held", "label": "sem referência" },
+        { "from": "applied", "to": "wallet", "label": "saldo" },
+        { "from": "wallet", "to": "ledger", "label": "lançamento" },
+        { "from": "rejected", "to": "failure" },
+        { "from": "held", "to": "retry" },
+        { "from": "retry", "to": "exhausted", "label": "esgotadas" },
+        { "from": "failure", "to": "events" },
+        { "from": "exhausted", "to": "events" }
+      ]
+    }
+  ]
+}

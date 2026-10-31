@@ -389,6 +389,43 @@ Events: `WagerTransactionProcessed` (including LOSS), `WagerTransactionRejected`
 carrying `walletVersion`). The envelope is an abstract class (`IntegrationEvent`) with one
 concrete subclass per event type. Its data holds only JSON-friendly values.
 
+### What an external consumer can rely on
+
+The events queue is FIFO per wallet (`MessageGroupId` is the aggregate), but FIFO orders only what
+arrives in order. Three things are true, and they are all the guarantee there is:
+
+1. **Every event arrives, at least once.** A refused event is retried without a limit on its attempts;
+   only its delay is capped (`retryDelayMs`). No event is dropped, and an event the broker accepted is
+   not sent again except after a lost acknowledgement.
+2. **`eventId` identifies the fact.** It is the outbox id, the SQS deduplication id, and the value a
+   consumer deduplicates on. A repeated event has the same `eventId`.
+3. **`walletVersion` orders the balance changes of one wallet.** It rises by exactly one with each balance
+   change, and `WalletBalanceChanged` is published for each one, so the versions of a wallet are
+   `1, 2, 3, ...` with no gap in the committed history.
+
+What is not true: the arrival order. A refused event is retried after its backoff, so a later event of
+the same wallet can arrive first. The test `partial-batch-order.test.ts` makes that visible: with E2
+refused in the first request, the broker receives `walletVersion` 1 and 3, then 2 after its retry. The
+outbox holds E2 alone, with one attempt, until its backoff ends.
+
+**The consumer rule.** To apply a wallet's balance changes in order, keep the last applied `walletVersion`
+per wallet, apply `last + 1` when it arrives, and hold a higher version until the missing ones arrive.
+A version at or below `last` is a duplicate, and its `eventId` tells whether it is the same fact.
+
+**Why the publisher does not reorder.** Sending a wallet's events in one request per round (one event of
+each wallet per request, the next round after the previous one) would keep a refused event from being
+overtaken within one publisher. It was evaluated and not adopted:
+
+- The guarantee would hold only for one publisher. Two publishers already send one wallet's events out
+  of commit order (`two publishers can send one wallet's events out of commit order`), and rounds do
+  not change that. The consumer rule above is needed either way.
+- The cost is in broker requests, and it depends on how the events are spread. Twenty events over twenty
+  wallets are two requests in both designs. Twenty events on one wallet are two requests now and twenty
+  in rounds, because each round holds one entry. A hot wallet would pay ten times the requests for an
+  order that the consumer rule gives anyway.
+- The alternative that would give a global order is a sequencer per wallet, which this design does not
+  build (section 14).
+
 ## 9. Out-of-order references
 
 A reversal whose reference is missing is held as `PENDING_REFERENCE`, with its attempt
@@ -574,8 +611,9 @@ What is not claimed, and why:
 - **Restart after a crash is configuration, not a test.** Compose restarts the `api` and
   `worker` services unless they were stopped (`restart: unless-stopped`). `docker compose
 config` validates the file. No test starts a container and kills it.
-- **Event order across concurrent publishers is not guaranteed.** Two publishers can send one
-  wallet's events out of commit order. Within one publisher's batch the order is the due time, and
+- **Event order is not guaranteed on arrival.** A refused event is retried later, so a later event of its wallet
+  can arrive first (`partial-batch-order.test.ts`), and two publishers can send one wallet's events out of
+  commit order. Within one publisher's batch the order is the due time, and
   events committed at the same instant have no defined order. `integration: two publishers send one wallet's events out of
 commit order` shows it. Consumers order by `walletVersion`, so no order is promised across publishers.
 - **Reconciliation runs on demand.** There is no scheduled job.

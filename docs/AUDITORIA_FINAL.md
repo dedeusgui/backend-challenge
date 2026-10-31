@@ -63,5 +63,13 @@ desta rodada** (justificado abaixo).
 
 ## Achado sobre a garantia de ordem (item 6)
 
-Este item é tratado no commit próprio da mensageria, com o teste da sequência E1, E2, E3 e a comparação
-entre manter o lote e reordenar por rodadas. O resultado será registrado aqui e em `ARCHITECTURE.md` §8.
+Com E2 recusado na primeira requisição, o broker real recebe `walletVersion` 1 e 3 e depois 2, e o
+outbox guarda E2 sozinho, com uma tentativa, até o fim do backoff. A garantia para o consumidor é:
+todo evento chega (tentativas sem teto), `eventId` identifica o fato, e `walletVersion` ordena as
+alterações de saldo de uma wallet. O consumidor precisa aplicar `last + 1` e segurar as versões
+maiores. O texto completo está em ARCHITECTURE §8.
+
+A alternativa de enviar em rodadas, uma entrada por wallet em cada requisição, foi avaliada e não foi
+adotada: não cobre dois publicadores, e em carteiras quentes multiplica as requisições por até o
+tamanho do lote. Nenhum tempo de execução foi medido para ela, e a conclusão se baseia na contagem de
+requisições, que é determinística.

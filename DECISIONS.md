@@ -83,6 +83,7 @@ reviewed in `docs/INVARIANT_REVIEW.md`.
 | E-05 | Read paths take no lock. Only reconciliation takes a shared lock.                                                                                                | Reads must never queue behind a financial write.                                                 | A read may see a state that is one commit old.                                            | `WalletQueries`, `WagerQueries`                                        | Accepted |
 | E-06 | The outbox claim uses `FOR UPDATE SKIP LOCKED`.                                                                                                                  | Two publishers should not wait for each other.                                                   | Removing it changes nothing a test can see (mutant M3). The lease predicate keeps safety. | `mikro-orm-outbox.store.ts`; M3 recorded in `TEST_STRATEGY.md`         | Accepted |
 | E-07 | Lock waits are **not measured**. `concurrency_conflicts_total` counts lost races only.                                                                           | Measuring the wait needs instrumentation that was not added.                                     | A slow lock is invisible in the metrics.                                                  | `process-wager-transaction.use-case.ts`                                | Open     |
+| E-08 | A stored transaction is answered before the wallet lock is taken. The fast path is one lookup before the lock, and it is not benchmarked in this review.         | A replay does not queue behind a financial write, and the lock is taken only for a new identity. | None measured.                                                                            | `a replay is answered without waiting for the wallet lock`             | Accepted |
 
 ## F. Idempotency and payloads
 
@@ -355,3 +356,15 @@ These are facts of the environment, and the project depends on them without choo
 
 - The sandbox has no published CI run. The workflow was validated for syntax and not executed on GitHub.
 - The LocalStack behaviour is LocalStack's, and an AWS deployment was not made.
+
+## O. Decided not to build in this review
+
+These were considered and not built. Each row says why, so that a later reader does not have to ask.
+
+| ID   | Option                                                              | Why not now                                                                                                                                       |
+| ---- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O-01 | Zod for the HTTP and queue contracts (challenge section 4.1)        | The validators are small, and each has a test. A dependency for them would add code without a proven gain. Revisit when the contract grows.       |
+| O-02 | Rate limiting at the edge (Nginx profile) or in process (section 7) | The edge needs Docker, which was not available here, so a profile could not be verified. An in-process throttle would not limit across instances. |
+| O-03 | Helmet                                                              | A subset is set in `configureHttp` (no `x-powered-by`, `nosniff`, `no-store`). That covers the responses this API sends, with no dependency.      |
+| O-04 | Keycloak or Zitadel                                                 | Not required by the specification, and ADR 0007 and decision D5 in INVARIANT_REVIEW decide it. The IdP is the production path.                    |
+| O-05 | Changing a hot path for speed                                       | No bottleneck was measured in this review, and the load report was not regenerated. A change without a measurement is not claimed as faster.      |

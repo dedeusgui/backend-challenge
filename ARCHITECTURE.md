@@ -509,13 +509,18 @@ What is not claimed, and why:
 - **Restart after a crash is configuration, not a test.** Compose restarts the `api` and
   `worker` services unless they were stopped (`restart: unless-stopped`). `docker compose
 config` validates the file. No test starts a container and kills it.
-- **Event order across concurrent publishers is not guaranteed.** Consumers order by
-  `walletVersion`.
+- **Event order across concurrent publishers is not guaranteed.** Two publishers can send one
+  wallet's events out of commit order. `integration: two publishers send one wallet's events out of
+commit order` shows it. Consumers order by `walletVersion`, so no order is promised across publishers.
 - **Reconciliation runs on demand.** There is no scheduled job.
+- **No rate limiting.** Abuse protection is not built. An edge proxy is the intended place. An in-process
+  throttle would count per process, so it would not limit across instances.
 - **No dead-letter replay tooling.**
 - **A win resent under a new external id is a second credit** unless it names its BET (section 7).
 - **Dead-letter duplicates after a crash.** A crash between a dead-letter send and its acknowledgement
   leaves one copy per delivery. A dead-letter consumer must deduplicate by the message body.
+- **The HTTP changes of this review are not measured.** The headers, the explicit body limit and the
+  correlation check are on the request path. The load report predates them, and it was not regenerated.
 - **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed
   rates were 25, 100 and 200 requests per second, and the first failing rates 50, 125 and 300
   (`docs/LOAD_TEST_RESULTS.md`). The predicted ceiling, from the CPU per request, matched on one and two

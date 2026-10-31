@@ -286,6 +286,35 @@ send that the broker refuses is not acknowledged, so the message is retried on r
 `integration: crash after the dead-letter send` and `integration: dead-letter send refused` in
 `test/integration/messaging/wager-command-consumer.test.ts`.
 
+### Duplicates: what each layer stops
+
+The queue delivers at least once, so one operation can arrive many times. The same operation can also
+arrive over HTTP, or be resent under a new message id. Each way a duplicate can arrive has a layer
+that stops its effect. `test/integration/messaging/duplicate-deliveries.test.ts` checks each one by
+counting the rows and the balance afterwards. It runs three consumers at once, against real PostgreSQL
+and LocalStack.
+
+| How the duplicate arrives                                                | What stops its effect                                                                                                                           | Proven by                                                                                                    |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| The same message again (lost acknowledgement, crash, expired visibility) | Inbox row `(consumer, messageId)`, written in the operation's transaction, and the idempotency lookup                                           | `duplicate-deliveries`: twenty copies, three consumers at once; `wager-command-consumer`: crash after commit |
+| The producer resends it under a new message id                           | The idempotency key and the external id, each unique per provider                                                                               | `duplicate-deliveries`: five resends under five ids                                                          |
+| The same operation over HTTP and in the queue                            | The same idempotency key                                                                                                                        | `duplicate-deliveries`: HTTP and queue                                                                       |
+| The same external id under another key, with the same payload            | The external id lookup, which replays (ADR 0003)                                                                                                | `duplicate-deliveries`: rekeyed copy                                                                         |
+| A reversal delivered more than once                                      | `hasProcessedReversal`, and the partial unique index on the reference                                                                           | `duplicate-deliveries`: refund five times                                                                    |
+| Two copies racing on one wallet                                          | The wallet lock, the second look under it, and the unique constraints                                                                           | `hot-wallet`, `distributed-contention`                                                                       |
+| Whatever the code does, the last line                                    | `UNIQUE (provider, external id)`, `UNIQUE (provider, idempotency key)`, `UNIQUE (wallet, transaction)` in the ledger, and the inbox primary key | `schema-constraints`, one test per constraint                                                                |
+
+The replay lookup is what answers a duplicate and lets it finish. The unique constraints are what
+make a second effect impossible. Without the lookup, a duplicate that loses a race retries until its
+attempts run out, but it still applies nothing. A mutation check showed this: with the stored lookup
+disabled, the balance and the ledger stayed correct, and the messages did not settle.
+
+**Not deduplicated, on purpose.** Two operations with different external ids are two operations, even
+when their payloads match. A provider that resends a win under a new external id therefore gets a
+second credit, unless the win names its BET. A linked win is held to one result per BET. An unnamed
+win is not, because the specification makes the reference optional (section 13). The owner must
+decide whether that is acceptable, or whether a win must name its BET.
+
 ## 8. Transactional outbox
 
 Events are written in the same transaction as the financial change. Nothing is sent to
@@ -475,6 +504,7 @@ config` validates the file. No test starts a container and kills it.
   `walletVersion`.
 - **Reconciliation runs on demand.** There is no scheduled job.
 - **No dead-letter replay tooling.**
+- **A win resent under a new external id is a second credit** unless it names its BET (section 7).
 - **Dead-letter duplicates after a crash.** A crash between a dead-letter send and its acknowledgement
   leaves one copy per delivery. A dead-letter consumer must deduplicate by the message body.
 - **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed

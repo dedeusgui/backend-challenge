@@ -28,7 +28,8 @@
     "bench:edge": "bun run test/edge/overhead.ts",
     "demo:finance": "bun run test/demo/finance.ts",
     "edge:check": "bun run edge:up && bun run test:edge; status=$?; bun run edge:down; exit $status",
-    "test:infra": "bun test test/infra"
+    "test:infra": "bun test test/infra",
+    "site:build": "bun run scripts/build-site.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

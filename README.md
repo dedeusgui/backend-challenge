@@ -201,3 +201,4 @@ docs/                     guias, matriz, ADRs, contrato OpenAPI, relatórios de 
 - [docs/DOMAIN_GLOSSARY.md](docs/DOMAIN_GLOSSARY.md): glossário do domínio.
 - [docs/adr/README.md](docs/adr/README.md): índice das decisões registradas.
 - [docs/CHALLENGE.md](docs/CHALLENGE.md): o enunciado, sem alterações.
+- Vitrine estática: `bun run site:build` gera `site/`, uma página que não depende de serviço. A publicação no GitHub Pages está preparada em `.github/workflows/pages.yml`, e depende de uma configuração do repositório; ver [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md).

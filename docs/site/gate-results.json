@@ -1,0 +1,10 @@
+{
+  "commit": "0bc7612",
+  "meaning": "check:all run on the working tree built on this commit; the commit that adds this file is the next one",
+  "command": "bun run check:all",
+  "unit": 326,
+  "infra": 4,
+  "integration": 144,
+  "concurrency": 23,
+  "e2e": 100
+}

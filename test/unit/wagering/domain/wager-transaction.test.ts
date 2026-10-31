@@ -70,17 +70,41 @@ describe('WagerTransaction.create', () => {
     expect(transaction.resultingBalance).toBeUndefined();
   });
 
-  test.each([
-    ['WIN', undefined],
-    ['LOSS', undefined],
-    ['REFUND', undefined],
-    ['ROLLBACK', undefined],
-  ] as const)('%s requires referenceExternalTransactionId', (kind, reference) => {
-    expect(
-      domainErrorCodeOf(() =>
-        WagerTransaction.create(props({ kind, referenceExternalTransactionId: reference })),
-      ),
-    ).toBe('INVALID_TRANSACTION');
+  test.each(['REFUND', 'ROLLBACK'] as const)(
+    '%s requires referenceExternalTransactionId',
+    (kind) => {
+      expect(
+        domainErrorCodeOf(() =>
+          WagerTransaction.create(props({ kind, referenceExternalTransactionId: undefined })),
+        ),
+      ).toBe('INVALID_TRANSACTION');
+    },
+  );
+
+  test.each(['WIN', 'LOSS'] as const)(
+    '%s may omit referenceExternalTransactionId, as the specification allows',
+    (kind) => {
+      const result = WagerTransaction.create(
+        props({ kind, referenceExternalTransactionId: undefined }),
+      );
+      expect(result.referenceExternalTransactionId).toBeUndefined();
+      expect(result.requiresReference()).toBe(false);
+    },
+  );
+
+  test('an unlinked WIN is processed without a reference', () => {
+    const win = WagerTransaction.create(
+      props({ kind: 'WIN', referenceExternalTransactionId: undefined, money: brl('40.00') }),
+    );
+
+    win.markProcessed({
+      referenceTransactionId: undefined,
+      resultingBalance: brl('140.00'),
+      at: PROCESSED_AT,
+    });
+
+    expect(win.status).toBe('PROCESSED');
+    expect(win.referenceTransactionId).toBeUndefined();
   });
 
   test.each(['BET', 'OPENING'] as const)('%s must not carry a reference', (kind) => {
@@ -136,8 +160,8 @@ describe('WagerTransaction kind rules', () => {
   test.each([
     ['OPENING', true, false, 'CREDIT'],
     ['BET', true, false, 'DEBIT'],
-    ['WIN', true, true, 'CREDIT'],
-    ['LOSS', false, true, undefined],
+    ['WIN', true, false, 'CREDIT'],
+    ['LOSS', false, false, undefined],
     ['REFUND', true, true, 'CREDIT'],
   ] as const)(
     '%s: affectsBalance=%s requiresReference=%s direction=%s',

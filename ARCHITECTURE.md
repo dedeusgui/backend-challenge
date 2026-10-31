@@ -70,8 +70,8 @@ and their rules are one table (`wager-transaction-kind.ts`):
 | ---------- | ------------------------- | ------- | --------------------------------------------------------------- |
 | `OPENING`  | credit (internal only)    | CREDIT  | none                                                            |
 | `BET`      | debit                     | DEBIT   | none                                                            |
-| `WIN`      | credit                    | CREDIT  | required `BET`, not amount-bound                                |
-| `LOSS`     | none                      | none    | required `BET`                                                  |
+| `WIN`      | credit                    | CREDIT  | optional `BET`, not amount-bound                                |
+| `LOSS`     | none                      | none    | optional `BET`                                                  |
 | `REFUND`   | credit                    | CREDIT  | required `BET` with no result, amount must match                |
 | `ROLLBACK` | opposite of the reference | inverse | required `BET`, `WIN` or `REFUND`, any state, amount must match |
 
@@ -135,7 +135,7 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   refuse mutation.
 - `wager_transactions`: `UNIQUE (provider_id, external_transaction_id)`;
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
-  `ROLLBACK`, `WIN` or `LOSS` must carry a reference; a `BET` or `OPENING` must not. Status
+  `ROLLBACK` must carry a reference, a `BET` or `OPENING` must not, and a `WIN` or `LOSS` may carry one (migration 6, challenge 6.3). Status
   shape: PROCESSED needs `processed_at` and a resulting balance; REJECTED and FAILED
   need a failure code; a held row needs its next lookup time. Composite foreign key
   `(reference_transaction_id, provider_id, wallet_id)`, so a reference must share the
@@ -363,10 +363,13 @@ These are choices the specification leaves open. Each one is tested.
 - Idempotency is per provider. A same external id under another key replays when the
   payload matches, and conflicts when it does not.
 - Zero amounts are refused for balance-affecting kinds. `LOSS` may be zero.
-- A `WIN` and a `LOSS` must name the `BET` they settle. Without that link a result cannot be
-  tied to its BET, so a second result or a REFUND after a result could not be refused. This
-  narrows the specification, where a WIN "pode referenciar" its BET. The win's amount is not
-  bound to the bet's. The owner should confirm this reading.
+- A `WIN` and a `LOSS` may name the `BET` they settle. The specification makes that reference
+  optional: it requires one only for REFUND and ROLLBACK. A named result is checked against its
+  BET, so a second result, or a REFUND after a result, is refused. An unnamed result cannot be tied
+  to a BET, so those rules do not apply to it. A REFUND of the same BET may follow an unnamed WIN,
+  and both credits stay. That is the cost of following the specification, and the owner must accept
+  it or require the reference. The win's amount is not bound to the bet's. The owner should
+  confirm this reading.
 - A `BET` has at most one result. A second WIN or LOSS on it is `REFERENCE_ALREADY_SETTLED`.
   Before this rule a BET could be credited by two WINs.
 - A `REFUND` applies only to a `BET` with no result. After a WIN or a LOSS it is

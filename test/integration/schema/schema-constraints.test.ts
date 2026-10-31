@@ -511,7 +511,7 @@ describe('inbox and outbox constraints', () => {
 });
 
 describe('wager_transactions: results name their BET, and a BET has one result', () => {
-  test('a WIN or a LOSS without the reference of its BET is refused by the database', async () => {
+  test('a WIN or a LOSS may omit the reference of its BET, as the specification allows', async () => {
     const walletId = await insertWallet();
 
     expect(
@@ -525,7 +525,7 @@ describe('wager_transactions: results name their BET, and a BET has one result',
           resultingBalance: '140.00',
         }),
       ),
-    ).toBe('23514');
+    ).toBe('NO_ERROR');
     expect(
       await sqlStateOf(() =>
         insertWager({
@@ -537,7 +537,7 @@ describe('wager_transactions: results name their BET, and a BET has one result',
           resultingBalance: '100.00',
         }),
       ),
-    ).toBe('23514');
+    ).toBe('NO_ERROR');
   });
 
   test('allows only one PROCESSED result per BET', async () => {

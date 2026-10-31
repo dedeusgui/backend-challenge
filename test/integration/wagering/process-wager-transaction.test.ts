@@ -635,10 +635,23 @@ describe('ProcessWagerTransaction: one result per BET, and REFUND only for a BET
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
   });
 
-  test('a WIN or LOSS without the reference of its BET is an invalid transaction', async () => {
+  test('a WIN or a LOSS without a reference is applied, because the specification makes it optional', async () => {
     const wallet = await fundedWallet('100.00');
 
-    for (const kind of ['WIN', 'LOSS'] as const) {
+    const win = await processWager.execute(command(wallet, { kind: 'WIN', money: brl('40.00') }));
+    const loss = await processWager.execute(command(wallet, { kind: 'LOSS', money: brl('0.00') }));
+
+    expect(win.transaction.status).toBe('PROCESSED');
+    expect(win.transaction.referenceExternalTransactionId).toBeUndefined();
+    expect(loss.transaction.status).toBe('PROCESSED');
+    expect(loss.balance.toString()).toBe('140.00');
+    expect(await balanceOf(wallet.walletId)).toBe('140.00');
+  });
+
+  test('a REFUND or a ROLLBACK without a reference is still an invalid transaction', async () => {
+    const wallet = await fundedWallet('100.00');
+
+    for (const kind of ['REFUND', 'ROLLBACK'] as const) {
       const error = await processWager
         .execute(command(wallet, { kind, money: brl('25.00') }))
         .catch((caught: unknown) => caught);

@@ -32,6 +32,12 @@ export interface KindRules {
   readonly externallySubmittable: boolean;
 }
 
+/**
+ * The specification requires a reference only for REFUND and ROLLBACK (challenge 6.3 and 7).
+ * WIN and LOSS name the BET they settle when they can. Without that name a result cannot be
+ * tied to its BET, so the one-result rule and the reversal rules apply only to linked results.
+ */
+
 /** The business rules of each kind, in one table so that they can be read at a glance. */
 export const KIND_RULES: Readonly<Record<WagerTransactionKind, KindRules>> = {
   OPENING: {
@@ -49,13 +55,13 @@ export const KIND_RULES: Readonly<Record<WagerTransactionKind, KindRules>> = {
   WIN: {
     affectsBalance: true,
     ledgerDirection: 'CREDIT',
-    reference: { kinds: ['BET'], required: true, amountMustMatch: false, mustBeUnsettled: true },
+    reference: { kinds: ['BET'], required: false, amountMustMatch: false, mustBeUnsettled: true },
     externallySubmittable: true,
   },
   LOSS: {
     affectsBalance: false,
     ledgerDirection: undefined,
-    reference: { kinds: ['BET'], required: true, amountMustMatch: false, mustBeUnsettled: true },
+    reference: { kinds: ['BET'], required: false, amountMustMatch: false, mustBeUnsettled: true },
     externallySubmittable: true,
   },
   REFUND: {

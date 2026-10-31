@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { configureHttp } from '../../../src/shared/http/configure-http';
 import type { AddressInfo } from 'node:net';
 import type { MikroORM } from '@mikro-orm/postgresql';
 import { randomUUID } from 'node:crypto';
@@ -31,7 +33,7 @@ export async function startTestApp(
   databaseUrl: string,
   overrides: TestAppOverrides = {},
 ): Promise<TestApp> {
-  const app = await NestFactory.create(
+  const app = await NestFactory.create<NestExpressApplication>(
     AppModule.register({
       port: 0,
       databaseUrl,
@@ -43,8 +45,9 @@ export async function startTestApp(
         eventsQueueName: 'wager-events.fifo',
       },
     }),
-    { logger: false },
+    { logger: false, bodyParser: false },
   );
+  configureHttp(app);
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as AddressInfo;
   const repository = new MikroOrmApiClientRepository(app.get<MikroORM>(ORM));

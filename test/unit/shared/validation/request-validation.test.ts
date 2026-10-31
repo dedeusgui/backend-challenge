@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  expectCorrelationId,
   expectText,
   expectUuid,
   RequestValidationError,
@@ -69,4 +70,31 @@ describe('requiredString', () => {
     expect(error).toBeInstanceOf(RequestValidationError);
     expect(error instanceof Error ? error.message : '').toContain('playerId');
   });
+});
+
+describe('expectCorrelationId', () => {
+  test('keeps a bounded identifier of letters, digits and . _ : -', () => {
+    expect(expectCorrelationId('req-2026.07_31:alpha')).toBe('req-2026.07_31:alpha');
+  });
+
+  test('is absent when the header is absent, so the caller generates one', () => {
+    expect(expectCorrelationId(undefined)).toBeUndefined();
+  });
+
+  test('rejects an identifier longer than 128 characters', () => {
+    const error = rejectionOf(() => expectCorrelationId('c'.repeat(129)));
+    expect(error).toBeInstanceOf(RequestValidationError);
+    expect(error instanceof Error ? error.message : '').toContain('x-correlation-id');
+  });
+
+  test('rejects an empty identifier', () => {
+    expect(rejectionOf(() => expectCorrelationId(''))).toBeInstanceOf(RequestValidationError);
+  });
+
+  test.each(['has space', 'semi;colon', 'quote"', 'slash/path', 'emoji😀'])(
+    'rejects %p, which is outside the allowed characters',
+    (value) => {
+      expect(rejectionOf(() => expectCorrelationId(value))).toBeInstanceOf(RequestValidationError);
+    },
+  );
 });

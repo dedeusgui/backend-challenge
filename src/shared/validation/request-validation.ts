@@ -59,6 +59,24 @@ function hasControlCharacter(value: string): boolean {
   return false;
 }
 
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/**
+ * The correlation id is copied into events and logs, so its size and alphabet are bounded. An
+ * absent header is not an error: the caller generates an identifier instead.
+ */
+export function expectCorrelationId(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!CORRELATION_ID_PATTERN.test(value)) {
+    throw new RequestValidationError(
+      'x-correlation-id must be 1 to 128 characters of letters, digits, ".", "_", ":" or "-"',
+    );
+  }
+  return value;
+}
+
 export function requiredString(
   body: Record<string, unknown>,
   field: string,

@@ -74,6 +74,9 @@ function httpFailure(status: number): ErrorResponse {
   if (status === 403) {
     return failure(403, 'FORBIDDEN', 'This API key may not perform the operation');
   }
+  if (status === 413) {
+    return failure(413, 'PAYLOAD_TOO_LARGE', 'The request body is larger than the limit');
+  }
   if (status >= 400 && status < 500) {
     return failure(status, 'INVALID_REQUEST', 'The request could not be parsed');
   }

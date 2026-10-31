@@ -213,3 +213,53 @@ describe('a malformed monetary amount is 400', () => {
     expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
   });
 });
+
+describe('the correlation id is bounded and well formed', () => {
+  // The identifier is checked before the wallet is looked up, so a random wallet id is enough.
+  const submitWithCorrelation = (correlationId: string) =>
+    send(
+      'POST',
+      '/wagering/transactions',
+      providerKey,
+      {
+        providerId: 'provider-a',
+        externalTransactionId: `corr-${randomUUID()}`,
+        playerId: randomUUID(),
+        walletId: randomUUID(),
+        roundId: 'round-1',
+        gameId: 'fortune-chimp',
+        kind: 'BET',
+        money: { amount: '1.00', currency: 'BRL' },
+      },
+      { 'idempotency-key': `provider-a:${randomUUID()}`, 'x-correlation-id': correlationId },
+    );
+
+  test('an identifier longer than 128 characters is 400 INVALID_REQUEST', async () => {
+    const result = await submitWithCorrelation('c'.repeat(129));
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+
+  test.each(['has space', 'quote"here', 'semi;colon'])(
+    '%p is outside the allowed characters, so it is 400 INVALID_REQUEST',
+    async (correlationId) => {
+      const result = await submitWithCorrelation(correlationId);
+      expect(result.status).toBe(400);
+      expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+    },
+  );
+
+  test('a bounded identifier of allowed characters reaches the use case', async () => {
+    const result = await submitWithCorrelation('req.2026-07_31:alpha');
+    expect(result.status).toBe(404);
+    expect(errorCodeOf(result)).toBe('WALLET_NOT_FOUND');
+  });
+});
+
+describe('the JSON body has an explicit limit', () => {
+  test('a body above the limit is 413 PAYLOAD_TOO_LARGE, before authentication or parsing', async () => {
+    const result = await send('POST', '/wallets', operatorKey, { padding: 'x'.repeat(20_000) });
+    expect(result.status).toBe(413);
+    expect(errorCodeOf(result)).toBe('PAYLOAD_TOO_LARGE');
+  });
+});

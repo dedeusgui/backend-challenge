@@ -9,7 +9,7 @@ import {
   type ProcessWagerOutcome,
 } from '../application/process-wager-transaction.use-case';
 import { parseProcessWagerRequest } from './process-wager.request';
-import { expectUuid } from '../../../shared/validation/request-validation';
+import { expectCorrelationId, expectUuid } from '../../../shared/validation/request-validation';
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
 import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
@@ -56,7 +56,7 @@ export class WageringController {
   ): Promise<WagerTransactionResponse> {
     const { command } = parseProcessWagerRequest(body, idempotencyKey);
     requireProviderScope(principal, command.providerId);
-    const resolvedCorrelationId = correlationId ?? randomUUID();
+    const resolvedCorrelationId = expectCorrelationId(correlationId) ?? randomUUID();
     const started = performance.now();
     const outcome = await this.processWager.execute({
       ...command,

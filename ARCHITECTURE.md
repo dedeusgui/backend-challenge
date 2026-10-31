@@ -377,7 +377,9 @@ Decision: [ADR 0005](docs/adr/0005-reference-hold-and-bounded-retries.md).
 | `GET /health/ready`                               | 200 when PostgreSQL and the command queue answer             | 503 names the failing check                                                                                                                                                                               |
 | `GET /metrics`                                    | 200, this process's counters                                 | none                                                                                                                                                                                                      |
 
-Unknown routes are 404 `NOT_FOUND`. Malformed bodies are 400 `INVALID_REQUEST`. A `walletId` or `transactionId` that is not a UUID, and
+Unknown routes are 404 `NOT_FOUND`. Malformed bodies are 400 `INVALID_REQUEST`, and a body above 16 kB is 413 `PAYLOAD_TOO_LARGE`, refused before
+parsing or authentication. A correlation id longer than 128 characters, or with a character outside
+`A-Za-z0-9._:-`, is 400. A `walletId` or `transactionId` that is not a UUID, and
 a control character in any text field, are 400 `INVALID_REQUEST` on every route, so they never reach
 PostgreSQL. A ledger cursor whose sequence is beyond the `bigint` range is 400 `INVALID_CURSOR`. Unknown
 errors are 500 `INTERNAL_ERROR` with no internal detail. A business rejection is not a
@@ -431,6 +433,9 @@ The guard is `src/modules/auth/http/api-key.guard.ts`. The rules are in
 
 Queue messages are not authenticated, because they arrive on an internal channel (challenge
 §2). Their provider and wallet fields are still checked in the domain.
+
+The SQS client takes its credentials from the SDK's default chain. The fixed local pair is used only
+when an emulator endpoint is configured (`createSqsClient`), and it is never sent to AWS.
 
 ## 13. Interpretations
 

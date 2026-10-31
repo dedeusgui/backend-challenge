@@ -18,12 +18,15 @@ export interface TestQueues {
 }
 
 /** Creates three private FIFO queues, so each test file sees only its own messages. */
-export async function createTestQueues(client: SQSClient): Promise<TestQueues> {
+export async function createTestQueues(
+  client: SQSClient,
+  names?: { command: string; deadLetter: string; events: string },
+): Promise<TestQueues> {
   const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
   const create = async (name: string): Promise<string> => {
     const created = await client.send(
       new CreateQueueCommand({
-        QueueName: `${name}-${suffix}.fifo`,
+        QueueName: name.endsWith('.fifo') ? name : `${name}.fifo`,
         Attributes: { FifoQueue: 'true', ContentBasedDeduplication: 'false' },
       }),
     );
@@ -33,9 +36,9 @@ export async function createTestQueues(client: SQSClient): Promise<TestQueues> {
     return created.QueueUrl;
   };
   return {
-    commandQueueUrl: await create('commands'),
-    deadLetterQueueUrl: await create('dead-letter'),
-    eventsQueueUrl: await create('events'),
+    commandQueueUrl: await create(names?.command ?? `commands-${suffix}`),
+    deadLetterQueueUrl: await create(names?.deadLetter ?? `dead-letter-${suffix}`),
+    eventsQueueUrl: await create(names?.events ?? `events-${suffix}`),
   };
 }
 

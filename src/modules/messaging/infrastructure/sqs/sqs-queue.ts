@@ -70,6 +70,20 @@ export class SqsQueue implements MessageQueue {
     );
   }
 
+  /** Messages still in the queue: visible ones plus those delivered and not yet acknowledged. */
+  async pendingCount(): Promise<number> {
+    const response = await this.client.send(
+      new GetQueueAttributesCommand({
+        QueueUrl: this.queueUrl,
+        AttributeNames: ['ApproximateNumberOfMessages', 'ApproximateNumberOfMessagesNotVisible'],
+      }),
+    );
+    return (
+      Number(response.Attributes?.ApproximateNumberOfMessages ?? '0') +
+      Number(response.Attributes?.ApproximateNumberOfMessagesNotVisible ?? '0')
+    );
+  }
+
   /** Messages delivered and not yet acknowledged, which are invisible to other receivers. */
   async countInFlight(): Promise<number> {
     const response = await this.client.send(

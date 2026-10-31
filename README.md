@@ -12,7 +12,7 @@ against its ledger.
 - [docs/adr](docs/adr): the decisions and their trade-offs.
 - [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md): the three public reference implementations.
 - [DECISIONS.md](DECISIONS.md): every technical decision, with its reason, trade-off, evidence and status.
-- [docs/ENTITY_MAP.md](docs/ENTITY_MAP.md): every entity, its table, its classes and methods, and the flows.
+- [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.md): the flow of data: colour-coded graphs, the function-by-entity matrix, the response table, and every entity with its table and methods.
 - [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md): the review of every invariant and constraint, and the decisions the owner must confirm.
 - [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md): the optional load test, with its environment.
 
@@ -147,10 +147,11 @@ bun run test:concurrency
 Each test asserts that exactly one operation has the effect, and that the rest are replays,
 conflicts or rejections. `docs/TEST_STRATEGY.md` says which spec requirement each test proves.
 
-To run the optional load test against the same kind of stack:
+To run the optional load test against the same kind of stack. It ramps the rate in steps and checks
+every step against the constraints in `test/load/thresholds.ts`:
 
 ```bash
-bun run test:load   # writes docs/LOAD_TEST_RESULTS.md
+bun run test:load   # writes docs/LOAD_TEST_RESULTS.md; the runs are in docs/LOAD_TEST_HISTORY.md
 ```
 
 ## Tests
@@ -170,8 +171,8 @@ These are listed in full in `ARCHITECTURE.md` section 14. The most important:
 - **Broker-side dead-lettering** (after ten deliveries) is configured in Compose and checked on the
   provisioned queue by `test/integration/messaging/broker-redrive.test.ts`.
 - **Metrics are per process**, with no aggregation or dashboard.
-- **Load is measured once, on one machine.** `docs/LOAD_TEST_RESULTS.md` has the numbers. They are
-  not a capacity claim, and the outbox publisher lags behind the write rate under that load.
+- **Load is measured on one cloud machine.** The agreed figure is 150 requests per second sustained,
+  with 200 as the observed ceiling. The numbers are not a capacity claim for any other machine.
 - The repository's Dockerfile image build could not run in the authoring sandbox, whose TLS
   proxy blocks package downloads. The stack was verified from clean volumes with an image
   built from the same source and the sandbox CA.

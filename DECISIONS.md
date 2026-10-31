@@ -171,6 +171,166 @@ reviewed in `docs/INVARIANT_REVIEW.md`.
 | M-03 | Work goes to the designated branch. `main` is fast-forwarded only when the owner asks.                                                                                    | The owner reviews before `main` changes.                           | `main` can lag the designated branch.                                | `git log origin/main`        | Accepted |
 | M-04 | The Dockerfile image cannot be built in the authoring sandbox, because its TLS proxy blocks package downloads. It was verified with a scratch context and the sandbox CA. | Honest about what was run.                                         | The repository's own Dockerfile build is not proven in this sandbox. | `ARCHITECTURE.md` section 14 | Accepted |
 
+## N. Load test method
+
+The load test is an optional differential. Its constraints are in `test/load/thresholds.ts`, its
+results in `docs/LOAD_TEST_RESULTS.md`, and every run in `docs/LOAD_TEST_HISTORY.md`.
+
+| ID   | Decision                                                                                                                                                                                           | Why                                                                                                                         | Trade-off                                                                            | Evidence                                                  | Status   |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------- | -------- |
+| N-01 | Open model: requests are sent on a fixed schedule, whether or not earlier ones have answered. The first version was closed-loop, and it is kept only as history.                                   | A closed loop slows down when the server slows, and so it hides its own queue.                                              | The generator must keep up. Its lag is measured and checked (N-02).                  | `test/load/load-test.ts`, `runStep`; run 0 in the history | Accepted |
+| N-02 | Latency is measured from the scheduled send time. The constraint is the **p99 of the generator lag** (50 ms), not its maximum. A step whose generator is late for 1% of its requests is not valid. | Coordinated omission: a late send would look fast. The maximum fails a whole step on one garbage-collection pause (run 3).  | A step with a late generator is discarded, even if the system was fine.              | `maxGeneratorLagP99Ms`, `lagP99Ms`                        | Accepted |
+| N-03 | Constraints are written in `thresholds.ts` before a run. The ramp stops at the first failing step. The agreed rate is the highest step that passed every constraint.                               | A run cannot move its own goalposts.                                                                                        | A ramp of fixed steps finds a limit between two rates, not the exact one.            | `thresholds.ts`, the verdict in the report                | Accepted |
+| N-04 | A request with no HTTP response in 10 s is **lost**. A 5xx or a lost request is an **error**. A 4xx answer is a correct answer, not an error. Any loss fails its step.                             | Business rejections are part of the design, and a 422 is not a failure. Zero tolerance for loss is the strict reading.      | A loss caused by the client counts against the system until it is classified (N-10). | `LOST`, `lostReason`, `serverErrors`                      | Accepted |
+| N-05 | The driver is written in Bun, in the repository, and reuses the stack's tooling. k6, wrk, vegeta and Gatling were considered.                                                                      | One toolchain, the same definitions as the tests, and no second language to maintain.                                       | A dedicated tool has more protocols and better reports. k6 is a fair second opinion. | `test/load/load-test.ts`                                  | Accepted |
+| N-06 | The invariant `balance == ledger`, and the duplicate check, run after every step, not only at the end.                                                                                             | A violation under load must be attributed to the step that caused it.                                                       | Each step has a few more queries.                                                    | `violations`, `duplicates`                                | Accepted |
+| N-07 | Memory is sampled with `ps` every 500 ms. The constraint is the peak resident memory of any one process: at most 512 MiB. The API processes peaked at about 180 MiB.                               | Memory per process is the number that sizes a deployment.                                                                   | `ps` reports resident memory, not the allocator's view.                              | `rssMiBOf`, `maxRssMiBPerProcess`                         | Accepted |
+| N-08 | After each step the outbox must drain within 60 s. The drain time is part of the verdict.                                                                                                          | Events are part of the contract. A publisher that falls behind is a failure, even if the API is fine.                       | It makes the outbox the limit of a run (see G-05).                                   | `maxOutboxDrainSeconds`, the drain column                 | Accepted |
+| N-09 | CPU of each component is measured: each API and worker process from `/proc` on Linux (or `ps`), PostgreSQL and LocalStack from `docker stats`, and the generator from `process.cpuUsage`.          | To say what saturates, and not to guess. Each Bun process is single-threaded, so one process cannot pass 100%.              | `docker stats` is coarse. The table is an inference aid, not a proof.                | `cpuSecondsOf`, `containerCpuSample`, "CPU by component"  | Accepted |
+| N-10 | Each lost request records its error name and message, and the report lists them by step.                                                                                                           | A loss is either the client's (a socket closed by the server) or the system's (no answer). Only the error tells them apart. | Error messages come from the runtime, and they never carry a payload.                | "Lost requests" table in the report                       | Accepted |
+| N-11 | A constraint is agreed from the rate that held in **every** run that reached it, and the highest rate seen is shown next to it as the ceiling.                                                     | One run can be lucky or unlucky. Run 5 lost one request at 200 req/s, and run 6 lost none at the same rate.                 | The agreed rate is conservative, and the presenter must say so.                      | `docs/LOAD_TEST_HISTORY.md`, "Agreed figure"              | Accepted |
+| N-12 | The machine is the one available, and the environment table is written next to every number. No number is claimed for another machine.                                                             | A number without its machine means nothing.                                                                                 | The numbers for the presentation come from a run on the presenter's machine.         | the environment table of `docs/LOAD_TEST_RESULTS.md`      | Accepted |
+| N-13 | The driver needs Linux or macOS for memory and CPU per process. On Windows it runs inside WSL.                                                                                                     | `ps` and `/proc` are the sources. Making the driver portable would mean a second implementation.                            | Windows without WSL cannot run the memory and CPU columns.                           | `docs/LOAD_TEST_RESULTS.md`, limits                       | Accepted |
+
+## Cases: the problem and how each one is treated
+
+Each row is a situation that can happen, what goes wrong without the decision, what the system
+does, and where a test shows it. The rows are ordered from the core of the domain outwards.
+
+| #   | Case                                                               | Without a rule                                         | Treatment                                                                                                | Proven by                                                                |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1   | Two BETs of 80.00 race for a wallet with 100.00                    | Both debit, and the balance goes negative              | The wallet row is locked; the second BET reads the new balance and is `INSUFFICIENT_BALANCE`             | `hot-wallet.test.ts`, `three-processes.test.ts` (hot wallet)             |
+| 2   | The same bet is sent 50 times from three processes                 | Fifty debits                                           | One key per provider in the database; the lock serialises; one `201` and replays of the same transaction | `three-processes.test.ts`, `distributed-contention.test.ts`              |
+| 3   | The same key with another amount                                   | A second, different transaction under the same key     | `409 IDEMPOTENCY_CONFLICT`; nothing is written                                                           | `distributed-contention.test.ts`, the conflict test                      |
+| 4   | A WIN and a second WIN, or a LOSS, on one BET                      | The BET pays twice                                     | One PROCESSED result per BET, checked in settlement and by a partial unique index                        | `process-wager-transaction.test.ts`, `distributed-contention.test.ts`    |
+| 5   | A REFUND after a WIN                                               | The stake comes back on top of the winnings            | A REFUND needs a BET with no result: `REFERENCE_ALREADY_SETTLED`                                         | `process-wager-transaction.test.ts`                                      |
+| 6   | A REFUND and a ROLLBACK of the same BET, from three processes      | The stake is credited twice                            | One reversal per reference, checked in settlement and by a partial unique index                          | `distributed-contention.test.ts`                                         |
+| 7   | A REFUND arrives before its BET                                    | Rejected, and the provider has to resend               | Held as `PENDING_REFERENCE`, announced, applied when the BET arrives, rejected after 6 tries             | `pending-reference.test.ts`                                              |
+| 8   | The worker dies after the commit, before the acknowledgement       | The command runs again and debits twice                | The inbox row is in the same commit; the redelivery finds it and does nothing                            | `three-processes.test.ts`, `wager-command-consumer.test.ts`              |
+| 9   | The worker dies inside the transaction, before the commit          | A partial effect                                       | Nothing is committed. The message is redelivered and applied once                                        | `process-crash-and-shutdown.test.ts`                                     |
+| 10  | SIGTERM arrives while a batch is in progress                       | A batch is abandoned, and its messages are in flight   | The batch is finished and acknowledged; the process exits with 0                                         | `process-crash-and-shutdown.test.ts`                                     |
+| 11  | One of two workers is killed while the other takes the same wallet | Its in-flight commands are lost, or applied twice      | Their visibility expires; the survivor applies each once, through the inbox                              | `distributed-contention.test.ts`                                         |
+| 12  | Two publishers read the same outbox                                | The same event is published twice                      | `FOR UPDATE SKIP LOCKED` and a lease token; each row is claimed once                                     | `distributed-contention.test.ts`, `outbox-publisher.test.ts`             |
+| 13  | A publisher dies holding a lease                                   | The event is never published                           | The lease expires, another publisher sends it with the same event id                                     | `fault-injection.test.ts`, `outbox-publisher.test.ts`                    |
+| 14  | The broker is unavailable                                          | Events are lost, or the API fails                      | The send fails, the row stays in the outbox, and the retry has backoff; readiness reports the queue down | `outbox-publisher.test.ts`, `health.test.ts`                             |
+| 15  | A message is malformed, or its payload conflicts with its id       | It is retried forever and blocks its group             | Dead-lettered after one delivery, with no retry                                                          | `wager-command-consumer.test.ts`                                         |
+| 16  | A lost race on the version guard, every retry lost                 | An error reaches the provider                          | Three attempts, then `503` with `retry-after: 1`                                                         | `distributed-contention.test.ts` (zero-retry), `fault-injection.test.ts` |
+| 17  | Someone updates or deletes a ledger row                            | History is rewritten                                   | A trigger refuses it                                                                                     | `schema-constraints.test.ts`                                             |
+| 18  | A balance below zero through a race                                | An overdraft                                           | The lock serialises the debit, and a `CHECK` refuses a negative balance                                  | `schema-constraints.test.ts`, `hot-wallet.test.ts`                       |
+| 19  | A provider submits for another provider's id                       | A write under another provider's name                  | `403` before anything is written                                                                         | `auth-http.test.ts`                                                      |
+| 20  | An API process or a worker crashes                                 | It stays down until someone restarts it                | Compose restarts both (`unless-stopped`); the work in flight is redelivered                              | `docker compose config`; the crash tests above                           |
+| 21  | Reconciliation reads while a debit commits                         | A divergence that does not exist                       | Reconciliation takes a shared lock; the debit waits                                                      | `reconciliation-consistency.test.ts`                                     |
+| 22  | A replay after the balance has changed                             | The replay shows a different balance from the original | The stored `resulting_balance` is returned                                                               | `process-wager-transaction.test.ts` (replay)                             |
+| 23  | Money arrives as a JavaScript number                               | Floating-point error                                   | Rejected at the boundary; `Money` only accepts decimal strings                                           | `money.test.ts`                                                          |
+| 24  | An internal error, with its message                                | The message reveals rows or code                       | `500 INTERNAL_ERROR` with no message; the log carries the class and the code, never the message          | `test/unit/shared/http/error-response.test.ts`, `structured-log.test.ts` |
+| 25  | Under load the outbox falls behind the writes                      | Events arrive late, or never                           | Measured. The drain time is a constraint of the load test. Not fixed yet (G-05)                          | `docs/LOAD_TEST_RESULTS.md`                                              |
+
+## How the core decisions work in the code
+
+The short versions. Each file has the full version.
+
+**Pessimistic lock on the wallet.** The first query of every financial path locks the wallet row.
+Nothing else runs before it, so the replay check and the balance check see the state the lock holds.
+
+```ts
+// src/modules/wallet/infrastructure/mikro-orm-wallet.repository.ts
+const record = await this.em.findOne(
+  WalletRecord,
+  { id: walletId },
+  { lockMode: LockMode.PESSIMISTIC_WRITE, refresh: true },
+);
+```
+
+**Version guard on save.** The update names the version it read. If another transaction changed
+the row in between, nothing matches, and the caller retries.
+
+```ts
+const updated = await this.em.nativeUpdate(
+  WalletRecord,
+  { id: wallet.id, version: expectedVersion },
+  { balance: wallet.balance.toString(), version: wallet.version, updatedAt: wallet.updatedAt },
+);
+if (updated !== 1) throw new ConcurrencyConflictError(/* ... */);
+```
+
+**Idempotency.** The key is a unique row in the database, under the provider. The replay path
+returns the stored result, so a repeat never reaches the balance.
+
+```sql
+CONSTRAINT wager_idempotency_key UNIQUE (provider_id, idempotency_key)
+```
+
+**One result per BET, and one reversal per reference.** The settlement function checks the rule,
+and a partial unique index enforces it, so a second writer cannot break it.
+
+```ts
+// src/modules/wagering/application/transaction-settlement.ts
+if (reference !== undefined && (await repositories.wagers.hasProcessedReversal(reference.id))) {
+  return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
+}
+```
+
+**Outbox claim with a lease.** A publisher claims rows it can lock, and the lease token says who
+owns each row. The completion writes only if the token still matches.
+
+```sql
+UPDATE outbox_messages SET lease_token = ?, lease_expires_at = ?
+ WHERE id IN (SELECT id FROM outbox_messages
+               WHERE published_at IS NULL AND next_attempt_at <= ?
+                 AND (lease_expires_at IS NULL OR lease_expires_at < ?)
+               ORDER BY next_attempt_at LIMIT ?
+               FOR UPDATE SKIP LOCKED)
+RETURNING ...
+```
+
+**Acknowledge after commit.** The consumer deletes the queue message only after the transaction
+has returned. A crash in between leaves the message in flight, and the redelivery is safe because
+of the inbox row.
+
+```ts
+// src/modules/messaging/application/wager-command-consumer.ts
+if (disposition === 'APPLIED') {
+  await faults.beforeAcknowledge(message); // test seam, a no-op in production
+  await queue.acknowledge(message.receiptHandle);
+}
+```
+
+**Held reference with bounded backoff.** The delay doubles from 1 s and is capped at 5 min. After
+six misses the transaction is rejected, and the rejection is announced.
+
+```ts
+export function referenceRetryDelayMs(missesSoFar: number): number {
+  return Math.min(BASE_DELAY_MS * 2 ** missesSoFar, MAX_DELAY_MS);
+}
+```
+
+**Reconciliation takes a shared lock.** The read of the balance and the read of the ledger
+happen under the same shared lock, so a debit waits between them.
+
+```ts
+const wallet = await repositories.wallets.findForShare(walletId); // FOR SHARE
+const summary = await repositories.ledger.summarize(walletId, wallet.currency);
+```
+
+**API keys.** A key is 256 random bits. Only its SHA-256 hash is stored, and a request is
+authenticated by hashing its key and looking the hash up.
+
+```ts
+export function hashApiKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
+```
+
+**Provider scope.** The controller checks the provider of the request before the use case runs.
+
+```ts
+export function requireProviderScope(principal: Principal, providerId: string): void {
+  if (!canOperateFor(principal, providerId)) {
+    throw new ForbiddenException('This API key may not act for this provider');
+  }
+}
+```
+
 ## Decisions that are not decisions
 
 These are facts of the environment, and the project depends on them without choosing them:

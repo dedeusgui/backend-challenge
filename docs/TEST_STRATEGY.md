@@ -139,15 +139,33 @@ survived.
 
 ## Load
 
-`bun run test:load` runs three API processes, two workers and one PostgreSQL. It sends 4,000
-operations with 64 concurrent lanes, over 50 wallets, with a hot wallet and some replays. It reports
-throughput, client-side p50, p95 and p99, the status mix, the lost lock races, the outbox lag, and
-the invariant for every wallet. The results and the environment are in
-[LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
+`bun run test:load` runs the stack as processes (three API, two workers, PostgreSQL, LocalStack) and
+sends requests on a fixed schedule, in steps of increasing rate. Each step is checked against the
+constraints in `test/load/thresholds.ts`: error rate, lost requests, p95 and p99 latency, generator
+lag at p99, outbox drain, memory per process, and the invariant `balance == ledger`. The ramp stops at
+the first step that fails. The method and its reasons are in `DECISIONS.md`, group N.
 
-The percentiles are client-side, because the server summaries hold only count, sum and maximum.
-One finding came out of the run: the outbox publisher lags behind the write rate, with an average
-lag of several seconds. It is recorded in ARCHITECTURE section 14.
+The agreed figure on the cloud machine used for this work is **150 requests per second sustained**,
+with **200 requests per second** as the observed ceiling. Six runs are in
+[LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md). The latest report, with its CPU per component and its
+lost requests, is in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
+
+**What these runs prove, and what they do not:**
+
+- They prove the constraints held for the length of one step, at one rate, on this machine.
+- They do not prove a longer run. There is no soak test.
+- The load generator runs on the same CPUs as the system. A dedicated machine would move the knee.
+- The queue is LocalStack, and PostgreSQL has its default configuration, with no replica.
+- The mix is ours: BETs over 50 wallets, about 5% on one hot wallet, about 5% replays. Real traffic
+  has WIN, LOSS, REFUND and ROLLBACK too.
+- Latency is the client view. The percentiles come from our own sample, not from a histogram.
+- Each step ran once in each run, with no confidence interval. Six runs are the basis of the figure.
+- Memory and CPU need Linux or macOS. On Windows, run it inside WSL.
+
+**What the knee suggests.** At 300 requests per second the latency rises for every wallet, and no run
+lost a request at that rate. PostgreSQL reached one full core, and the API processes were at about 43%
+each. The likely limit is PostgreSQL under the hot-row lock, with its default pool of 10 connections per
+process. This is an inference, because lock and pool waits were not measured.
 
 ## Environment notes
 

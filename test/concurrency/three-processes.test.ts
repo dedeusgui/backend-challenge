@@ -233,6 +233,13 @@ describe('process lifecycle', () => {
   }, 30_000);
 
   test('a worker that crashes after commit and before ACK is recovered by a restarted worker, without a second effect', async () => {
+    // The worker of the setup must not take this message, or the crash would never happen. An earlier test
+    // stops it, but a run of this test alone does not, so it is stopped here, whatever the order.
+    const setupWorker = cluster.processes.find((managed) => managed.name === 'worker-1');
+    if (setupWorker !== undefined) {
+      setupWorker.process.kill('SIGTERM');
+      await setupWorker.process.exited;
+    }
     const playerId = randomUUID();
     const created = await postJson(apis[0] as string, '/wallets', {
       playerId,

@@ -11,6 +11,7 @@ import { MikroOrmOutboxStore } from '../modules/messaging/infrastructure/mikro-o
 import { SqsEventTransport } from '../modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../modules/messaging/infrastructure/sqs/sqs-queue';
 import { ProcessWagerTransaction } from '../modules/wagering/application/process-wager-transaction.use-case';
+import { ProcessPendingReferences } from '../modules/wagering/application/process-pending-references.use-case';
 import { MikroOrmFinancialUnitOfWork } from '../shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { ormOptions } from '../shared/infrastructure/database/orm-config';
 import { createSqsClient, resolveQueues } from '../shared/infrastructure/sqs/sqs-connection';
@@ -20,6 +21,7 @@ export const WAGER_CONSUMER_NAME = 'wager-transactions';
 export interface WorkerRuntime {
   consumer: WagerCommandConsumer;
   publisher: OutboxPublisher;
+  pendingReferences: ProcessPendingReferences;
   idleDelayMs: number;
   close(): Promise<void>;
 }
@@ -66,6 +68,7 @@ export async function createWorkerRuntime(
   return {
     consumer,
     publisher,
+    pendingReferences: new ProcessPendingReferences(context),
     idleDelayMs: config.outboxIdleDelayMs,
     async close() {
       await orm.close(true);

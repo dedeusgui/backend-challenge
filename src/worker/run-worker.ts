@@ -20,7 +20,11 @@ export class StopSignal {
  * visibility timeout.
  */
 export async function runWorker(runtime: WorkerRuntime, stop: StopSignal): Promise<void> {
-  await Promise.all([consumeUntilStopped(runtime, stop), publishUntilStopped(runtime, stop)]);
+  await Promise.all([
+    consumeUntilStopped(runtime, stop),
+    publishUntilStopped(runtime, stop),
+    resolveReferencesUntilStopped(runtime, stop),
+  ]);
 }
 
 async function consumeUntilStopped(runtime: WorkerRuntime, stop: StopSignal): Promise<void> {
@@ -34,6 +38,20 @@ async function publishUntilStopped(runtime: WorkerRuntime, stop: StopSignal): Pr
     const published = await runtime.publisher.publishOnce();
     if (published === 0) {
       await sleep(runtime.idleDelayMs);
+    }
+  }
+}
+
+const REFERENCE_IDLE_DELAY_MS = 1_000;
+
+async function resolveReferencesUntilStopped(
+  runtime: WorkerRuntime,
+  stop: StopSignal,
+): Promise<void> {
+  while (!stop.isRequested()) {
+    const examined = await runtime.pendingReferences.runOnce();
+    if (examined === 0) {
+      await sleep(REFERENCE_IDLE_DELAY_MS);
     }
   }
 }

@@ -23,6 +23,8 @@ export const WagerTransactionRecordSchema = defineEntity({
     failureCode: p.string().columnType('text').nullable(),
     resultingBalance: p.string().columnType('numeric(20,2)').nullable(),
     processedAt: p.datetime().columnType('timestamptz').nullable(),
+    referenceAttempts: p.integer(),
+    referenceNextAttemptAt: p.datetime().columnType('timestamptz').nullable(),
     createdAt: p.datetime().columnType('timestamptz'),
   },
 });

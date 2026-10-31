@@ -37,6 +37,20 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     }
   }
 
+  async update(transaction: WagerTransaction): Promise<void> {
+    const { id, ...fields } = toRecordData(transaction.toState());
+    await this.em.nativeUpdate(WagerTransactionRecord, { id }, fields);
+  }
+
+  async findDueForReferenceLookup(now: Date, limit: number): Promise<WagerTransaction[]> {
+    const records = await this.em.find(
+      WagerTransactionRecord,
+      { status: 'PENDING_REFERENCE', referenceNextAttemptAt: { $lte: now } },
+      { orderBy: { referenceNextAttemptAt: 'asc' }, limit, refresh: true },
+    );
+    return records.map((record) => WagerTransaction.rehydrate(toState(record)));
+  }
+
   async findById(transactionId: string): Promise<WagerTransaction | undefined> {
     return this.findOneBy({ id: transactionId });
   }
@@ -93,6 +107,8 @@ function toRecordData(state: WagerTransactionState) {
     failureCode: state.failureCode ?? null,
     resultingBalance: state.resultingBalance?.toString() ?? null,
     processedAt: state.processedAt ?? null,
+    referenceAttempts: state.referenceAttempts,
+    referenceNextAttemptAt: state.referenceNextAttemptAt ?? null,
     createdAt: state.createdAt,
   };
 }
@@ -118,6 +134,8 @@ function toState(record: WagerTransactionRecord): WagerTransactionState {
     failureCode: parseFailureCode(record.failureCode),
     resultingBalance: parseOptionalMoney(record.resultingBalance, currency),
     processedAt: nullableToOptional(record.processedAt),
+    referenceAttempts: record.referenceAttempts,
+    referenceNextAttemptAt: nullableToOptional(record.referenceNextAttemptAt),
   };
 }
 

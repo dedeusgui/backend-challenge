@@ -221,7 +221,7 @@ describe('WagerTransaction transitions', () => {
       props({ kind: 'ROLLBACK', referenceExternalTransactionId: 'bet-1', money: brl('25.00') }),
     );
 
-    rollback.markPendingReference();
+    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
     expect(rollback.status).toBe('PENDING_REFERENCE');
 
     rollback.markProcessed({
@@ -237,7 +237,7 @@ describe('WagerTransaction transitions', () => {
     const rollback = WagerTransaction.create(
       props({ kind: 'ROLLBACK', referenceExternalTransactionId: 'bet-1' }),
     );
-    rollback.markPendingReference();
+    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
 
     rollback.reject({ code: 'REFERENCE_NOT_FOUND', observedBalance: brl('100.00') });
 
@@ -263,11 +263,13 @@ describe('WagerTransaction transitions', () => {
 
   test('markPendingReference is only valid from PENDING', () => {
     const transaction = bet();
-    transaction.markPendingReference();
+    transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
 
-    expect(domainErrorCodeOf(() => transaction.markPendingReference())).toBe(
-      'INVALID_TRANSACTION_TRANSITION',
-    );
+    expect(
+      domainErrorCodeOf(() =>
+        transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z')),
+      ),
+    ).toBe('INVALID_TRANSACTION_TRANSITION');
   });
 });
 
@@ -297,7 +299,7 @@ describe('WagerTransaction terminal states', () => {
     expect(transaction.status).toBe(status);
 
     const attempts: Array<() => unknown> = [
-      () => transaction.markPendingReference(),
+      () => transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z')),
       () =>
         transaction.markProcessed({
           referenceTransactionId: undefined,

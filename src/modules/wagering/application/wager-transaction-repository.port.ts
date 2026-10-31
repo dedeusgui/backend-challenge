@@ -3,6 +3,10 @@ import type { WagerTransactionKind } from '../domain/wager-transaction-kind';
 
 export interface WagerTransactionRepository {
   insert(transaction: WagerTransaction): Promise<void>;
+  /** Persists the state of an existing transaction, such as a held one that was resolved or missed again. */
+  update(transaction: WagerTransaction): Promise<void>;
+  /** Held transactions whose next reference lookup is due at `now`, oldest first. */
+  findDueForReferenceLookup(now: Date, limit: number): Promise<WagerTransaction[]>;
   findById(transactionId: string): Promise<WagerTransaction | undefined>;
   findByIdempotencyKey(
     providerId: string,

@@ -3,6 +3,7 @@ import type { LedgerDirection } from '../../../shared/domain/ledger-direction';
 import { Money } from '../../../shared/domain/money';
 import type { FailureCode } from './failure-code';
 import { KIND_RULES, type WagerTransactionKind } from './wager-transaction-kind';
+import { MAX_REFERENCE_ATTEMPTS, referenceRetryDelayMs } from './reference-retry-policy';
 
 export type { WagerTransactionKind } from './wager-transaction-kind';
 
@@ -38,6 +39,9 @@ export interface WagerTransactionState {
   /** Balance after a PROCESSED transaction, or the balance observed when it was REJECTED or FAILED. */
   resultingBalance: Money | undefined;
   processedAt: Date | undefined;
+  /** Reference lookups that found the reference missing or still pending. */
+  referenceAttempts: number;
+  referenceNextAttemptAt: Date | undefined;
 }
 
 export type CreateWagerTransactionProps = Pick<
@@ -97,6 +101,8 @@ export class WagerTransaction {
   private currentFailureCode: FailureCode | undefined;
   private currentResultingBalance: Money | undefined;
   private currentProcessedAt: Date | undefined;
+  private currentReferenceAttempts: number;
+  private currentReferenceNextAttemptAt: Date | undefined;
 
   private constructor(state: WagerTransactionState) {
     this.id = state.id;
@@ -117,6 +123,8 @@ export class WagerTransaction {
     this.currentFailureCode = state.failureCode;
     this.currentResultingBalance = state.resultingBalance;
     this.currentProcessedAt = state.processedAt;
+    this.currentReferenceAttempts = state.referenceAttempts;
+    this.currentReferenceNextAttemptAt = state.referenceNextAttemptAt;
   }
 
   /** Creates a transaction in PENDING after checking its shape against the kind's rules. */
@@ -143,6 +151,8 @@ export class WagerTransaction {
       failureCode: undefined,
       resultingBalance: undefined,
       processedAt: undefined,
+      referenceAttempts: 0,
+      referenceNextAttemptAt: undefined,
     });
   }
 
@@ -174,6 +184,14 @@ export class WagerTransaction {
 
   get processedAt(): Date | undefined {
     return this.currentProcessedAt;
+  }
+
+  get referenceAttempts(): number {
+    return this.currentReferenceAttempts;
+  }
+
+  get referenceNextAttemptAt(): Date | undefined {
+    return this.currentReferenceNextAttemptAt;
   }
 
   affectsBalance(): boolean {
@@ -267,9 +285,33 @@ export class WagerTransaction {
     return { outcome: 'READY' };
   }
 
-  markPendingReference(): void {
+  /** Holds the transaction until its reference arrives. The first lookup is due at `nextAttemptAt`. */
+  markPendingReference(nextAttemptAt: Date): void {
     this.assertTransitionFrom(['PENDING']);
     this.currentStatus = 'PENDING_REFERENCE';
+    this.currentReferenceNextAttemptAt = nextAttemptAt;
+  }
+
+  /** The reference was still missing. Schedules the next lookup, or reports that the limit is reached. */
+  recordReferenceMiss(now: Date): { exhausted: boolean } {
+    this.assertTransitionFrom(['PENDING_REFERENCE']);
+    this.currentReferenceAttempts += 1;
+    if (this.currentReferenceAttempts >= MAX_REFERENCE_ATTEMPTS) {
+      return { exhausted: true };
+    }
+    this.currentReferenceNextAttemptAt = new Date(
+      now.getTime() + referenceRetryDelayMs(this.currentReferenceAttempts),
+    );
+    return { exhausted: false };
+  }
+
+  /** Whether a held transaction is due for another reference lookup at `now`. */
+  isDueForReferenceLookup(now: Date): boolean {
+    return (
+      this.currentStatus === 'PENDING_REFERENCE' &&
+      this.currentReferenceNextAttemptAt !== undefined &&
+      this.currentReferenceNextAttemptAt.getTime() <= now.getTime()
+    );
   }
 
   markProcessed(transition: ProcessedTransition): void {
@@ -321,6 +363,8 @@ export class WagerTransaction {
       failureCode: this.currentFailureCode,
       resultingBalance: this.currentResultingBalance,
       processedAt: this.currentProcessedAt,
+      referenceAttempts: this.currentReferenceAttempts,
+      referenceNextAttemptAt: this.currentReferenceNextAttemptAt,
     };
   }
 

@@ -21,6 +21,21 @@ async function withAdminConnection<T>(work: (orm: MikroORM) => Promise<T>): Prom
   }
 }
 
+/** Fails the suite when any wallet's materialized balance disagrees with its ledger. */
+async function assertLedgerInvariant(orm: MikroORM): Promise<void> {
+  const rows = (await orm.em.getConnection().execute(
+    `SELECT w.id, w.balance::text AS balance,
+            COALESCE((SELECT SUM(CASE WHEN l.direction = 'CREDIT' THEN l.amount ELSE -l.amount END)
+                        FROM wallet_ledger_entries l WHERE l.wallet_id = w.id), 0)::text AS ledger
+       FROM wallets w
+      WHERE w.balance <> COALESCE((SELECT SUM(CASE WHEN l.direction = 'CREDIT' THEN l.amount ELSE -l.amount END)
+                                     FROM wallet_ledger_entries l WHERE l.wallet_id = w.id), 0)`,
+  )) as Array<{ id: string; balance: string; ledger: string }>;
+  if (rows.length > 0) {
+    throw new Error(`Ledger invariant violated: ${JSON.stringify(rows.slice(0, 3))}`);
+  }
+}
+
 export interface TestDatabase {
   orm: MikroORM;
   /** Connection URL of this isolated database, for starting processes against it. */
@@ -33,7 +48,16 @@ export interface TestDatabase {
  * Creates an isolated, migrated PostgreSQL database for one test file. Each
  * file gets its own database, so no state leaks between suites.
  */
-export async function createTestDatabase(): Promise<TestDatabase> {
+export interface TestDatabaseOptions {
+  /**
+   * Whether teardown checks that every wallet equals its ledger sum. Suites that write rows
+   * directly to prove a database rule may build states that break the invariant on purpose,
+   * and turn this off; every flow-level suite keeps it on.
+   */
+  verifyLedgerInvariant?: boolean;
+}
+
+export async function createTestDatabase(options: TestDatabaseOptions = {}): Promise<TestDatabase> {
   const name = `wagering_test_${crypto.randomUUID().replaceAll('-', '')}`;
   await withAdminConnection((admin) =>
     admin.em.getConnection().execute(`CREATE DATABASE "${name}"`),
@@ -47,6 +71,10 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     orm,
     url,
     async drop() {
+      // Every test database ends with the global invariant: each wallet's balance equals its ledger sum.
+      if (options.verifyLedgerInvariant ?? true) {
+        await assertLedgerInvariant(orm);
+      }
       await orm.close(true);
       await withAdminConnection((admin) =>
         admin.em.getConnection().execute(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`),

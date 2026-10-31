@@ -11,7 +11,9 @@ import { type TestDatabase, createTestDatabase } from '../support/test-database'
 let database: TestDatabase;
 
 beforeAll(async () => {
-  database = await createTestDatabase();
+  // These rows are written directly to prove what the database refuses. Some of them break the
+  // ledger invariant by design, so the flow-level invariant check is off for this suite only.
+  database = await createTestDatabase({ verifyLedgerInvariant: false });
 });
 
 afterAll(async () => {

@@ -225,5 +225,9 @@ describe('reconciliation', () => {
       difference: { amount: '1.00', currency: 'BRL' },
     });
     expect(after.body.balance).toEqual({ amount: '101.00', currency: 'BRL' });
+    // The divergence was injected on purpose. Restore it so the database-wide invariant holds at teardown.
+    await database.orm.em
+      .getConnection()
+      .execute(`UPDATE wallets SET balance = balance - 1 WHERE id = ?`, [wallet.walletId]);
   });
 });

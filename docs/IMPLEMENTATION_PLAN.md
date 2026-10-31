@@ -61,7 +61,8 @@ summarises the slices and what each one proved.
 - [x] Fault injection before commit, after broker accept and before mark, and during
       reference resolution.
 - [x] Ledger invariant verified at the teardown of every flow-level database suite.
-- [ ] Process-level crash before commit, and an interrupted batch during shutdown.
+- [x] Process-level crash before commit, and an interrupted batch during shutdown
+      (`test/concurrency/process-crash-and-shutdown.test.ts`).
 
 ## Documentation and decisions
 

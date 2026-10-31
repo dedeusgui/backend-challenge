@@ -381,11 +381,15 @@ What is not claimed, and why:
   from the same source and the sandbox CA, outside the repository.
 - **Broker redrive is configured but not exercised** (section 7).
 - **Metrics are per process.** No aggregation or dashboard.
-- **Fault injection is partial.** Crash after commit and before acknowledgement is a real
-  process crash. Crash before commit, after the broker accepts and before the mark, and
-  during reference resolution are injected around real components in the same process.
-  A process-level crash before commit, and an interrupted batch during shutdown, are not
-  covered.
+- **Fault injection is partial.** Crash after commit and before acknowledgement, and crash
+  before commit, are real process crashes of a worker (exit 137, `test/concurrency`). A
+  SIGTERM during a batch is a real process stop. After the broker accepts and before the mark,
+  and during reference resolution, faults are injected around real components in one process.
+  The HTTP API is not crashed at process level inside a transaction: a provider's retry under
+  the same idempotency key is covered in-process only.
+- **Restart after a crash is configuration, not a test.** Compose restarts the `api` and
+  `worker` services unless they were stopped (`restart: unless-stopped`). `docker compose
+config` validates the file. No test starts a container and kills it.
 - **Event order across concurrent publishers is not guaranteed.** Consumers order by
   `walletVersion`.
 - **Reconciliation runs on demand.** There is no scheduled job.

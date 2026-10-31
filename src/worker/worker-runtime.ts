@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { MikroORM } from '@mikro-orm/postgresql';
 import type { WorkerConfig } from '../config/worker-config';
+import type { FinancialUnitOfWork } from '../shared/application/ports/financial-unit-of-work.port';
 import { OutboxPublisher } from '../modules/messaging/application/outbox-publisher';
 import {
   NO_FAULTS,
@@ -32,6 +33,11 @@ export interface WorkerRuntime {
 export interface WorkerRuntimeOptions {
   /** Test-only seam. Production never passes it. */
   faults?: ConsumerFaults;
+  /**
+   * Test-only seam: wraps the financial unit of work, so that a test process can stop inside a
+   * transaction. Production never passes it.
+   */
+  decorateUnitOfWork?: (unitOfWork: FinancialUnitOfWork) => FinancialUnitOfWork;
   logger?: OperationLogger;
   metrics?: MetricsRegistry;
 }
@@ -48,8 +54,9 @@ export async function createWorkerRuntime(
   const sqs = createSqsClient(config.sqs);
   const queues = await resolveQueues(sqs, config.sqs);
   const metrics = options.metrics ?? new MetricsRegistry();
+  const financialUnitOfWork = new MikroOrmFinancialUnitOfWork(orm);
   const context = {
-    unitOfWork: new MikroOrmFinancialUnitOfWork(orm),
+    unitOfWork: options.decorateUnitOfWork?.(financialUnitOfWork) ?? financialUnitOfWork,
     clock: () => new Date(),
     newId: randomUUID,
     metrics,

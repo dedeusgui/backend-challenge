@@ -298,6 +298,19 @@ describe('OutboxPublisher', () => {
   });
 });
 
+/** The `id` column of each row. A row without one is a broken query, so the test fails there. */
+function idsOf(rows: unknown): string[] {
+  if (!Array.isArray(rows)) {
+    throw new Error('Expected a list of rows');
+  }
+  return rows.map((row: unknown) => {
+    if (typeof row === 'object' && row !== null && 'id' in row && typeof row.id === 'string') {
+      return row.id;
+    }
+    throw new Error('A row has no text id');
+  });
+}
+
 /** A promise that a test resolves on purpose. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve: () => void = () => {};
@@ -368,15 +381,17 @@ describe('OutboxPublisher: order across publishers', () => {
     await bet(new Date(NOW.getTime() - 1_000));
 
     const connection = database.orm.em.getConnection();
-    const walletEvents = (await connection.execute(
-      `SELECT id::text AS id FROM outbox_messages
+    const walletEvents = idsOf(
+      await connection.execute(
+        `SELECT id::text AS id FROM outbox_messages
         WHERE aggregate_id = ? AND event_type = 'WalletBalanceChanged' AND published_at IS NULL
         ORDER BY occurred_at`,
-      [walletId],
-    )) as Array<{ id: string }>;
+        [walletId],
+      ),
+    );
     expect(walletEvents).toHaveLength(2);
-    const earlierCommit = walletEvents[0]?.id ?? '';
-    const laterCommit = walletEvents[1]?.id ?? '';
+    const earlierCommit = walletEvents[0] ?? '';
+    const laterCommit = walletEvents[1] ?? '';
     // Only the wallet's events are claimed in this test. The transaction events wait out of the window.
     await connection.execute(
       `UPDATE outbox_messages SET next_attempt_at = next_attempt_at + interval '1 day'

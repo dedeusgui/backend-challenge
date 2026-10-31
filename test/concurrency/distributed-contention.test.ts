@@ -294,7 +294,7 @@ describe('distributed contention: three API processes and two workers', () => {
     const bet = `settle-${randomUUID()}`;
     expect(
       (
-        await submit(apis[0] as string, wallet, {
+        await submit(apis[0] ?? '', wallet, {
           kind: 'BET',
           externalTransactionId: bet,
           amount: '25.00',
@@ -303,19 +303,19 @@ describe('distributed contention: three API processes and two workers', () => {
     ).toBe(201);
 
     const responses = await Promise.all([
-      submit(apis[0] as string, wallet, {
+      submit(apis[0] ?? '', wallet, {
         kind: 'WIN',
         externalTransactionId: `win-${randomUUID()}`,
         amount: '40.00',
         reference: bet,
       }),
-      submit(apis[1] as string, wallet, {
+      submit(apis[1] ?? '', wallet, {
         kind: 'REFUND',
         externalTransactionId: `refund-${randomUUID()}`,
         amount: '25.00',
         reference: bet,
       }),
-      submit(apis[2] as string, wallet, {
+      submit(apis[2] ?? '', wallet, {
         kind: 'LOSS',
         externalTransactionId: `loss-${randomUUID()}`,
         amount: '0.00',

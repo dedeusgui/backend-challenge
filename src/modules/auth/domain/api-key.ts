@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 const KEY_PREFIX = 'wgr_';
-const BEARER = /^Bearer ([A-Za-z0-9_-]+)$/;
+// RFC 9110: the auth scheme is case-insensitive. The token itself is case-sensitive and has one fixed shape.
+const BEARER = /^bearer ([A-Za-z0-9_-]+)$/i;
 
 /**
  * A new key: 256 random bits, with a prefix so that a leaked key is easy to find in logs and

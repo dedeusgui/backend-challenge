@@ -1,0 +1,5 @@
+bun.lock
+coverage
+node_modules
+# Verbatim copy of the official challenge specification.
+docs/CHALLENGE.md

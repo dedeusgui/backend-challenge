@@ -8,8 +8,14 @@ The [challenge specification](CHALLENGE.md) is authoritative.
 - [x] Bun/NestJS bootstrap with strict TypeScript and a liveness endpoint
 - [x] Local PostgreSQL, LocalStack and SQS queues in Docker Compose
 - [x] Vertical module layout and documented architectural decisions
-- [ ] Generate and commit `bun.lock` after `bun install` using Bun 1.x
-- [ ] Run `bun run typecheck`, tests and Compose locally; fix actual failures
+- [x] Generate and commit `bun.lock` with Bun 1.4.4 (pinned in CI and Dockerfile)
+- [x] Run `bun run typecheck`, tests and Compose locally; fix actual failures
+  - Audit findings fixed: Dockerfile installed without lockfile and used a
+    floating `oven/bun:1`; CI used floating `bun-version: 1.x`; `format:check`
+    failed on 5 files; LocalStack image was a floating major tag.
+  - Verified: `docker compose up postgres localstack` provisions the FIFO
+    queues and redrive policy; the API image builds with `--frozen-lockfile`
+    and serves `/health/live`.
 
 ## Slice 1 — Domain (unit tests first)
 

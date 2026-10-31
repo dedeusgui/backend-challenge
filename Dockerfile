@@ -1,8 +1,9 @@
-FROM oven/bun:1
+# Bun version is pinned to match .github/workflows/ci.yml and the local toolchain.
+FROM oven/bun:1.4.4
 WORKDIR /app
 
-COPY package.json ./
-RUN bun install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 COPY tsconfig.json bunfig.toml ./
 COPY src ./src

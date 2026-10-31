@@ -4,16 +4,14 @@ on:
   pull_request:
 
 jobs:
-  foundation:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.x'
+          bun-version: '1.4.4'
       - name: Install dependencies
-        run: bun install
-      - name: Typecheck
-        run: bun run typecheck
-      - name: Unit tests
-        run: bun run test:unit
+        run: bun install --frozen-lockfile
+      - name: Fast checks (typecheck, lint, format, unit tests)
+        run: bun run check:fast

@@ -7,10 +7,12 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun run src/main.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint --config .oxlintrc.json src test",
     "test": "bun test",
     "test:unit": "bun test test/unit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "@types/node": "^24.0.0",
+    "oxlint": "^1.90.0",
     "prettier": "^3.6.2",
     "typescript": "^6.0.2"
   }

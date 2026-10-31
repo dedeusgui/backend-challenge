@@ -13,7 +13,8 @@ Bun 1.x · TypeScript strict · NestJS · PostgreSQL · MikroORM · AWS SQS (Loc
 
 ## Run locally
 
-Requirements: Bun 1.x and Docker with Compose.
+Requirements: Bun **1.4.4** (the version pinned in `.github/workflows/ci.yml`
+and the `Dockerfile`) and Docker with Compose.
 
 ```bash
 cp .env.example .env
@@ -42,19 +43,20 @@ the last queue will eventually receive committed integration events.
 
 ### Developer commands
 
-| Command | Purpose |
-| --- | --- |
-| `bun run dev` | Restart-on-change HTTP entrypoint |
-| `bun run start` | Start HTTP process |
-| `bun run typecheck` | Check strict TypeScript types |
-| `bun run test:unit` | Run implemented Bun unit tests |
-| `bun run test` | Run all currently available Bun tests |
-| `bun run format:check` | Validate formatting |
-| `docker compose down` | Stop containers (preserve database volume) |
+| Command                | Purpose                                    |
+| ---------------------- | ------------------------------------------ |
+| `bun run dev`          | Restart-on-change HTTP entrypoint          |
+| `bun run start`        | Start HTTP process                         |
+| `bun run typecheck`    | Check strict TypeScript types              |
+| `bun run lint`         | Run oxlint on `src` and `test`             |
+| `bun run test:unit`    | Run Bun unit tests                         |
+| `bun run test`         | Run all currently available Bun tests      |
+| `bun run format:check` | Validate formatting                        |
+| `bun run check:fast`   | typecheck + lint + format:check + unit     |
+| `docker compose down`  | Stop containers (preserve database volume) |
 
-The lockfile has **not** been generated as part of the scaffold. Run
-`bun install` with the intended Bun 1.x version and commit the resulting
-`bun.lock` before claiming reproducible installs or introducing frozen CI builds.
+Dependencies are pinned by `bun.lock`, which is committed. Install with
+`bun install --frozen-lockfile` (CI and the Docker image do the same).
 Never commit `.env` or actual credentials.
 
 ## Layout

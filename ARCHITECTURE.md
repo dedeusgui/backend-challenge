@@ -1,6 +1,6 @@
 # Architecture and technical decisions
 
-**Status:** foundation / design decisions. Sections marked *planned* are not
+**Status:** foundation / design decisions. Sections marked _planned_ are not
 implemented. This document must be revised after each validated slice, rather
 than describing hypothetical behavior as working software.
 
@@ -54,9 +54,9 @@ calls; `http` maps contracts and errors. In particular, TypeScript interfaces
 do not validate incoming JSON at runtime.
 
 There is one HTTP bootstrap currently. Separate HTTP / worker entrypoints are
-*planned*; workers must not depend on starting a network listener.
+_planned_; workers must not depend on starting a network listener.
 
-## 3. Money (*planned*)
+## 3. Money (_planned_)
 
 Use an immutable value object backed by `decimal.js` with exact arithmetic,
 not JS `number`. The public contract is a decimal **string** with exactly
@@ -74,7 +74,7 @@ but `decimal.js` aligns closely with the challenge's Money shape and keeps
 conversion explicit. This choice will be revisited if benchmarks or domain
 rules warrant it.
 
-## 4. Domain state and database design (*planned*)
+## 4. Domain state and database design (_planned_)
 
 - `Wallet`: unique `(player_id, currency)`, nonnegative balance CHECK,
   version starts at 1 and changes only on balance mutation.
@@ -100,15 +100,16 @@ or provider-scoped. The HTTP header is authoritative; the external transaction
 identity is independently unique within the provider. Document the finalized
 constraint and test collisions across providers.
 
-## 5. Transactions and concurrency (*planned*)
+## 5. Transactions and concurrency (_planned_)
 
 Proposed choice: **PostgreSQL pessimistic row lock on Wallet**, inside
 `EntityManager.transactional()`, using `LockMode.PESSIMISTIC_WRITE`.
-Lock the wallet *before* computing balance-sensitive decisions. Keep the
+Lock the wallet _before_ computing balance-sensitive decisions. Keep the
 transaction short and free from calls to SQS; order any other locks
 consistently. Independent wallets may advance concurrently.
 
 Alternatives:
+
 - optimistic version + bounded retry: fewer waits under low contention,
   but repeated work and more complex contention behavior on a hot wallet;
 - conditional atomic update: performant for simple balance changes, but needs
@@ -120,7 +121,7 @@ The canonical acceptance test is two simultaneous `BET 80.00` against
 `100.00`: one succeeds, one is rejected, balance is `20.00`, with one
 ledger debit. This is a **target**, not a passing test yet.
 
-## 6. Idempotency, Inbox and Outbox (*planned*)
+## 6. Idempotency, Inbox and Outbox (_planned_)
 
 HTTP `Idempotency-Key` is mandatory. Default recommendation for the caller:
 `providerId:externalTransactionId`. A stable, canonical JSON subset of
@@ -154,7 +155,7 @@ The pending-reference worker separately retries missing provider references
 with bounded exponential backoff and terminal rejection on expiry.
 It must not republish or reapply completed financial effects.
 
-## 7. Auth and external identity (*explicitly deferred*)
+## 7. Auth and external identity (_explicitly deferred_)
 
 The challenge gives no evaluation points to authentication and permits
 documented omission. No local users/passwords, no Keycloak container yet.

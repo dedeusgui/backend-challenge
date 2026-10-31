@@ -326,12 +326,16 @@ decide whether that is acceptable, or whether a win must name its BET.
 
 ## 8. Transactional outbox
 
-Events are written in the same transaction as the financial change. Nothing is sent to
-SQS inside it, so an event exists only if its operation committed. The publisher leases a
-batch with one statement, `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)`,
-sends each event outside any transaction, then marks it published only if its lease
-token still matches. A stale token is refused and counted. Delivery is at-least-once. The
-event id is the SQS deduplication id and the consumers' deduplication key.
+Events are written in the same transaction as the financial change. Nothing is sent to SQS inside it, so an
+event exists only if its operation committed. The publisher leases a batch with one statement, `UPDATE ...
+WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)`, and orders the batch in the same statement by due time and
+then by occurrence, because an `UPDATE` returns its rows in no particular order. It then sends the batch
+outside any transaction, in SQS requests of at most ten entries, each entry in the aggregate's message group.
+The events the broker accepted are marked published together, in one statement, and only where the lease
+token still matches. Each event the broker refused is rescheduled on its own, with backoff. A stale token is
+refused and counted. Delivery is at-least-once. The event id is the SQS deduplication id and the consumers'
+deduplication key. Events committed at the same instant have no defined order within a batch: the claim
+orders them by their instant, and the timestamp is the only key. Consumers order by `walletVersion`.
 Decision: [ADR 0004](docs/adr/0004-outbox-claim-lease-at-least-once.md).
 
 ```mermaid
@@ -341,13 +345,13 @@ sequenceDiagram
   participant E as SQS events FIFO
   P->>DB: claim due rows, lease token (short statement, commit)
   DB-->>P: rows
-  loop each row, no transaction open
-    P->>E: send (MessageGroupId = aggregate, DeduplicationId = eventId)
-    alt sent
-      P->>DB: mark published WHERE lease = token
-    else failed
+  loop each request of up to ten events, no transaction open
+    P->>E: SendMessageBatch (MessageGroupId = aggregate, DeduplicationId = eventId)
+    P->>DB: mark the accepted events published WHERE lease = token, one statement
+    loop each refused event
       P->>DB: reschedule with backoff WHERE lease = token
     end
+  end
   end
 ```
 
@@ -536,7 +540,8 @@ What is not claimed, and why:
   `worker` services unless they were stopped (`restart: unless-stopped`). `docker compose
 config` validates the file. No test starts a container and kills it.
 - **Event order across concurrent publishers is not guaranteed.** Two publishers can send one
-  wallet's events out of commit order. `integration: two publishers send one wallet's events out of
+  wallet's events out of commit order. Within one publisher's batch the order is the due time, and
+  events committed at the same instant have no defined order. `integration: two publishers send one wallet's events out of
 commit order` shows it. Consumers order by `walletVersion`, so no order is promised across publishers.
 - **Reconciliation runs on demand.** There is no scheduled job.
 - **No rate limiting.** Abuse protection is not built. An edge proxy is the intended place. An in-process
@@ -553,8 +558,8 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
   (`docs/LOAD_TEST_RESULTS.md`). The predicted ceiling, from the CPU per request, matched on one and two
   CPUs. On four CPUs the limit was lock contention on the hot wallet, not CPU (`DECISIONS.md`, N-23). The
   earlier cloud runs are superseded (`docs/LOAD_TEST_HISTORY.md`).
-- **The outbox publisher sends one event at a time.** Its drain time is measured after each step of the
-  load test, and the report shows it. Parallel or batched sends were not built.
+- **The outbox publisher sends one batch at a time, from one process.** A batch is up to twenty events, sent in
+  requests of ten. Parallel sends were not built: the publisher's drain time is measured after each load step.
 - **Percentiles are not kept per process.** The phase summaries hold the count, the sum and the maximum
   (section 11). Percentiles come from the load test, which measures each request from its send time.
 - **`FAILED` has no producer** in this build (section 2).

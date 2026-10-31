@@ -3,6 +3,7 @@ import {
   DeleteMessageCommand,
   GetQueueAttributesCommand,
   ReceiveMessageCommand,
+  SendMessageBatchCommand,
   SendMessageCommand,
   type SQSClient,
 } from '@aws-sdk/client-sqs';
@@ -11,6 +12,19 @@ import type {
   ReceiveOptions,
   ReceivedMessage,
 } from '../../application/message-queue.port';
+
+export interface SendBatchEntry {
+  id: string;
+  body: string;
+  groupId: string;
+  deduplicationId: string;
+}
+
+export interface SendBatchOutcome {
+  /** The ids the broker accepted. An entry that is not listed here was not accepted. */
+  sentIds: readonly string[];
+  refused: readonly { id: string; code: string; message: string }[];
+}
 
 /** Thin adapter over one FIFO queue. It translates SDK calls and nothing else. */
 export class SqsQueue implements MessageQueue {
@@ -28,6 +42,31 @@ export class SqsQueue implements MessageQueue {
         MessageDeduplicationId: deduplicationId,
       }),
     );
+  }
+
+  /** One SendMessageBatch request of at most ten entries. The broker answers each entry on its own. */
+  async sendBatch(entries: readonly SendBatchEntry[]): Promise<SendBatchOutcome> {
+    const response = await this.client.send(
+      new SendMessageBatchCommand({
+        QueueUrl: this.queueUrl,
+        Entries: entries.map((entry) => ({
+          Id: entry.id,
+          MessageBody: entry.body,
+          MessageGroupId: entry.groupId,
+          MessageDeduplicationId: entry.deduplicationId,
+        })),
+      }),
+    );
+    return {
+      sentIds: (response.Successful ?? []).flatMap((entry) =>
+        entry.Id === undefined ? [] : [entry.Id],
+      ),
+      refused: (response.Failed ?? []).flatMap((entry) =>
+        entry.Id === undefined
+          ? []
+          : [{ id: entry.Id, code: entry.Code ?? 'Unknown', message: entry.Message ?? '' }],
+      ),
+    };
   }
 
   async receive(options: ReceiveOptions): Promise<ReceivedMessage[]> {

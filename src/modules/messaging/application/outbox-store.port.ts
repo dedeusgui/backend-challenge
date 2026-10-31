@@ -11,8 +11,11 @@ export interface ClaimRequest {
 export interface OutboxStore {
   /** Atomically leases up to `limit` unpublished events that are due or whose previous lease expired. */
   claimDue(request: ClaimRequest): Promise<OutboxMessage[]>;
-  /** Marks published only if this lease still owns the event. Returns false when ownership was lost. */
-  complete(message: OutboxMessage, token: string, at: Date): Promise<boolean>;
+  /**
+   * Marks the events published, in one statement, but only those this lease still owns. Resolves with
+   * the ids it marked. An event that is missing from the answer lost its lease.
+   */
+  complete(messages: readonly OutboxMessage[], token: string, at: Date): Promise<readonly string[]>;
   /** Stores the new attempt count and next attempt time, only under this lease. */
   reschedule(message: OutboxMessage, token: string): Promise<boolean>;
 }

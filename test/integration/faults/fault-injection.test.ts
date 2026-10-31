@@ -222,9 +222,11 @@ describe('fault injection', () => {
     );
     const sends = new Map<string, number>();
     const transport: OutboxTransport = {
-      publish: async (message) => {
-        sends.set(message.id, (sends.get(message.id) ?? 0) + 1);
-        await new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)).publish(message);
+      publish: async (messages) => {
+        for (const message of messages) {
+          sends.set(message.id, (sends.get(message.id) ?? 0) + 1);
+        }
+        return new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)).publish(messages);
       },
     };
     const store = new CrashBeforeMark(new MikroOrmOutboxStore(database.orm));

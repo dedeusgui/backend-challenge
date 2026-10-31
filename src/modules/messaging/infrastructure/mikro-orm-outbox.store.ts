@@ -21,32 +21,46 @@ export class MikroOrmOutboxStore implements OutboxStore {
   constructor(private readonly orm: MikroORM) {}
 
   async claimDue(request: ClaimRequest): Promise<OutboxMessage[]> {
+    // The UPDATE returns its rows in no particular order, so the order is applied after it: a batch is
+    // sent in the order its events became due, and the events of one wallet keep their commit order.
     const rows = (await this.orm.em.getConnection().execute(
-      `UPDATE outbox_messages
-          SET lease_token = ?, lease_expires_at = ?
-        WHERE id IN (
-          SELECT id FROM outbox_messages
-           WHERE published_at IS NULL
-             AND next_attempt_at <= ?
-             AND (lease_expires_at IS NULL OR lease_expires_at < ?)
-           ORDER BY next_attempt_at
-           LIMIT ?
-           FOR UPDATE SKIP LOCKED)
-       RETURNING id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at`,
+      `WITH claimed AS (
+         UPDATE outbox_messages
+            SET lease_token = ?, lease_expires_at = ?
+          WHERE id IN (
+            SELECT id FROM outbox_messages
+             WHERE published_at IS NULL
+               AND next_attempt_at <= ?
+               AND (lease_expires_at IS NULL OR lease_expires_at < ?)
+             ORDER BY next_attempt_at, occurred_at
+             LIMIT ?
+             FOR UPDATE SKIP LOCKED)
+         RETURNING id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at
+       )
+       SELECT * FROM claimed ORDER BY next_attempt_at, occurred_at`,
       [request.token, request.leaseUntil, request.now, request.now, request.limit],
     )) as OutboxRow[];
     return rows.map(toDomain);
   }
 
-  async complete(message: OutboxMessage, token: string, at: Date): Promise<boolean> {
+  async complete(
+    messages: readonly OutboxMessage[],
+    token: string,
+    at: Date,
+  ): Promise<readonly string[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+    // One placeholder per id: the driver expands an array parameter into a list, not into an array value.
+    const placeholders = messages.map(() => '?').join(', ');
     const rows = (await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
           SET published_at = ?, lease_token = NULL, lease_expires_at = NULL
-        WHERE id = ? AND lease_token = ?
+        WHERE lease_token = ? AND id IN (${placeholders})
        RETURNING id`,
-      [at, message.id, token],
+      [at, token, ...messages.map((message) => message.id)],
     )) as Array<{ id: string }>;
-    return rows.length === 1;
+    return rows.map((row) => row.id);
   }
 
   async reschedule(message: OutboxMessage, token: string): Promise<boolean> {

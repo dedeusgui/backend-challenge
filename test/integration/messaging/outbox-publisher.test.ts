@@ -8,6 +8,8 @@ import { ProcessWagerTransaction } from '../../../src/modules/wagering/applicati
 import {
   OutboxPublisher,
   type OutboxTransport,
+  type OutboxTransportFailure,
+  type OutboxTransportMessage,
 } from '../../../src/modules/messaging/application/outbox-publisher';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
@@ -50,13 +52,17 @@ class CountingTransport implements OutboxTransport {
 
   constructor(private readonly inner: OutboxTransport) {}
 
-  async publish(message: Parameters<OutboxTransport['publish']>[0]): Promise<void> {
-    this.sendsByEvent.set(message.id, (this.sendsByEvent.get(message.id) ?? 0) + 1);
+  async publish(
+    messages: readonly OutboxTransportMessage[],
+  ): Promise<readonly OutboxTransportFailure[]> {
+    for (const message of messages) {
+      this.sendsByEvent.set(message.id, (this.sendsByEvent.get(message.id) ?? 0) + 1);
+    }
     if (this.failuresRemaining > 0) {
       this.failuresRemaining -= 1;
       throw new Error('simulated broker outage');
     }
-    await this.inner.publish(message);
+    return this.inner.publish(messages);
   }
 }
 
@@ -153,10 +159,10 @@ describe('OutboxPublisher', () => {
   test('a failed broker send is retried only after its backoff has elapsed', async () => {
     await committedEvents();
     const transport = transportFor();
-    // Every event pending now fails its first send, so the whole batch is in backoff.
-    transport.failuresRemaining = await pendingCount();
-    const pending = transport.failuresRemaining;
+    // The first broker request fails, and it carries every pending event, so the whole batch is in backoff.
+    const pending = await pendingCount();
     expect(pending).toBeGreaterThan(0);
+    transport.failuresRemaining = 1;
     const later = (ms: number) => () => new Date(NOW.getTime() + ms);
 
     expect(await publisherFor(transport, later(0)).publishOnce()).toBe(0);
@@ -193,11 +199,11 @@ describe('OutboxPublisher', () => {
     const successor = publisherFor(transport, () => now);
     let successorPublished = -1;
     const stalled: OutboxTransport = {
-      publish: async (message) => {
+      publish: async (messages) => {
         // Slow, not crashed: the lease expires while this send is in flight, and a successor takes over.
         now = new Date(NOW.getTime() + 31_000);
         successorPublished = await successor.publishOnce();
-        await transport.publish(message);
+        return transport.publish(messages);
       },
     };
     const before = metrics.snapshot().counters['outbox_lost_lease_total'] ?? 0;
@@ -236,9 +242,9 @@ describe('OutboxPublisher', () => {
       limit: 50,
     });
 
-    const completed = await store.complete(event, staleToken, NOW);
+    const completed = await store.complete([event], staleToken, NOW);
 
-    expect(completed).toBe(false);
+    expect(completed).toEqual([]);
   });
 
   test('a publisher whose lease was taken over counts the refused mark and does not report success', async () => {
@@ -247,12 +253,12 @@ describe('OutboxPublisher', () => {
     let refusedOnce = false;
     const store = {
       claimDue: (request: Parameters<typeof real.claimDue>[0]) => real.claimDue(request),
-      complete: (message: Parameters<typeof real.complete>[0], token: string, at: Date) => {
+      complete: (messages: Parameters<typeof real.complete>[0], token: string, at: Date) => {
         if (refusedOnce) {
-          return real.complete(message, token, at);
+          return real.complete(messages, token, at);
         }
         refusedOnce = true;
-        return Promise.resolve(false);
+        return Promise.resolve([]);
       },
       reschedule: (message: Parameters<typeof real.reschedule>[0], token: string) =>
         real.reschedule(message, token),
@@ -330,22 +336,113 @@ class HeldTransport implements OutboxTransport {
 
   constructor(private readonly heldId: string) {}
 
-  async publish(message: Parameters<OutboxTransport['publish']>[0]): Promise<void> {
-    if (message.id === this.heldId) {
-      this.entered.resolve();
-      await this.released.promise;
+  async publish(
+    messages: readonly OutboxTransportMessage[],
+  ): Promise<readonly OutboxTransportFailure[]> {
+    for (const message of messages) {
+      if (message.id === this.heldId) {
+        this.entered.resolve();
+        await this.released.promise;
+      }
+      this.sent.push(message.id);
     }
-    this.sent.push(message.id);
+    return [];
   }
 }
 
 class RecordingTransport implements OutboxTransport {
   readonly sent: string[] = [];
 
-  async publish(message: Parameters<OutboxTransport['publish']>[0]): Promise<void> {
-    this.sent.push(message.id);
+  async publish(
+    messages: readonly OutboxTransportMessage[],
+  ): Promise<readonly OutboxTransportFailure[]> {
+    for (const message of messages) {
+      this.sent.push(message.id);
+    }
+    return [];
   }
 }
+
+/** The wallet version of a balance event for `walletId`, or undefined for any other event. */
+function walletVersionFor(walletId: string, body: string): number | undefined {
+  const envelope: unknown = JSON.parse(body);
+  if (typeof envelope !== 'object' || envelope === null || !('aggregateId' in envelope)) {
+    return undefined;
+  }
+  if (envelope.aggregateId !== walletId || !('data' in envelope)) {
+    return undefined;
+  }
+  const { data } = envelope;
+  if (typeof data !== 'object' || data === null || !('walletVersion' in data)) {
+    return undefined;
+  }
+  return typeof data.walletVersion === 'number' ? data.walletVersion : undefined;
+}
+
+describe('OutboxPublisher: a batch keeps the order of one wallet', () => {
+  test('the balance events of one wallet reach the events queue in version order, in one batch', async () => {
+    // Earlier tests may leave events in backoff. A clock beyond every backoff makes them due, and draining
+    // them empties the outbox, so the batch below holds only this test's events.
+    const beyondEveryBackoff = () => new Date(NOW.getTime() + 1_000_000);
+    while ((await publisherFor(transportFor(), beyondEveryBackoff, 100).publishOnce()) > 0) {
+      // Each pass publishes what is due. The loop ends when nothing is due.
+    }
+    // Each committed event gets its own instant, later than the one before. The claim orders by instant,
+    // so equal instants would leave the order of the batch undefined, and this test is about the batch.
+    let tick = 0;
+    const later = () => new Date(NOW.getTime() + (tick += 1));
+    const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
+    const wallets = new OpenWallet({ unitOfWork, clock: later, newId: randomUUID });
+    const wagers = new ProcessWagerTransaction({ unitOfWork, clock: later, newId: randomUUID });
+    const playerId = `player-${randomUUID()}`;
+    const { walletId } = await wallets.execute({
+      playerId,
+      initialBalance: Money.from({ amount: '500.00', currency: 'BRL' }),
+    });
+    for (let bet = 0; bet < 4; bet += 1) {
+      const externalTransactionId = `t-${randomUUID()}`;
+      await wagers.execute({
+        idempotencyKey: `k-${externalTransactionId}`,
+        providerId: 'provider-a',
+        externalTransactionId,
+        playerId,
+        walletId,
+        roundId: 'round-987',
+        gameId: 'fortune-chimp',
+        kind: 'BET',
+        money: Money.from({ amount: '1.00', currency: 'BRL' }),
+        referenceExternalTransactionId: undefined,
+        correlationId: `corr-${randomUUID()}`,
+      });
+    }
+
+    // One claim of this test's events, which all become due at once: the batch goes to the transport together.
+    await publisherFor(transportFor(), beyondEveryBackoff, 100).publishOnce();
+
+    const events = new SqsQueue(sqs, queues.eventsQueueUrl);
+    const versions: number[] = [];
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const received = await events.receive({
+        maxMessages: 10,
+        waitSeconds: 1,
+        visibilityTimeoutSeconds: 30,
+      });
+      if (received.length === 0) {
+        break;
+      }
+      for (const message of received) {
+        const version = walletVersionFor(walletId, message.body);
+        if (version !== undefined) {
+          versions.push(version);
+        }
+        await events.acknowledge(message.receiptHandle);
+      }
+    }
+
+    expect(versions).toEqual([...versions].sort((left, right) => left - right));
+    expect(versions.length).toBeGreaterThanOrEqual(4);
+  });
+});
 
 describe('OutboxPublisher: order across publishers', () => {
   test("two publishers can send one wallet's events out of commit order, so no order is promised across them", async () => {

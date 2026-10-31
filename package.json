@@ -20,7 +20,8 @@
     "test:e2e": "bun test test/e2e",
     "db:migrate": "bun run src/migrate.ts",
     "auth:create": "bun run src/auth.ts create",
-    "auth:revoke": "bun run src/auth.ts revoke"
+    "auth:revoke": "bun run src/auth.ts revoke",
+    "test:load": "bun run test/load/load-test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

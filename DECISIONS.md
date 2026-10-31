@@ -1,5 +1,8 @@
 # Decisions
 
+> **Appendix.** Read after [ARCHITECTURE.md](ARCHITECTURE.md). Each row is a decision with its reason, trade-off and
+> evidence. The main decisions are gathered in ARCHITECTURE's table at its start.
+
 Every technical decision of this project, with the reason, the trade-off, the evidence and the
 status. Decisions with their own record are in [`docs/adr`](docs/adr). The rules of the business
 are in [`ARCHITECTURE.md`](ARCHITECTURE.md) section 13.

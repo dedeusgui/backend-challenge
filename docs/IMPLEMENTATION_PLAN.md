@@ -1,5 +1,8 @@
 # Implementation plan and status
 
+> **Appendix.** The log of the slices, kept as history. Where it differs from [ARCHITECTURE.md](../ARCHITECTURE.md),
+> ARCHITECTURE.md is the current reading.
+
 The [challenge specification](CHALLENGE.md) is authoritative. The
 [requirements matrix](REQUIREMENTS_MATRIX.md) is the detailed status. This page
 summarises the slices and what each one proved.

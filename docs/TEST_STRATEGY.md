@@ -7,18 +7,18 @@ what mutation evidence says about whether they can fail.
 
 ## Suites and commands
 
-| Command                    | What it runs                                                                                             | Real infrastructure       |
-| -------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                     | none                      |
-| `bun run lint`             | oxlint on `src` and `test`                                                                               | none                      |
-| `bun run format:check`     | Prettier                                                                                                 | none                      |
-| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops           | none                      |
-| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table     | PostgreSQL and LocalStack |
-| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown         | PostgreSQL and LocalStack |
-| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys                                                | PostgreSQL and LocalStack |
-| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md` | PostgreSQL and LocalStack |
-| `bun run check:fast`       | typecheck, lint, format, unit                                                                            | none                      |
-| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                    | all of the above          |
+| Command                    | What it runs                                                                                              | Real infrastructure       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                      | none                      |
+| `bun run lint`             | oxlint on `src` and `test`                                                                                | none                      |
+| `bun run format:check`     | Prettier                                                                                                  | none                      |
+| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops            | none                      |
+| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table      | PostgreSQL and LocalStack |
+| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown          | PostgreSQL and LocalStack |
+| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys and the input contract (malformed input is 400) | PostgreSQL and LocalStack |
+| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md`  | PostgreSQL and LocalStack |
+| `bun run check:fast`       | typecheck, lint, format, unit                                                                             | none                      |
+| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                     | all of the above          |
 
 `test:load` is not part of `check:all`. It takes minutes, and its numbers describe the machine
 it runs on.

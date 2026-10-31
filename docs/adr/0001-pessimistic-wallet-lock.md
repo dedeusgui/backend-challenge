@@ -12,7 +12,9 @@ balance of 100.00 must produce one debit, one rejection and a final balance of
 
 Every financial operation first reads the wallet with `SELECT ... FOR UPDATE`
 (`MikroOrmWalletRepository.findForUpdate`, `LockMode.PESSIMISTIC_WRITE`). The
-idempotency check and the balance decision happen under that lock. The write
+idempotency check of a new operation repeats under that lock, and the balance decision happens there.
+A replay of a stored transaction is answered before the lock, because it writes nothing (ARCHITECTURE
+section 5). The write
 of the new balance is also guarded by `WHERE version = expected`, so a lost lock
 is detected instead of silently overwriting.
 

@@ -1,5 +1,8 @@
 # Public implementation review
 
+> **Appendix.** A comparison with three public implementations, made to test the design. Running or testing the
+> service does not need it.
+
 Reviewed on 2026-10-31 by reading the three public repositories (shallow clones
 at the default branch), grepping their code, and reading their architecture
 documents. The reference suites were **not executed**, so no claim here rests on

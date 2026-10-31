@@ -1,7 +1,10 @@
 # Invariant, constraint and decision review
 
+> **Appendix.** The owner's review of every invariant and constraint. The decisions it asks the owner to confirm are
+> listed in [ARCHITECTURE.md](../ARCHITECTURE.md) section 13.
+
 Reviewed before the push of this branch to `main`. The review covers every invariant of the
-requirements matrix (83 rows), every database constraint in the five migrations, and every
+requirements matrix, every database constraint in the migrations, and every
 decision in `docs/adr/` and `ARCHITECTURE.md` section 13.
 
 Each invariant is listed with the point that enforces it and the test that proves it. Test names

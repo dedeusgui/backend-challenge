@@ -147,11 +147,22 @@ export interface SummarySnapshot {
   max: number;
 }
 
-/** A summary over every process of a run: the mean is taken over all their observations together. */
+/** The unit of a summary, read from the name the code gives it: `_seconds` or `_ms`. */
+export type SummaryUnit = 'ms' | 's';
+
+/** The unit of a summary. A name with neither suffix is refused, so a unit is never guessed. */
+export function unitOfSummary(name: string): SummaryUnit {
+  if (name.endsWith('_seconds')) return 's';
+  if (name.endsWith('_ms')) return 'ms';
+  throw new Error(`summary ${name} has no unit in its name`);
+}
+
+/** A summary over every process of a run. The mean is over all their observations together, in its unit. */
 export interface PhaseSummary {
   count: number;
-  meanMs: number;
-  maxMs: number;
+  mean: number;
+  max: number;
+  unit: SummaryUnit;
 }
 
 /** Adds the summaries of several processes. Counts and sums add up, and the maximum is the largest. */
@@ -172,9 +183,36 @@ export function mergeSummaries(
   return Object.fromEntries(
     [...merged].map(([name, value]) => [
       name,
-      { count: value.count, meanMs: value.sum / value.count, maxMs: value.max },
+      {
+        count: value.count,
+        mean: value.sum / value.count,
+        max: value.max,
+        unit: unitOfSummary(name),
+      },
     ]),
   );
+}
+
+/**
+ * A summary as a run record stores it. Runs written before the unit was recorded hold `{count, meanMs, maxMs}`
+ * for every summary, seconds included. The unit is taken from the name, and the values are kept as they are.
+ */
+export function readPhaseSummary(name: string, value: unknown): PhaseSummary {
+  const unit = unitOfSummary(name);
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('count' in value) ||
+    typeof value.count !== 'number'
+  ) {
+    throw new Error(`summary ${name} has no count`);
+  }
+  const mean = 'mean' in value ? value.mean : 'meanMs' in value ? value.meanMs : undefined;
+  const max = 'max' in value ? value.max : 'maxMs' in value ? value.maxMs : undefined;
+  if (typeof mean !== 'number' || typeof max !== 'number') {
+    throw new Error(`summary ${name} has no mean or maximum`);
+  }
+  return { count: value.count, mean, max, unit };
 }
 
 export function isSummaryRecord(value: unknown): value is Record<string, SummarySnapshot> {

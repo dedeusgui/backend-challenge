@@ -137,7 +137,7 @@ describe('mergeSummaries', () => {
       { transaction_work_ms: { count: 3, sum: 30, max: 12 } },
     ]);
 
-    expect(merged).toEqual({ transaction_work_ms: { count: 5, meanMs: 8, maxMs: 12 } });
+    expect(merged).toEqual({ transaction_work_ms: { count: 5, mean: 8, max: 12, unit: 'ms' } });
   });
 
   test('keeps a name that only one process reported', () => {
@@ -147,7 +147,7 @@ describe('mergeSummaries', () => {
     ]);
 
     expect(Object.keys(merged).sort()).toEqual(['auth_ms', 'settlement_ms']);
-    expect(merged['settlement_ms']).toEqual({ count: 4, meanMs: 2, maxMs: 3 });
+    expect(merged['settlement_ms']).toEqual({ count: 4, mean: 2, max: 3, unit: 'ms' });
   });
 });
 

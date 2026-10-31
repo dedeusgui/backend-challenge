@@ -46,30 +46,30 @@ server {
 
     # Health checks are not rate limited: monitoring must see the service when clients are throttled.
     location = /health/live {
-        include /etc/nginx/edge/proxy.inc;
+        include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
     location = /health/ready {
-        include /etc/nginx/edge/proxy.inc;
+        include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
 
     # Writes: a wallet opening and a submission. Their burst is the explicit allowance for a retry storm.
     location = /wagering/transactions {
         limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
-        include /etc/nginx/edge/proxy.inc;
+        include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
     location = /wallets {
         limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
-        include /etc/nginx/edge/proxy.inc;
+        include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
 
     # Everything else: reads of wallets, ledgers, transactions and the metrics.
     location / {
         limit_req zone=reads burst=${EDGE_READ_BURST} nodelay;
-        include /etc/nginx/edge/proxy.inc;
+        include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
 }

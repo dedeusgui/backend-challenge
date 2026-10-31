@@ -29,7 +29,7 @@ services:
       - '3000:8080'
     volumes:
       - ./docker/edge/default.conf.template:/etc/nginx/templates/default.conf.template:ro
-      - ./docker/edge/proxy.inc:/etc/nginx/edge/proxy.inc:ro
+      - ./docker/edge/proxy.conf:/etc/nginx/edge/proxy.conf:ro
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '-', 'http://127.0.0.1:8080/health/live']
       interval: 5s

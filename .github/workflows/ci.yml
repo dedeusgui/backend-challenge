@@ -13,5 +13,18 @@ jobs:
           bun-version: '1.4.4'
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Fast checks (typecheck, lint, format, unit tests)
-        run: bun run check:fast
+      # The same compose file as local development, so the queues are provisioned by the same init script.
+      - name: Start PostgreSQL and LocalStack
+        run: bun run infra:up
+      - name: Full gate (typecheck, lint, format, unit, integration, concurrency, e2e)
+        run: bun run check:all
+      - name: Stop infrastructure
+        if: always()
+        run: docker compose down -v
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the API image from the Dockerfile in this repository
+        run: docker build -t wagering-api:ci .

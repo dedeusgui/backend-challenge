@@ -6,6 +6,7 @@
 import { readWorkerConfig } from '../../src/config/worker-config';
 import { runWorker, StopSignal } from '../../src/worker/run-worker';
 import { createWorkerRuntime } from '../../src/worker/worker-runtime';
+import { STDOUT_LOGGER } from '../../src/shared/observability/structured-log';
 
 const config = readWorkerConfig(process.env);
 const runtime = await createWorkerRuntime(config, {
@@ -15,4 +16,4 @@ const runtime = await createWorkerRuntime(config, {
     },
   },
 });
-await runWorker(runtime, new StopSignal());
+await runWorker(runtime, new StopSignal(), { logger: STDOUT_LOGGER });

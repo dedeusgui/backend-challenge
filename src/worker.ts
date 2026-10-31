@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', () => stop.request());
   process.once('SIGINT', () => stop.request());
 
-  await runWorker(runtime, stop);
+  await runWorker(runtime, stop, { logger: STDOUT_LOGGER });
   process.stdout.write(
     `${JSON.stringify({ time: new Date().toISOString(), type: 'metrics', ...runtime.metrics.snapshot() })}\n`,
   );

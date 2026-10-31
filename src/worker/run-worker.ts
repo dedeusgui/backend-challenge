@@ -1,4 +1,4 @@
-import type { WorkerRuntime } from './worker-runtime';
+import { describeError, type OperationLogger } from '../shared/observability/structured-log';
 
 /** Set by SIGTERM or SIGINT. Loops finish the batch in progress and then return. */
 export class StopSignal {
@@ -13,46 +13,95 @@ export class StopSignal {
   }
 }
 
+/** The three passes the worker repeats. The runtime satisfies it; a test can supply a stub. */
+export interface WorkerLoops {
+  consumer: { pollOnce(): Promise<unknown> };
+  publisher: { publishOnce(): Promise<number> };
+  pendingReferences: { runOnce(): Promise<number> };
+  idleDelayMs: number;
+}
+
+export interface RunWorkerOptions {
+  logger: OperationLogger;
+  /** Pause after a failed pass, so a dependency that is down is not called in a tight loop. */
+  errorDelayMs?: number;
+}
+
+const DEFAULT_ERROR_DELAY_MS = 1_000;
+const REFERENCE_IDLE_DELAY_MS = 1_000;
+
+interface LoopContext {
+  stop: StopSignal;
+  logger: OperationLogger;
+  errorDelayMs: number;
+}
+
 /**
- * Runs the consume and publish loops until the stop signal is set. Each loop checks
- * the signal between batches, so a batch in progress is completed and acknowledged
- * first. An interrupted batch keeps its messages invisible, and they return after the
- * visibility timeout.
+ * Runs the consume, publish and reference loops until the stop signal is set. Each loop checks
+ * the signal between passes, so a pass in progress is completed and acknowledged first. An
+ * interrupted pass keeps its messages invisible, and they return after the visibility timeout.
+ *
+ * A failed pass is logged with its error name and code, and its loop waits and tries again. One
+ * failing dependency does not end the worker, and the other loops keep running.
  */
-export async function runWorker(runtime: WorkerRuntime, stop: StopSignal): Promise<void> {
+export async function runWorker(
+  loops: WorkerLoops,
+  stop: StopSignal,
+  options: RunWorkerOptions,
+): Promise<void> {
+  const context: LoopContext = {
+    stop,
+    logger: options.logger,
+    errorDelayMs: options.errorDelayMs ?? DEFAULT_ERROR_DELAY_MS,
+  };
   await Promise.all([
-    consumeUntilStopped(runtime, stop),
-    publishUntilStopped(runtime, stop),
-    resolveReferencesUntilStopped(runtime, stop),
+    consumeUntilStopped(loops, context),
+    publishUntilStopped(loops, context),
+    resolveReferencesUntilStopped(loops, context),
   ]);
 }
 
-async function consumeUntilStopped(runtime: WorkerRuntime, stop: StopSignal): Promise<void> {
-  while (!stop.isRequested()) {
-    await runtime.consumer.pollOnce();
+async function consumeUntilStopped(loops: WorkerLoops, context: LoopContext): Promise<void> {
+  while (!context.stop.isRequested()) {
+    await runPass(context, 'worker.consume', () => loops.consumer.pollOnce());
   }
 }
 
-async function publishUntilStopped(runtime: WorkerRuntime, stop: StopSignal): Promise<void> {
-  while (!stop.isRequested()) {
-    const published = await runtime.publisher.publishOnce();
-    if (published === 0) {
-      await sleep(runtime.idleDelayMs);
+async function publishUntilStopped(loops: WorkerLoops, context: LoopContext): Promise<void> {
+  while (!context.stop.isRequested()) {
+    const published = await runPass(context, 'worker.publish', () => loops.publisher.publishOnce());
+    if (!published) {
+      await sleep(loops.idleDelayMs);
     }
   }
 }
-
-const REFERENCE_IDLE_DELAY_MS = 1_000;
 
 async function resolveReferencesUntilStopped(
-  runtime: WorkerRuntime,
-  stop: StopSignal,
+  loops: WorkerLoops,
+  context: LoopContext,
 ): Promise<void> {
-  while (!stop.isRequested()) {
-    const examined = await runtime.pendingReferences.runOnce();
-    if (examined === 0) {
+  while (!context.stop.isRequested()) {
+    const examined = await runPass(context, 'worker.resolve_references', () =>
+      loops.pendingReferences.runOnce(),
+    );
+    if (!examined) {
       await sleep(REFERENCE_IDLE_DELAY_MS);
     }
+  }
+}
+
+/** Returns the result of the pass, or undefined when it failed. The failure never leaves the loop. */
+async function runPass<T>(
+  context: LoopContext,
+  operation: string,
+  work: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await work();
+  } catch (error) {
+    context.logger({ operation, status: 'failed', ...describeError(error) });
+    await sleep(context.errorDelayMs);
+    return undefined;
   }
 }
 

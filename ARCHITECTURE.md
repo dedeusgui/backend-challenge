@@ -310,6 +310,11 @@ Operation logs are one JSON object per line. The fields are `time`, `level`, `op
 `providerId` and `durationMs`. The type has no field for an amount or a payload, and a
 compile-time test checks that.
 
+A failure is logged with `errorName`, the class of the thrown error, and `errorCode`, its
+`code` when it has one. The message is never logged, because it can carry a payload. A failed
+broker send, a failed command and a failed worker pass are logged this way. A worker loop that
+fails keeps running after a pause, so one failing dependency does not end the worker.
+
 Counters are per process (`MetricsRegistry`): `transactions_total{status}`,
 `idempotent_replays_total`, `concurrency_conflicts_total`, `commands_total{result}`,
 `reference_resolutions_total{status}`, `reference_exhausted_total`,

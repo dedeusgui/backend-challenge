@@ -98,6 +98,39 @@ Os limites são `EDGE_WRITE_RATE` (20 por segundo), `EDGE_WRITE_BURST` (40), `ED
 A lista completa, com a interpretação de cada regra ambígua do enunciado, está em
 [ARCHITECTURE.md §13](ARCHITECTURE.md) e [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md).
 
+## Diagramas dos fluxos
+
+Os diagramas abaixo são os **mesmos arquivos SVG versionados** utilizados na vitrine estática. Eles
+representam os fluxos implementados, não uma arquitetura hipotética. A explicação das
+garantias e dos pontos de falha está em [ARCHITECTURE.md](ARCHITECTURE.md); os testes
+correspondentes estão na [matriz de requisitos](docs/REQUIREMENTS_MATRIX.md).
+
+### 1. BET recebida por HTTP
+
+Autenticação e identidade do provedor, validação da operação, idempotência e decisão
+transacional. [Abrir SVG em tamanho original](docs/diagrams/bet-over-http.svg).
+
+![Fluxo BET via HTTP, incluindo autenticação, idempotência e persistência](docs/diagrams/bet-over-http.svg)
+
+### 2. Comando recebido pela SQS
+
+Consumo da fila, processamento financeiro compartilhado com a rota HTTP, tratamento de
+reentregas e confirmação da mensagem. [Abrir SVG em tamanho original](docs/diagrams/queued-command.svg).
+
+![Fluxo de um comando de apostas vindo da fila SQS](docs/diagrams/queued-command.svg)
+
+### 3. Resultados, estados e entidades
+
+Visão das transições e dos registros envolvidos na decisão sobre uma operação financeira.
+[Abrir SVG em tamanho original](docs/diagrams/outcome-entities.svg).
+
+![Diagrama de estados e entidades do processamento financeiro](docs/diagrams/outcome-entities.svg)
+
+Estes diagramas são explicativos: a prova das invariantes está nas constraints do banco,
+no código e nos testes de integração, concorrência e falhas. A
+[vitrine técnica](https://dedeusgui.github.io/backend-challenge/) reúne os mesmos fluxos
+com a metodologia e as limitações dos resultados publicados.
+
 ## Testes
 
 | Comando                    | Para que serve                                                                                          |

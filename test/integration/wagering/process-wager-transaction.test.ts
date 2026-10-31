@@ -311,6 +311,19 @@ describe('ProcessWagerTransaction: early replay, and the lookup order', () => {
     await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
   });
 
+  test('a key already used for another existing wallet is a conflict, and that wallet is untouched', async () => {
+    const owner = await fundedWallet('100.00');
+    const other = await fundedWallet('100.00');
+    const original = command(owner, { kind: 'BET', money: brl('25.00') });
+    await processWager.execute(original);
+
+    const attempt = processWager.execute({ ...original, walletId: other.walletId });
+
+    await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
+    expect(await balanceOf(other.walletId)).toBe('100.00');
+    expect(await balanceOf(owner.walletId)).toBe('75.00');
+  });
+
   test('a second inbox record for one message is a lost race, which the use case retries, not a failure', async () => {
     const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
     const inbound = InboxMessage.receive({
@@ -574,6 +587,50 @@ describe('ProcessWagerTransaction: one reversal per bet, and no settlement after
     expect(second.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
     expect(refund.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a ROLLBACK of a REFUND takes the stake back, and the BET cannot be reversed again afterwards', async () => {
+    // Reversal is once per reference, whatever the kind (DECISIONS R-06). A rolled-back refund does not
+    // free its BET, so a second reversal of the BET is refused.
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '40.00');
+    const refundId = `refund-${randomUUID()}`;
+    expect(
+      (
+        await processWager.execute(
+          command(wallet, {
+            kind: 'REFUND',
+            money: brl('40.00'),
+            externalTransactionId: refundId,
+            referenceExternalTransactionId: bet,
+          }),
+        )
+      ).balance.toString(),
+    ).toBe('100.00');
+
+    const undone = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('40.00'),
+        referenceExternalTransactionId: refundId,
+      }),
+    );
+    expect(undone.transaction.status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('60.00');
+
+    const rollbackOfBet = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('40.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+    const refundAgain = await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('40.00'), referenceExternalTransactionId: bet }),
+    );
+    expect(rollbackOfBet.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(refundAgain.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(await balanceOf(wallet.walletId)).toBe('60.00');
   });
 
   test('a WIN cannot settle a BET that was already refunded', async () => {

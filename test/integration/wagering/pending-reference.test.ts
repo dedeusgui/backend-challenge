@@ -166,6 +166,63 @@ describe('pending references', () => {
     expect(replay.balance.toString()).toBe('100.00');
   });
 
+  test('a redelivered or resent held REFUND, and a restarted process, answer the balance it was held with', async () => {
+    now = T0;
+    const wallet = await fundedWallet('100.00');
+    const betId = `bet-${randomUUID()}`;
+    const refund = command(wallet.playerId, wallet.walletId, {
+      kind: 'REFUND',
+      money: Money.from({ amount: '30.00', currency: 'BRL' }),
+      externalTransactionId: `refund-${randomUUID()}`,
+      referenceExternalTransactionId: betId,
+    });
+    const delivery = (messageId: string) => ({
+      ...refund,
+      inbound: { consumerName: 'wager-commands', messageId },
+    });
+
+    const held = await processWager.execute(delivery('msg-first'));
+    expect(held.transaction.status).toBe('PENDING_REFERENCE');
+    await processWager.execute(
+      command(wallet.playerId, wallet.walletId, {
+        kind: 'BET',
+        money: Money.from({ amount: '30.00', currency: 'BRL' }),
+        externalTransactionId: betId,
+      }),
+    );
+    expect(await balanceOf(wallet.walletId)).toBe('70.00');
+
+    const redelivered = await processWager.execute(delivery('msg-first'));
+    const resent = await processWager.execute(delivery('msg-second'));
+    const restarted = await new ProcessWagerTransaction({
+      unitOfWork,
+      clock: () => now,
+      newId: randomUUID,
+    }).execute(refund);
+    for (const answer of [redelivered, resent, restarted]) {
+      expect(answer.idempotentReplay).toBe(true);
+      expect(answer.transaction.status).toBe('PENDING_REFERENCE');
+      expect(answer.balance.toString()).toBe('100.00');
+    }
+
+    now = new Date(T0.getTime() + HOUR_MS);
+    await worker().runOnce();
+    expect((await row(refund.externalTransactionId)).status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+
+    await processWager.execute(
+      command(wallet.playerId, wallet.walletId, {
+        kind: 'BET',
+        money: Money.from({ amount: '10.00', currency: 'BRL' }),
+      }),
+    );
+    expect(await balanceOf(wallet.walletId)).toBe('90.00');
+    // The replay reports the balance the refund was processed with. The live balance is 90.00.
+    const afterResolution = await processWager.execute(refund);
+    expect(afterResolution.transaction.status).toBe('PROCESSED');
+    expect(afterResolution.balance.toString()).toBe('100.00');
+  });
+
   test('retries are scheduled with backoff and are not attempted before they are due', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;

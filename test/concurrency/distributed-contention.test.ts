@@ -289,6 +289,56 @@ describe('distributed contention: three API processes and two workers', () => {
     ).toBe('2');
   }, 60_000);
 
+  test('a WIN, a REFUND and a LOSS on one BET from three processes: exactly one result applies', async () => {
+    const wallet = await openWallet('100.00');
+    const bet = `settle-${randomUUID()}`;
+    expect(
+      (
+        await submit(apis[0] as string, wallet, {
+          kind: 'BET',
+          externalTransactionId: bet,
+          amount: '25.00',
+        })
+      ).status,
+    ).toBe(201);
+
+    const responses = await Promise.all([
+      submit(apis[0] as string, wallet, {
+        kind: 'WIN',
+        externalTransactionId: `win-${randomUUID()}`,
+        amount: '40.00',
+        reference: bet,
+      }),
+      submit(apis[1] as string, wallet, {
+        kind: 'REFUND',
+        externalTransactionId: `refund-${randomUUID()}`,
+        amount: '25.00',
+        reference: bet,
+      }),
+      submit(apis[2] as string, wallet, {
+        kind: 'LOSS',
+        externalTransactionId: `loss-${randomUUID()}`,
+        amount: '0.00',
+        reference: bet,
+      }),
+    ]);
+
+    const winnerIndex = responses.findIndex((response) => response.status === 201);
+    expect(winnerIndex).toBeGreaterThanOrEqual(0);
+    const refusedCodes = responses
+      .filter((response) => response.status === 422)
+      .map((response) => String(response.body.failureCode));
+    expect(refusedCodes).toHaveLength(2);
+    for (const code of refusedCodes) {
+      expect(['REFERENCE_ALREADY_SETTLED', 'REFERENCE_ALREADY_REVERSED']).toContain(code);
+    }
+    // The result that applied decides the balance: a WIN credits 40.00, a REFUND returns 25.00, a LOSS moves nothing.
+    const expectedBalance = ['115.00', '100.00', '75.00'][winnerIndex] ?? 'no winner';
+    expect(
+      await probes.scalar(`SELECT balance::text FROM wallets WHERE id = ?`, [wallet.walletId]),
+    ).toBe(expectedBalance);
+  }, 60_000);
+
   test('a WIN, a LOSS and a second WIN on one BET from three processes: exactly one result applies', async () => {
     const wallet = await openWallet('100.00');
     const bet = `result-${randomUUID()}`;

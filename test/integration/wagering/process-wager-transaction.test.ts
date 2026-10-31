@@ -862,3 +862,51 @@ describe('ProcessWagerTransaction: one result per BET, and REFUND only for a BET
     }
   });
 });
+
+describe('ProcessWagerTransaction: where the time goes', () => {
+  test('a new transaction reports its wait for the pool, its lock, its settlement and its commit', async () => {
+    const wallet = await fundedWallet('100.00');
+    const registry = new MetricsRegistry();
+    const timed = new ProcessWagerTransaction({
+      unitOfWork: new MikroOrmFinancialUnitOfWork(database.orm),
+      clock: () => NOW,
+      newId: randomUUID,
+      metrics: registry,
+    });
+
+    await timed.execute(command(wallet, { kind: 'BET', money: brl('25.00') }));
+
+    const summaries = registry.snapshot().summaries;
+    for (const name of [
+      'transaction_begin_ms',
+      'transaction_work_ms',
+      'transaction_commit_ms',
+      'wallet_lock_wait_ms',
+      'settlement_ms',
+    ]) {
+      expect(summaries[name]?.count).toBe(1);
+    }
+    expect(summaries).not.toHaveProperty('replay_latency_ms');
+  });
+
+  test('a replay reports its own latency, and does not count as a new transaction', async () => {
+    const wallet = await fundedWallet('100.00');
+    const original = command(wallet, { kind: 'BET', money: brl('25.00') });
+    const registry = new MetricsRegistry();
+    const timed = new ProcessWagerTransaction({
+      unitOfWork: new MikroOrmFinancialUnitOfWork(database.orm),
+      clock: () => NOW,
+      newId: randomUUID,
+      metrics: registry,
+    });
+    await timed.execute(original);
+
+    const replay = await timed.execute(original);
+
+    expect(replay.idempotentReplay).toBe(true);
+    const summaries = registry.snapshot().summaries;
+    expect(summaries['replay_latency_ms']?.count).toBe(1);
+    // A replay takes no wallet lock, so only the original waited for one.
+    expect(summaries['wallet_lock_wait_ms']?.count).toBe(1);
+  });
+});

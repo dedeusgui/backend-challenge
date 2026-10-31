@@ -26,6 +26,19 @@ describe('MetricsRegistry', () => {
     });
   });
 
+  test('summarizes labelled observations per label set, as counters do', () => {
+    const metrics = new MetricsRegistry();
+
+    metrics.observe('replay_latency_ms', 4, { path: 'replay' });
+    metrics.observe('replay_latency_ms', 6, { path: 'replay' });
+    metrics.observe('replay_latency_ms', 9, { path: 'new' });
+
+    expect(metrics.snapshot().summaries).toEqual({
+      'replay_latency_ms{path="replay"}': { count: 2, sum: 10, max: 6 },
+      'replay_latency_ms{path="new"}': { count: 1, sum: 9, max: 9 },
+    });
+  });
+
   test('a fresh registry starts empty, so processes never share counts', () => {
     const first = new MetricsRegistry();
     first.increment('idempotent_replays_total');

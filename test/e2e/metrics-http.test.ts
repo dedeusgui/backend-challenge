@@ -70,5 +70,8 @@ describe('GET /metrics', () => {
     expect(metrics.counters['idempotent_replays_total']).toBe(1);
     // Latency is timed for every request, the replay included, so the count is the number of requests.
     expect(metrics.summaries['processing_latency_ms']?.count).toBe(2);
+    // Every request is authenticated, and every submission is validated before the use case.
+    expect(metrics.summaries['auth_ms']?.count).toBeGreaterThanOrEqual(2);
+    expect(metrics.summaries['request_validation_ms']?.count).toBeGreaterThanOrEqual(1);
   });
 });

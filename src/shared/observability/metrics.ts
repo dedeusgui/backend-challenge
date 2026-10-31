@@ -19,9 +19,10 @@ export class MetricsRegistry {
     this.counters.set(key, (this.counters.get(key) ?? 0) + 1);
   }
 
-  observe(name: string, value: number): void {
-    const current = this.summaries.get(name) ?? { count: 0, sum: 0, max: 0 };
-    this.summaries.set(name, {
+  observe(name: string, value: number, labels: Labels = {}): void {
+    const key = seriesKey(name, labels);
+    const current = this.summaries.get(key) ?? { count: 0, sum: 0, max: 0 };
+    this.summaries.set(key, {
       count: current.count + 1,
       sum: current.sum + value,
       max: Math.max(current.max, value),

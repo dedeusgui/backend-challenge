@@ -124,6 +124,8 @@ describe('OutboxPublisher', () => {
 
     expect(await pendingCount()).toBe(0);
     expect(metrics.snapshot().summaries['outbox_lag_seconds']?.count).toBeGreaterThanOrEqual(1);
+    expect(metrics.snapshot().summaries['outbox_claim_ms']?.count).toBeGreaterThanOrEqual(1);
+    expect(metrics.snapshot().summaries['outbox_publish_ms']?.count).toBeGreaterThanOrEqual(1);
     for (const sends of transport.sendsByEvent.values()) {
       expect(sends).toBe(1);
     }

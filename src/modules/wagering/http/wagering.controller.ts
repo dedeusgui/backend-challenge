@@ -3,6 +3,7 @@ import {
   OPERATION_LOGGER,
   type OperationLogger,
 } from '../../../shared/observability/structured-log';
+import { METRICS_REGISTRY, type MetricsSink } from '../../../shared/observability/metrics';
 import { randomUUID } from 'node:crypto';
 import {
   ProcessWagerTransaction,
@@ -34,6 +35,7 @@ export class WageringController {
     private readonly processWager: ProcessWagerTransaction,
     private readonly queries: WagerQueries,
     @Inject(OPERATION_LOGGER) private readonly logger: OperationLogger,
+    @Inject(METRICS_REGISTRY) private readonly metrics: MetricsSink,
   ) {}
 
   @Get(':transactionId')
@@ -54,7 +56,9 @@ export class WageringController {
     @Headers('x-correlation-id') correlationId: string | undefined,
     @Res({ passthrough: true }) response: StatusSetter,
   ): Promise<WagerTransactionResponse> {
+    const validateStarted = performance.now();
     const { command } = parseProcessWagerRequest(body, idempotencyKey);
+    this.metrics.observe('request_validation_ms', performance.now() - validateStarted);
     requireProviderScope(principal, command.providerId);
     const resolvedCorrelationId = expectCorrelationId(correlationId) ?? randomUUID();
     const started = performance.now();

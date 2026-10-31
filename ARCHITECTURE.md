@@ -419,8 +419,27 @@ Counters are per process (`MetricsRegistry`): `transactions_total{status}`,
 `idempotent_replays_total`, `concurrency_conflicts_total`, `commands_total{result}`,
 `reference_resolutions_total{status}`, `reference_exhausted_total`,
 `reconciliation_divergences_total`, `outbox_published_total`,
-`outbox_publish_failures_total`, `outbox_lost_lease_total`. Summaries:
-`processing_latency_ms` and `outbox_lag_seconds`. Replays are not counted as transactions.
+`outbox_publish_failures_total`, `outbox_lost_lease_total`. Replays are not counted as transactions.
+
+Summaries keep the count, the sum and the maximum of each series, so the mean and the worst case are
+known, but no percentile is. The time is in milliseconds, except `outbox_lag_seconds`. They split a
+request into its phases, so a slow request can be placed:
+
+| Summary                                      | What it measures                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| `auth_ms`                                    | the API key lookup, per request                                        |
+| `request_validation_ms`                      | parsing the submission, before the use case                            |
+| `transaction_begin_ms`                       | the wait for a database connection, and BEGIN                          |
+| `wallet_lock_wait_ms`                        | the wait for the wallet row lock, with its query                       |
+| `transaction_work_ms`                        | the work inside the transaction: the lock, the decision and the writes |
+| `settlement_ms`                              | the decision and its writes, inside the work                           |
+| `transaction_commit_ms`                      | COMMIT                                                                 |
+| `processing_latency_ms`, `replay_latency_ms` | the whole request, and the whole request of a replay                   |
+| `outbox_claim_ms`, `outbox_publish_ms`       | one claim of due events, and one send to the events queue              |
+| `outbox_lag_seconds`                         | from the commit of an event to its send                                |
+
+No label carries an identifier. `test/unit/observability/metric-cardinality.test.ts` reads the source
+and fails on a label named after a transaction, a wallet, a provider or a message.
 
 ## 12. Authentication
 
@@ -536,8 +555,8 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
   earlier cloud runs are superseded (`docs/LOAD_TEST_HISTORY.md`).
 - **The outbox publisher sends one event at a time.** Its drain time is measured after each step of the
   load test, and the report shows it. Parallel or batched sends were not built.
-- **Lock waits are not measured.** `concurrency_conflicts_total` counts lost races, and nothing
-  counts the time a request waits for the wallet lock.
+- **Percentiles are not kept per process.** The phase summaries hold the count, the sum and the maximum
+  (section 11). Percentiles come from the load test, which measures each request from its send time.
 - **`FAILED` has no producer** in this build (section 2).
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is

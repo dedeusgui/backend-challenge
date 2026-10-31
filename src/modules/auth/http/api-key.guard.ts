@@ -1,5 +1,6 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   UnauthorizedException,
   type CanActivate,
@@ -8,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AuthenticateApiKey } from '../application/authenticate-api-key.use-case';
 import { isOperator, type Principal } from '../domain/principal';
+import { METRICS_REGISTRY, type MetricsSink } from '../../../shared/observability/metrics';
 import { IS_PUBLIC, OPERATOR_ONLY } from './access';
 
 /**
@@ -20,6 +22,7 @@ export class ApiKeyGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly authenticate: AuthenticateApiKey,
+    @Inject(METRICS_REGISTRY) private readonly metrics: MetricsSink,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -32,7 +35,9 @@ export class ApiKeyGuard implements CanActivate {
       headers: { authorization?: string };
       principal?: Principal;
     }>();
+    const authStarted = performance.now();
     const principal = await this.authenticate.execute(request.headers.authorization);
+    this.metrics.observe('auth_ms', performance.now() - authStarted);
     if (principal === undefined) {
       throw new UnauthorizedException('A valid API key is required');
     }

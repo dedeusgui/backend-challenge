@@ -49,12 +49,14 @@ export class OutboxPublisher {
   async publishOnce(): Promise<number> {
     const now = this.options.clock();
     const token = this.options.newLeaseToken();
+    const claimStarted = performance.now();
     const claimed = await this.options.store.claimDue({
       now,
       leaseUntil: new Date(now.getTime() + this.options.leaseDurationMs),
       token,
       limit: this.options.batchSize,
     });
+    this.metrics.observe('outbox_claim_ms', performance.now() - claimStarted);
 
     let published = 0;
     for (const message of claimed) {
@@ -69,6 +71,7 @@ export class OutboxPublisher {
     const attemptAt = this.options.clock();
     let sent = true;
     let failure: ErrorFields = {};
+    const sendStarted = performance.now();
     try {
       await this.options.transport.publish({
         id: message.id,
@@ -79,6 +82,7 @@ export class OutboxPublisher {
       sent = false;
       failure = describeError(error);
     }
+    this.metrics.observe('outbox_publish_ms', performance.now() - sendStarted);
 
     // Recording the outcome is outside the try: a failure here must surface, not be counted as a send failure.
     if (sent) {

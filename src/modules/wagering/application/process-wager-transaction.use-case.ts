@@ -71,14 +71,16 @@ export class ProcessWagerTransaction {
     const started = performance.now();
     for (let attempt = 1; ; attempt += 1) {
       try {
-        const outcome = await this.context.unitOfWork.run((repositories) =>
-          this.process(repositories, command, payloadHash),
-        );
+        const outcome = await this.inTransaction(command, payloadHash);
         // A replay is not a new transaction, so it is counted by idempotent_replays_total only.
         if (!outcome.idempotentReplay) {
           this.metrics.increment('transactions_total', { status: outcome.transaction.status });
         }
-        this.metrics.observe('processing_latency_ms', performance.now() - started);
+        const elapsed = performance.now() - started;
+        this.metrics.observe('processing_latency_ms', elapsed);
+        if (outcome.idempotentReplay) {
+          this.metrics.observe('replay_latency_ms', elapsed);
+        }
         return outcome;
       } catch (error) {
         // The failed unit of work has rolled back, so no effect was committed. A retry reads the winner.
@@ -91,6 +93,31 @@ export class ProcessWagerTransaction {
         throw error;
       }
     }
+  }
+
+  /**
+   * Runs the unit of work and times its three phases: the wait for a connection and BEGIN, the work
+   * inside the transaction (lock, decision and writes), and the COMMIT. Replays take the same phases,
+   * without the lock.
+   */
+  private async inTransaction(
+    command: ProcessWagerCommand,
+    payloadHash: string,
+  ): Promise<ProcessWagerOutcome> {
+    const requested = performance.now();
+    let worked = requested;
+    const outcome = await this.context.unitOfWork.run(async (repositories) => {
+      const working = performance.now();
+      this.metrics.observe('transaction_begin_ms', working - requested);
+      try {
+        return await this.process(repositories, command, payloadHash);
+      } finally {
+        worked = performance.now();
+        this.metrics.observe('transaction_work_ms', worked - working);
+      }
+    });
+    this.metrics.observe('transaction_commit_ms', performance.now() - worked);
+    return outcome;
   }
 
   private async process(
@@ -111,7 +138,9 @@ export class ProcessWagerTransaction {
     // same identity while this one waited is a replay, not a second effect. Without this second look,
     // the waiting request would insert, collide on the unique key and retry, and under load it could use
     // up its attempts and answer 503 to an identical request.
+    const lockRequested = performance.now();
     const wallet = await repositories.wallets.findForUpdate(command.walletId);
+    this.metrics.observe('wallet_lock_wait_ms', performance.now() - lockRequested);
     if (wallet === undefined) {
       throw new WalletNotFoundError(command.walletId);
     }

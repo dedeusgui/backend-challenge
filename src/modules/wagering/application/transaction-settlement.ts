@@ -44,6 +44,20 @@ export class TransactionSettlement {
     wallet: Wallet,
     options: SettlementOptions,
   ): Promise<SettlementOutcome> {
+    const started = performance.now();
+    try {
+      return await this.decide(repositories, transaction, wallet, options);
+    } finally {
+      this.metrics.observe('settlement_ms', performance.now() - started);
+    }
+  }
+
+  private async decide(
+    repositories: FinancialRepositories,
+    transaction: WagerTransaction,
+    wallet: Wallet,
+    options: SettlementOptions,
+  ): Promise<SettlementOutcome> {
     const reference =
       transaction.referenceExternalTransactionId === undefined
         ? undefined

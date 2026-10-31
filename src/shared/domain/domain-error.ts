@@ -3,7 +3,9 @@ export type DomainErrorCode =
   | 'CURRENCY_MISMATCH'
   | 'INVALID_WALLET'
   | 'INSUFFICIENT_BALANCE'
-  | 'INVALID_LEDGER_ENTRY';
+  | 'INVALID_LEDGER_ENTRY'
+  | 'INVALID_TRANSACTION'
+  | 'INVALID_TRANSACTION_TRANSITION';
 
 /**
  * Violation of a domain rule on input or on an operation.

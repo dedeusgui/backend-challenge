@@ -1,7 +1,6 @@
 import { DomainError } from '../../../shared/domain/domain-error';
+import { LedgerDirection } from '../../../shared/domain/ledger-direction';
 import { Money } from '../../../shared/domain/money';
-
-export type LedgerDirection = 'DEBIT' | 'CREDIT';
 
 export interface WalletLedgerEntryState {
   id: string;

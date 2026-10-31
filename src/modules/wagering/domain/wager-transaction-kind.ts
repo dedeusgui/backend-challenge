@@ -1,0 +1,59 @@
+import type { LedgerDirection } from '../../../shared/domain/ledger-direction';
+
+export type WagerTransactionKind = 'OPENING' | 'BET' | 'WIN' | 'LOSS' | 'REFUND' | 'ROLLBACK';
+
+export interface ReferenceRule {
+  /** Kinds this transaction may reference. */
+  readonly kinds: readonly WagerTransactionKind[];
+  readonly required: boolean;
+  /** Reversals restore the exact referenced amount; a WIN settles an independent amount. */
+  readonly amountMustMatch: boolean;
+}
+
+export interface KindRules {
+  readonly affectsBalance: boolean;
+  /** Fixed direction, `'INVERSE_OF_REFERENCE'` for ROLLBACK, or undefined when there is no ledger effect. */
+  readonly ledgerDirection: LedgerDirection | 'INVERSE_OF_REFERENCE' | undefined;
+  readonly reference: ReferenceRule | undefined;
+  readonly externallySubmittable: boolean;
+}
+
+/** The business rules of each kind, in one table so that they can be read at a glance. */
+export const KIND_RULES: Readonly<Record<WagerTransactionKind, KindRules>> = {
+  OPENING: {
+    affectsBalance: true,
+    ledgerDirection: 'CREDIT',
+    reference: undefined,
+    externallySubmittable: false,
+  },
+  BET: {
+    affectsBalance: true,
+    ledgerDirection: 'DEBIT',
+    reference: undefined,
+    externallySubmittable: true,
+  },
+  WIN: {
+    affectsBalance: true,
+    ledgerDirection: 'CREDIT',
+    reference: { kinds: ['BET'], required: false, amountMustMatch: false },
+    externallySubmittable: true,
+  },
+  LOSS: {
+    affectsBalance: false,
+    ledgerDirection: undefined,
+    reference: undefined,
+    externallySubmittable: true,
+  },
+  REFUND: {
+    affectsBalance: true,
+    ledgerDirection: 'CREDIT',
+    reference: { kinds: ['BET'], required: true, amountMustMatch: true },
+    externallySubmittable: true,
+  },
+  ROLLBACK: {
+    affectsBalance: true,
+    ledgerDirection: 'INVERSE_OF_REFERENCE',
+    reference: { kinds: ['BET', 'WIN', 'REFUND'], required: true, amountMustMatch: true },
+    externallySubmittable: true,
+  },
+};

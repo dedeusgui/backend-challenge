@@ -12,6 +12,35 @@ are the ones in the cited files. Matrix labels are short descriptions, and each 
 exists (checked for this review). Where the matrix and the code disagreed, the code was right and
 the matrix was corrected.
 
+## 0. The finalization review, at the head of the branch
+
+This section repeats the review on the code of the finalization branch. It lists each invariant the brief names, the
+point that enforces it, and the test that proves it at HEAD. Where a check was made by reading the code, the
+text says so. Every test named here passed in the final gate.
+
+| Invariant                                                  | Enforced by                                                                                             | Proven by                                                                                               |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Balance never negative                                     | `Wallet.canDebit` before the debit; `balance >= 0` in the database                                      | `wallet.test.ts`; `schema-constraints`; `hot-wallet: mixed operations`                                  |
+| Credits and debits not duplicated                          | one processed settlement per reference (partial unique index); one ledger row per (wallet, transaction) | `hot-wallet`, `distributed-contention`, `duplicate-deliveries`                                          |
+| Ledger immutable                                           | triggers that refuse UPDATE, DELETE and TRUNCATE                                                        | `schema-constraints: ledger is immutable`                                                               |
+| Uniqueness per provider and external identity              | `UNIQUE (provider, idempotency key)` and `UNIQUE (provider, external id)`                               | `schema-constraints`; `distributed-contention: one key, three payloads`                                 |
+| Canonical payload hash                                     | sorted keys and no whitespace, at every level; SHA-256 of that form; no transport metadata in it        | `wager-payload-hash.test.ts`: the encoding, the digest, the field order, and an absent reference        |
+| Out-of-order references                                    | `PENDING_REFERENCE` with a persisted schedule; the worker re-reads under the wallet lock                | `pending-reference: six workers racing over six held refunds`                                           |
+| Reversals                                                  | one reversal per reference, whatever its kind; an overdraw is `REVERSAL_WOULD_OVERDRAW`                 | `process-wager-transaction: one reversal per bet`; `distributed-contention: a refund and two rollbacks` |
+| Concurrency across three or more processes                 | the wallet row lock, the version guard, and the unique constraints                                      | `three-processes`; `distributed-contention`                                                             |
+| Atomicity of wallet, ledger, transaction, inbox and outbox | one unit of work; the outbox and inbox rows are written in it                                           | `fault-injection: a crash before commit leaves no trace`                                                |
+| HTTP answers coherent with the financial state             | `statusOf` maps each state to one status; a replay carries the stored snapshot                          | `wagering-http`; the replay contract in `ARCHITECTURE.md` section 6                                     |
+
+Changes in this round, each with its commit: the queue refuses a non-UUID wallet id as HTTP does (`d437452`); a
+dead-letter copy keeps one copy inside the broker's window (`ebc9589`); a duplicate that waits for the lock records
+no second inbox row (`a10fd11`); the outbox orders a claimed batch by due time (`89b7bc1`); the lock path makes fewer
+round trips, and its outcome query uses the partial indexes (`9e8dabe`). Each change has a test that failed before
+it and passes after it.
+
+Checked by reading the code, not by a test: that `Wallet.credit` does not check the database's maximum itself (the
+settlement checks `canCredit` first, and the database refuses the rest); that the reference worker takes the wallet
+lock before it re-reads a held transaction; that the consumer acknowledges only after the unit of work returns.
+
 ## 1. Defects found in this review, and their fixes
 
 | #   | Defect                                                                     | Fix                                                                                                                                                  | Commit    |

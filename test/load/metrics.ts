@@ -24,6 +24,11 @@ export function parseCpuList(text: string): number[] {
   return cpus;
 }
 
+/** Like parseCpuList, but an empty text is no CPUs: the generator has none when the stack has them all. */
+export function parseCpuListOrNone(text: string): number[] {
+  return text.trim() === '' ? [] : parseCpuList(text);
+}
+
 /** Formats CPU ids as the shortest list that taskset and docker accept: [0, 1, 2, 5] is `0-2,5`. */
 export function formatCpuList(cpus: readonly number[]): string {
   const sorted = [...new Set(cpus)].sort((left, right) => left - right);

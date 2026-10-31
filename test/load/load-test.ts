@@ -38,6 +38,7 @@ import {
   LINUX_CLOCK_TICKS,
   formatCpuList,
   parseCpuList,
+  parseCpuListOrNone,
   parseDockerStats,
   parsePidTable,
   parseProcStatRssKiB,
@@ -827,26 +828,32 @@ async function launch(): Promise<number> {
     ? planPinning({ allowed, stackCount, pinnable })
     : planFromEnvironment(env[PLAN_MARK] ?? '');
 
-  if (planned && plan.generator.length > 0) {
-    const child = Bun.spawn(
-      ['taskset', '-c', formatCpuList(plan.generator), process.execPath, 'run', import.meta.path],
-      {
-        env: {
-          ...env,
-          [PLAN_MARK]: JSON.stringify({
-            pinned: plan.pinned,
-            allowed: formatCpuList(plan.allowed),
-            stack: formatCpuList(plan.stack),
-            generator: formatCpuList(plan.generator),
-          }),
-          // Raised so that the generator never queues its own requests. The in-flight column shows the count.
-          BUN_CONFIG_MAX_HTTP_REQUESTS: env.BUN_CONFIG_MAX_HTTP_REQUESTS ?? '1024',
-        },
-        stdin: 'ignore',
-        stdout: 'inherit',
-        stderr: 'inherit',
+  if (planned) {
+    // The generator always runs in a child: the in-flight limit must be set before the runtime starts.
+    // The child is pinned to the CPUs the stack does not use, when there are any.
+    const pinnedGenerator = plan.generator.length > 0;
+    const command = [
+      ...(pinnedGenerator ? ['taskset', '-c', formatCpuList(plan.generator)] : []),
+      process.execPath,
+      'run',
+      import.meta.path,
+    ];
+    const child = Bun.spawn(command, {
+      env: {
+        ...env,
+        [PLAN_MARK]: JSON.stringify({
+          pinned: plan.pinned,
+          allowed: formatCpuList(plan.allowed),
+          stack: formatCpuList(plan.stack),
+          generator: formatCpuList(plan.generator),
+        }),
+        // Raised so that the generator never queues its own requests. The in-flight column shows the count.
+        BUN_CONFIG_MAX_HTTP_REQUESTS: env.BUN_CONFIG_MAX_HTTP_REQUESTS ?? '1024',
       },
-    );
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
     return child.exited;
   }
   return runLoad(plan);
@@ -874,7 +881,7 @@ function planFromEnvironment(text: string): PinningPlan {
     hostLogicalCpus: allowed.length,
     allowed,
     stack: parseCpuList(parsed.stack),
-    generator: parseCpuList(parsed.generator),
+    generator: parseCpuListOrNone(parsed.generator),
   };
 }
 

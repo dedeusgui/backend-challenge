@@ -4,6 +4,7 @@ import {
   formatCpuList,
   netPercent,
   parseCpuList,
+  parseCpuListOrNone,
   parseDockerStats,
   parsePidTable,
   parseProcStatRssKiB,
@@ -41,6 +42,12 @@ describe('CPU lists', () => {
 
   test('refuses text that is not a list, rather than pinning to the wrong CPUs', () => {
     expect(() => parseCpuList('0-x')).toThrow();
+  });
+
+  test('reads an empty list as no CPUs, which is what a generator with none left has', () => {
+    expect(parseCpuListOrNone('')).toEqual([]);
+    expect(parseCpuListOrNone('2-3')).toEqual([2, 3]);
+    expect(() => parseCpuListOrNone('x')).toThrow();
   });
 });
 

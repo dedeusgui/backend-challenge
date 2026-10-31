@@ -75,7 +75,12 @@ services:
   worker:
     build: .
     command: ['bun', 'run', 'src/worker.ts']
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      # The worker's own liveness and metrics. Exposed to the internal network only, never published.
+      WORKER_HTTP_PORT: '3001'
+    expose:
+      - '3001'
     restart: unless-stopped
     stop_grace_period: 30s
     depends_on:

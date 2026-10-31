@@ -502,6 +502,15 @@ request into its phases, so a slow request can be placed:
 | `outbox_claim_ms`, `outbox_publish_ms`       | one claim of due events, and one send to the events queue              |
 | `outbox_lag_seconds`                         | from the commit of an event to its send                                |
 
+The worker has its own HTTP surface, started with `WORKER_HTTP_PORT` (Compose sets 3001 on the internal
+network, and publishes no port). `GET /metrics` returns the counters and summaries of that process, with
+`startedAt`, `collectedAt` and `pid`, so a rate is the difference of two reads over the difference of
+`collectedAt`. `GET /health/live` answers while the loops run. Before this surface, the worker printed its
+counters once, at shutdown, so a crashed worker reported nothing. `worker-metrics-live.test.ts` reads the
+counters of a running worker process, which has published committed events, and stops it afterwards.
+Collection is pull-based and per process: no aggregation runs across workers, and Prometheus is not
+installed (see the audit, `docs/AUDITORIA_FINAL.md`).
+
 No label carries an identifier. `test/unit/observability/metric-cardinality.test.ts` reads the source
 and fails on a label named after a transaction, a wallet, a provider or a message.
 

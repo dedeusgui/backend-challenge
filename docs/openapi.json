@@ -1,0 +1,1504 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Distributed Wagering Processor: API HTTP",
+    "version": "0.1.0",
+    "summary": "Operações de apostas de provedores, saldos de carteira e ledger.",
+    "description": "Contrato escrito à mão e verificado contra as rotas e as respostas reais (`test/unit/openapi/route-parity.test.ts` e `test/e2e/openapi-responses.test.ts`). Descrições em português; identificadores e exemplos não são traduzidos.\n\n**Autenticação.** `Authorization: Bearer <chave>`. Chave PROVIDER age pelo próprio `providerId`. Chave OPERATOR abre e lê carteiras, reconcilia, lê métricas e age por qualquer provedor. Health é público. Ver ARCHITECTURE §12 e ADR 0007. Autenticação por chave de API é uma decisão registrada, não um IdP externo.\n\n**Idempotência.** `Idempotency-Key` é obrigatória e é a fonte da verdade, por provedor. Mesma chave e mesmo payload: replay (200). Mesma chave e payload diferente: 409.\n\n**Status de transação.** 201 aplicada; 200 replay; 202 aguardando referência; 422 rejeitada por regra (não reenviar sem mudança); 503 com Retry-After para disputa de carteira, que pode ser reenviada.\n\n**Limites.** Corpo acima de 16 kB: 413. Valores monetários com exatamente duas casas. Esta configuração padrão não limita taxa; o modo protegido, com borda Nginx, limita por endereço (ARCHITECTURE §15).",
+    "license": {
+      "name": "Uso na avaliação técnica da Jungle Gaming"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Stack local do docker-compose.yml, ou a borda do modo protegido, na mesma porta."
+    }
+  ],
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness e readiness. Públicos."
+    },
+    {
+      "name": "wallets",
+      "description": "Carteiras, ledger e reconciliação. Somente OPERATOR."
+    },
+    {
+      "name": "wagering",
+      "description": "Operações de apostas e consultas por id."
+    },
+    {
+      "name": "providers",
+      "description": "Consultas pelo id do provedor."
+    },
+    {
+      "name": "observability",
+      "description": "Métricas do processo. Somente OPERATOR."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "getHealthLive",
+        "summary": "Processo vivo",
+        "tags": ["health"],
+        "responses": {
+          "200": {
+            "description": "Processo vivo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status"],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["ok"]
+                    }
+                  }
+                },
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        },
+        "description": "Não toca em dependências e não exige chave.",
+        "security": []
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getHealthReady",
+        "summary": "PostgreSQL e fila alcançáveis",
+        "tags": ["health"],
+        "responses": {
+          "200": {
+            "description": "PostgreSQL e SQS responderam.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                },
+                "example": {
+                  "status": "ok",
+                  "checks": {
+                    "database": "up",
+                    "sqs": "up"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ao menos uma dependência não respondeu. `checks` diz qual.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                },
+                "example": {
+                  "status": "unavailable",
+                  "checks": {
+                    "database": "up",
+                    "sqs": "down"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/wallets": {
+      "post": {
+        "operationId": "openWallet",
+        "summary": "Abre uma carteira",
+        "tags": ["wallets"],
+        "responses": {
+          "201": {
+            "description": "Carteira criada. Com saldo inicial positivo, a transação interna OPENING e o lançamento CREDIT são gravados na mesma transação SQL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletOpened"
+                },
+                "example": {
+                  "id": "0192f291-27dd-7d3f-8071-5f8685deef37",
+                  "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1",
+                  "balance": {
+                    "amount": "1000.00",
+                    "currency": "BRL"
+                  },
+                  "version": 1
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_MONEY",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Já existe carteira para este playerId e moeda.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "WALLET_ALREADY_EXISTS",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "O corpo passa de 16 kB. Recusado antes da autenticação e da análise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "PAYLOAD_TOO_LARGE",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Somente chave OPERATOR.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenWalletRequest"
+              },
+              "example": {
+                "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1",
+                "initialBalance": {
+                  "amount": "1000.00",
+                  "currency": "BRL"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/wallets/{walletId}": {
+      "get": {
+        "operationId": "getWallet",
+        "summary": "Lê uma carteira",
+        "tags": ["wallets"],
+        "responses": {
+          "200": {
+            "description": "Saldo, versão e moeda no instante da leitura.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Carteira inexistente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "WALLET_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Somente chave OPERATOR.",
+        "parameters": [
+          {
+            "name": "walletId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da carteira.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/wallets/{walletId}/ledger": {
+      "get": {
+        "operationId": "getWalletLedger",
+        "summary": "Lê o ledger de uma carteira, em páginas",
+        "tags": ["wallets"],
+        "responses": {
+          "200": {
+            "description": "Lançamentos em ordem de `seq`, com `nextCursor` opaco (null na última página).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_CURSOR",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Carteira inexistente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "WALLET_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Somente chave OPERATOR.",
+        "parameters": [
+          {
+            "name": "walletId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da carteira.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco devolvido em `nextCursor`. Fora do intervalo de bigint: 400 INVALID_CURSOR.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Lançamentos por página.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
+        ]
+      }
+    },
+    "/wallets/{walletId}/reconciliation": {
+      "post": {
+        "operationId": "reconcileWallet",
+        "summary": "Reconcilia o saldo com o ledger",
+        "tags": ["wallets"],
+        "responses": {
+          "200": {
+            "description": "Relatório somente leitura. Divergência é informada, nunca corrigida.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Carteira inexistente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "WALLET_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Somente chave OPERATOR. Segura a linha da carteira em modo compartilhado, para que um débito não apareça como divergência. Não há corpo na requisição.",
+        "parameters": [
+          {
+            "name": "walletId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da carteira.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/wagering/transactions": {
+      "post": {
+        "operationId": "submitWagerTransaction",
+        "summary": "Submete uma operação de apostas",
+        "tags": ["wagering"],
+        "responses": {
+          "201": {
+            "description": "Aplicada agora (PROCESSED). `idempotentReplay` = false.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Replay idêntico de uma operação já processada. `balance` é o saldo observado quando ela foi aplicada, não o saldo atual.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Aceita, aguardando a referência (PENDING_REFERENCE). A operação é retida, com retentativas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Rejeitada por regra de negócio (REJECTED), com `failureCode`. Não reenviar sem mudança.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                },
+                "example": {
+                  "transactionId": "0192f298-345e-7e38-af88-e43f851a819d",
+                  "status": "REJECTED",
+                  "failureCode": "INSUFFICIENT_BALANCE",
+                  "balance": {
+                    "amount": "10.00",
+                    "currency": "BRL"
+                  },
+                  "idempotentReplay": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_KEY_REQUIRED",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Carteira inexistente. Nada é gravado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "WALLET_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A mesma chave com payload diferente. Não é replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "O corpo passa de 16 kB. Recusado antes da autenticação e da análise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "PAYLOAD_TOO_LARGE",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Carteira ocupada numa disputa perdida. Tente de novo após o Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "ConcurrencyConflict",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["1"]
+                }
+              }
+            }
+          }
+        },
+        "description": "Chave PROVIDER age só pelo próprio `providerId`; chave OPERATOR age por qualquer provedor. `OPENING` é interno e é recusado com 400 INVALID_TRANSACTION.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Obrigatória. Fonte da verdade da idempotência, por provedor. Padrão recomendado: `{providerId}:{externalTransactionId}`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "example": "provider-a:transaction-123"
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": false,
+            "description": "Até 128 caracteres de `A-Za-z0-9._:-`. Ausente, a API gera um.",
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              },
+              "example": {
+                "providerId": "provider-a",
+                "externalTransactionId": "transaction-123",
+                "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1",
+                "walletId": "0192f291-27dd-7d3f-8071-5f8685deef37",
+                "roundId": "round-987",
+                "gameId": "fortune-chimp",
+                "kind": "BET",
+                "money": {
+                  "amount": "25.00",
+                  "currency": "BRL"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/wagering/transactions/{transactionId}": {
+      "get": {
+        "operationId": "getWagerTransaction",
+        "summary": "Lê uma transação pelo id interno",
+        "tags": ["wagering"],
+        "responses": {
+          "200": {
+            "description": "Snapshot armazenado da transação.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A requisição não passou na validação do contrato.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transação inexistente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "TRANSACTION_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Uma chave PROVIDER que pede transação de outro provedor recebe 403, sem nenhum campo da transação. Decisão registrada em ARCHITECTURE §12: o 403 revela a existência do id.",
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador interno da transação.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/providers/{providerId}/wagering/transactions/{externalTransactionId}": {
+      "get": {
+        "operationId": "getProviderWagerTransaction",
+        "summary": "Lê uma transação pelo id do provedor",
+        "tags": ["providers"],
+        "responses": {
+          "200": {
+            "description": "Snapshot armazenado da transação.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transação inexistente para este provedor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "TRANSACTION_NOT_FOUND",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador do provedor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "externalTransactionId",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da transação no provedor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "getMetrics",
+        "summary": "Contadores e resumos deste processo",
+        "tags": ["observability"],
+        "responses": {
+          "200": {
+            "description": "Contadores e resumos deste processo, desde a sua inicialização. Sem identificadores nos rótulos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Somente chave OPERATOR. Cada réplica informa os próprios números; a superfície do worker tem o mesmo formato, em outra porta interna."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Chave de API emitida por `bun run auth:create`. Mostrada uma vez; só o hash é guardado."
+      }
+    },
+    "schemas": {
+      "Money": {
+        "type": "object",
+        "required": ["amount", "currency"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^-?[0-9]{1,18}\\.[0-9]{2}$",
+            "description": "Decimal string com exatamente duas casas. Nunca número."
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO-4217 em maiúsculas. O desafio usa BRL."
+          }
+        },
+        "example": {
+          "amount": "25.00",
+          "currency": "BRL"
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Código estável e legível por máquina."
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": ["status", "checks"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "unavailable"]
+          },
+          "checks": {
+            "type": "object",
+            "required": ["database", "sqs"],
+            "properties": {
+              "database": {
+                "type": "string",
+                "enum": ["up", "down"]
+              },
+              "sqs": {
+                "type": "string",
+                "enum": ["up", "down"]
+              }
+            }
+          }
+        }
+      },
+      "OpenWalletRequest": {
+        "type": "object",
+        "required": ["playerId", "initialBalance"],
+        "additionalProperties": false,
+        "properties": {
+          "playerId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identificador do jogador no provedor. Texto, não necessariamente UUID."
+          },
+          "initialBalance": {
+            "$ref": "#/components/schemas/Money"
+          }
+        }
+      },
+      "WalletOpened": {
+        "type": "object",
+        "required": ["id", "playerId", "balance", "version"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "playerId": {
+            "type": "string"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "WalletView": {
+        "type": "object",
+        "required": ["id", "playerId", "currency", "balance", "version", "updatedAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "playerId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Sobe somente quando o saldo muda."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LedgerEntry": {
+        "type": "object",
+        "required": [
+          "seq",
+          "id",
+          "transactionId",
+          "direction",
+          "amount",
+          "balanceBefore",
+          "balanceAfter",
+          "createdAt"
+        ],
+        "properties": {
+          "seq": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "Ordem do ledger dentro da carteira, como texto decimal: é um bigint do PostgreSQL, que JSON não representa com segurança como número."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "transactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["DEBIT", "CREDIT"]
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "balanceBefore": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "balanceAfter": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LedgerPage": {
+        "type": "object",
+        "required": ["entries", "nextCursor"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntry"
+            }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "description": "Null quando não há mais páginas."
+          }
+        }
+      },
+      "ReconciliationReport": {
+        "type": "object",
+        "required": [
+          "walletId",
+          "storedBalance",
+          "calculatedBalance",
+          "difference",
+          "consistent",
+          "checkedEntries"
+        ],
+        "properties": {
+          "walletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "storedBalance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "calculatedBalance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "difference": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "consistent": {
+            "type": "boolean"
+          },
+          "checkedEntries": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SubmitRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerId",
+          "externalTransactionId",
+          "playerId",
+          "walletId",
+          "roundId",
+          "gameId",
+          "kind",
+          "money"
+        ],
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalTransactionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "playerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "walletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "roundId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "gameId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["BET", "WIN", "LOSS", "REFUND", "ROLLBACK"],
+            "description": "OPENING é interno e não é aceito."
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "referenceExternalTransactionId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Obrigatória para REFUND e ROLLBACK. Opcional para WIN e LOSS, que podem nomear a BET que liquidam."
+          }
+        }
+      },
+      "SubmitResponse": {
+        "type": "object",
+        "required": ["transactionId", "status", "balance", "idempotentReplay"],
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PROCESSED", "PENDING_REFERENCE", "REJECTED"]
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "idempotentReplay": {
+            "type": "boolean"
+          },
+          "failureCode": {
+            "type": "string",
+            "description": "Presente quando REJECTED. Taxonomia em ARCHITECTURE §3."
+          }
+        }
+      },
+      "TransactionView": {
+        "type": "object",
+        "required": [
+          "transactionId",
+          "providerId",
+          "externalTransactionId",
+          "walletId",
+          "playerId",
+          "roundId",
+          "gameId",
+          "kind",
+          "status",
+          "money",
+          "referenceExternalTransactionId",
+          "failureCode",
+          "resultingBalance",
+          "processedAt",
+          "createdAt"
+        ],
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "externalTransactionId": {
+            "type": "string"
+          },
+          "walletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "playerId": {
+            "type": "string"
+          },
+          "roundId": {
+            "type": "string"
+          },
+          "gameId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["OPENING", "BET", "WIN", "LOSS", "REFUND", "ROLLBACK"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "PENDING_REFERENCE", "PROCESSED", "REJECTED", "FAILED"]
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "referenceExternalTransactionId": {
+            "type": ["string", "null"]
+          },
+          "failureCode": {
+            "type": ["string", "null"]
+          },
+          "resultingBalance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MetricsSnapshot": {
+        "type": "object",
+        "required": ["counters", "summaries"],
+        "properties": {
+          "counters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "summaries": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["count", "sum", "max"],
+              "properties": {
+                "count": {
+                  "type": "integer"
+                },
+                "sum": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

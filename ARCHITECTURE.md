@@ -156,13 +156,13 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
   `ROLLBACK` must carry a reference, a `BET` or `OPENING` must not, and a `WIN` or `LOSS` may carry one (migration 6, challenge 6.3). Status
   shape: PROCESSED needs `processed_at` and a resulting balance; REJECTED and FAILED
-  need a failure code; a held row needs its next lookup time and the balance it was held with
+  need a failure code and the balance observed when they were decided (migration 8); a held row needs its next lookup time and the balance it was held with
   (migration 7). Composite foreign key
   `(reference_transaction_id, provider_id, wallet_id)`, so a reference must share the
   provider and the wallet. Partial unique index on `(reference_transaction_id)` where
   PROCESSED and the kind is REFUND or ROLLBACK, so each reference is reversed once, whatever
-  the kind of reversal. A BET has at most one PROCESSED result, a WIN or a LOSS, enforced by
-  `wager_one_processed_result_per_reference`.
+  the kind of reversal. A BET has at most one PROCESSED settlement, a WIN, a LOSS or a REFUND, enforced by
+  `wager_one_processed_settlement_per_reference` (migration 8). A ROLLBACK is not in that index.
 - Migration 4 (`api_clients`) and migration 5 add, to the wager and ledger tables: a positive
   amount except for LOSS (`wager_amount_shape`); a ledger entry in its wallet's currency
   (`ledger_wallet_currency_fk`); and a reference in the same round

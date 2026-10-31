@@ -358,6 +358,15 @@ describe('wager_transactions identity and shape', () => {
     expect(await sqlStateOf(() => insertWager({ walletId, status: 'REJECTED' }))).toBe('23514');
   });
 
+  test('rejects a REJECTED transaction without the balance observed when it was rejected', async () => {
+    const walletId = await insertWallet();
+    expect(
+      await sqlStateOf(() =>
+        insertWager({ walletId, status: 'REJECTED', failureCode: 'INSUFFICIENT_BALANCE' }),
+      ),
+    ).toBe('23514');
+  });
+
   test('rejects a PENDING transaction that already carries a failure code', async () => {
     const walletId = await insertWallet();
     expect(
@@ -494,7 +503,8 @@ describe('wager_transactions references', () => {
         status,
         failureCode: status === 'REJECTED' ? 'REFERENCE_ALREADY_REVERSED' : null,
         processedAt: status === 'PROCESSED' ? new Date() : null,
-        resultingBalance: status === 'PROCESSED' ? '100.00' : null,
+        // A rejection stores the balance observed when it was decided, which is the balance after the BET.
+        resultingBalance: status === 'PROCESSED' ? '100.00' : '75.00',
       });
 
     await reversal('PROCESSED');
@@ -601,6 +611,36 @@ describe('wager_transactions: results name their BET, and a BET has one result',
     expect(await sqlStateOf(() => result('LOSS'))).toBe('23505');
     expect(await sqlStateOf(() => result('WIN'))).toBe('23505');
   });
+
+  test('a BET cannot have a processed result and a processed refund, in either order', async () => {
+    const walletId = await insertWallet();
+    const processedBet = () =>
+      insertWager({
+        walletId,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        resultingBalance: '75.00',
+      });
+    const settle = (bet: string, kind: 'WIN' | 'REFUND') =>
+      insertWager({
+        walletId,
+        kind,
+        amount: '25.00',
+        referenceExternalTransactionId: 'bet-settled',
+        referenceTransactionId: bet,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        resultingBalance: '100.00',
+      });
+
+    const resultFirst = await processedBet();
+    await settle(resultFirst, 'WIN');
+    expect(await sqlStateOf(() => settle(resultFirst, 'REFUND'))).toBe('23505');
+
+    const refundFirst = await processedBet();
+    await settle(refundFirst, 'REFUND');
+    expect(await sqlStateOf(() => settle(refundFirst, 'WIN'))).toBe('23505');
+  });
 });
 
 describe('wager_transactions: reference shape and one reversal per reference', () => {
@@ -694,6 +734,7 @@ describe('wager_transactions: amount, wallet context and round are checked by th
           currency: 'USD',
           status: 'REJECTED',
           failureCode: 'WALLET_PLAYER_MISMATCH',
+          resultingBalance: '100.00',
         }),
       ),
     ).toBe('NO_ERROR');

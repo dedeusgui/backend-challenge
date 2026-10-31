@@ -1,6 +1,6 @@
 # Distributed Wagering Processor (English)
 
-Portuguese is the primary language of this repository: see [README.md](README.md). This file is the English version of the same guide.
+The main documentation is in Portuguese, by choice of the final review round: see [README.md](README.md). The challenge specification does not require a language. This file is the English version of the same guide.
 
 Implementation of the [Jungle Gaming backend challenge](docs/CHALLENGE.md). It applies wager
 operations (BET, WIN, LOSS, REFUND, ROLLBACK) from game providers over HTTP and SQS, keeps

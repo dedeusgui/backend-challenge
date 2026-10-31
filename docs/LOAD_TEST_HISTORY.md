@@ -95,3 +95,14 @@ the four CPUs with the stack in that run, so the figure is a lower bound for the
 
 The cloud-VM records were the pinned report before this review. They are in git history, in `docs/load/results/`
 at commit `596e9fc`.
+
+## Smoke run of the current driver (5cf454c)
+
+One record, `docs/load/smoke/5cf454c/cpus-1.json`, measured with `LOAD_CPUS=1 LOAD_RATES=10,25 LOAD_STEP_SECONDS=5 LOAD_WARMUP_SECONDS=3 LOAD_IDLE_SECONDS=3`.
+It is not a campaign: two rates, five seconds each, on one CPU. It checks that the driver runs end to end with
+the judgement of answers, the scoped duplicate audit and the units of the summaries. Both steps passed. 175
+requests were sent, none was lost, none was an incorrect answer, and no transaction or balance was duplicated or
+wrong. The outbox drain after each step was 0.6 ms and 0.8 ms. Over the run, 493 published events had an outbox
+lag with a mean of 0.192 s and a maximum of 0.682 s.
+
+To render this record as a report, without measuring: `LOAD_RESULTS_DIR=docs/load/smoke/5cf454c LOAD_REPORT_PATH=<file> LOAD_REPORT_ONLY=1 bun run test:load`.

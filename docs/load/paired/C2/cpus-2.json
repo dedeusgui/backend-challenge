@@ -1,0 +1,719 @@
+{
+  "format": "load-test-run",
+  "version": 1,
+  "generatedAt": "2026-10-31T19:39:34.516Z",
+  "stackCpus": 2,
+  "stackCpuList": "0-1",
+  "generatorCpuList": "2-3",
+  "pinned": true,
+  "hostLogicalCpus": 4,
+  "observedAffinity": {
+    "api-1": "0-1",
+    "api-2": "0-1",
+    "api-3": "0-1",
+    "worker-1": "0-1",
+    "worker-2": "0-1"
+  },
+  "containerCpusets": {
+    "postgres": "0-1",
+    "localstack": "0-1"
+  },
+  "environment": {
+    "platform": "linux",
+    "release": "6.18.44-fc-v185",
+    "arch": "x64",
+    "cpuModel": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "memoryGiB": 15.714027404785156,
+    "bun": "1.4.4",
+    "topology": "3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14"
+  },
+  "constraints": {
+    "stepSeconds": 20,
+    "requestTimeoutMs": 10000,
+    "maxErrorRate": 0.001,
+    "maxLostRequests": 0,
+    "maxP95Ms": 500,
+    "maxP99Ms": 1000,
+    "maxGeneratorLagP99Ms": 50,
+    "maxOutboxDrainSeconds": 60,
+    "maxRssMiBPerProcess": 512
+  },
+  "workload": {
+    "mixPercent": {
+      "BET": 45,
+      "REPLAY": 5,
+      "WIN": 20,
+      "LOSS": 10,
+      "REFUND": 3,
+      "ROLLBACK": 2,
+      "READ_WALLET": 5,
+      "READ_TRANSACTION": 10
+    },
+    "planned": {
+      "BET": 4717,
+      "REPLAY": 489,
+      "WIN": 2103,
+      "LOSS": 1068,
+      "REFUND": 326,
+      "ROLLBACK": 215,
+      "READ_WALLET": 575,
+      "READ_TRANSACTION": 1007
+    },
+    "wallets": 50,
+    "hotShare": 0.1,
+    "stake": "5.00",
+    "winAmount": "9.50",
+    "settleAfterOperations": 100,
+    "readAfterOperations": 100,
+    "replayAfterOperations": 20
+  },
+  "warmup": {
+    "ratePerSecond": 25,
+    "seconds": 20,
+    "sent": 500
+  },
+  "idle": {
+    "seconds": 10,
+    "cpuPercent": {
+      "api-1": 0.7999844377427366,
+      "api-2": 0.3999922188713683,
+      "api-3": 0.7999844377427366,
+      "worker-1": 2.099959149074681,
+      "worker-2": 1.7999649849211552,
+      "postgres": 1.7535000000000003,
+      "localstack": 1.6395
+    }
+  },
+  "steps": [
+    {
+      "rate": 50,
+      "seconds": 20,
+      "elapsedSeconds": 19.991624898,
+      "sent": 1000,
+      "answered": 1000,
+      "lost": 0,
+      "serverErrors": 0,
+      "errorRate": 0,
+      "maxInFlight": 3,
+      "p50": 14.165468999999575,
+      "p95": 21.34620300000097,
+      "p99": 31.624242000005324,
+      "max": 47.59759900000063,
+      "distinctP99": 31.624242000005324,
+      "hotP99": 32.56749100000161,
+      "lagP99Ms": 1.2103510000015376,
+      "maxLagMs": 4.2707139999984065,
+      "drainSeconds": 0.0009481589999995777,
+      "violations": 0,
+      "duplicates": 0,
+      "eventsCreated": 1531,
+      "lockWaitersMean": 0,
+      "lockWaitersMax": 0,
+      "idleInTransactionMean": 0.3939393939393939,
+      "idleInTransactionMax": 2,
+      "connectionsMax": 8,
+      "cpuPercent": {
+        "api-1": 15.056304904465897,
+        "api-2": 14.856221118360038,
+        "api-3": 14.75617922530711,
+        "worker-1": 3.25136152422021,
+        "worker-2": 3.0012567915878865,
+        "postgres": 18.932,
+        "localstack": 3.9212500000000006
+      },
+      "generatorCpuPercent": 2.5487773134987917,
+      "peakRssMiB": {
+        "api-1": 123.73828125,
+        "api-2": 138.12890625,
+        "api-3": 125.6640625,
+        "worker-1": 90.01171875,
+        "worker-2": 98.12890625
+      },
+      "statusMix": {
+        "200": 184,
+        "201": 816
+      },
+      "lostReasons": {},
+      "byKind": {
+        "BET": {
+          "sent": 457,
+          "answered": 457,
+          "unexpected": 0,
+          "p50": 13.699279000000388,
+          "p95": 20.47982800000318,
+          "p99": 31.718524000003526,
+          "statuses": {
+            "201": 457
+          }
+        },
+        "REPLAY": {
+          "sent": 47,
+          "answered": 47,
+          "unexpected": 0,
+          "p50": 5.4748880000042845,
+          "p95": 9.382133999999496,
+          "p99": 15.745257000002312,
+          "statuses": {
+            "200": 47
+          }
+        },
+        "WIN": {
+          "sent": 207,
+          "answered": 207,
+          "unexpected": 0,
+          "p50": 17.121595000004163,
+          "p95": 25.672946999999112,
+          "p99": 31.8275450000001,
+          "statuses": {
+            "201": 207
+          }
+        },
+        "LOSS": {
+          "sent": 101,
+          "answered": 101,
+          "unexpected": 0,
+          "p50": 14.736909999999625,
+          "p95": 21.97403000000486,
+          "p99": 29.5418570000038,
+          "statuses": {
+            "201": 101
+          }
+        },
+        "REFUND": {
+          "sent": 31,
+          "answered": 31,
+          "unexpected": 0,
+          "p50": 17.670939000003273,
+          "p95": 23.880150000004505,
+          "p99": 42.90512000000308,
+          "statuses": {
+            "201": 31
+          }
+        },
+        "ROLLBACK": {
+          "sent": 20,
+          "answered": 20,
+          "unexpected": 0,
+          "p50": 15.765776000000187,
+          "p95": 20.23739100000239,
+          "p99": 21.34620300000097,
+          "statuses": {
+            "201": 20
+          }
+        },
+        "READ_WALLET": {
+          "sent": 52,
+          "answered": 52,
+          "unexpected": 0,
+          "p50": 4.669271999999182,
+          "p95": 7.962768000004871,
+          "p99": 13.200929999999062,
+          "statuses": {
+            "200": 52
+          }
+        },
+        "READ_TRANSACTION": {
+          "sent": 85,
+          "answered": 85,
+          "unexpected": 0,
+          "p50": 5.186948000002303,
+          "p95": 9.360414000002493,
+          "p99": 13.463918000001286,
+          "statuses": {
+            "200": 85
+          }
+        }
+      },
+      "reasons": []
+    },
+    {
+      "rate": 100,
+      "seconds": 20,
+      "elapsedSeconds": 20.001071959999994,
+      "sent": 2000,
+      "answered": 2000,
+      "lost": 0,
+      "serverErrors": 0,
+      "errorRate": 0,
+      "maxInFlight": 8,
+      "p50": 12.637665000002016,
+      "p95": 30.028352000001178,
+      "p99": 60.06593099999009,
+      "max": 87.57013900000311,
+      "distinctP99": 58.79532100000506,
+      "hotP99": 71.24501400000008,
+      "lagP99Ms": 1.2350790000054985,
+      "maxLagMs": 24.560010000001057,
+      "drainSeconds": 0.0009480860000039684,
+      "violations": 0,
+      "duplicates": 0,
+      "eventsCreated": 3040,
+      "lockWaitersMean": 0.010101010101010102,
+      "lockWaitersMax": 1,
+      "idleInTransactionMean": 0.9090909090909091,
+      "idleInTransactionMax": 4,
+      "connectionsMax": 14,
+      "cpuPercent": {
+        "api-1": 23.79872443596769,
+        "api-2": 23.248753913287764,
+        "api-3": 23.348748553775025,
+        "worker-1": 3.449815096810442,
+        "worker-2": 3.0498365348614063,
+        "postgres": 34.52849999999999,
+        "localstack": 6.145000000000001
+      },
+      "generatorCpuPercent": 3.8418940821609855,
+      "peakRssMiB": {
+        "api-1": 137.20703125,
+        "api-2": 140.22265625,
+        "api-3": 139.34375,
+        "worker-1": 97.265625,
+        "worker-2": 101.375
+      },
+      "statusMix": {
+        "200": 377,
+        "201": 1623
+      },
+      "lostReasons": {},
+      "byKind": {
+        "BET": {
+          "sent": 897,
+          "answered": 897,
+          "unexpected": 0,
+          "p50": 12.298647000003257,
+          "p95": 30.60709599999973,
+          "p99": 61.534527000003436,
+          "statuses": {
+            "201": 897
+          }
+        },
+        "REPLAY": {
+          "sent": 98,
+          "answered": 98,
+          "unexpected": 0,
+          "p50": 4.310572000002139,
+          "p95": 11.799724000004062,
+          "p99": 16.681224999992992,
+          "statuses": {
+            "200": 98
+          }
+        },
+        "WIN": {
+          "sent": 400,
+          "answered": 400,
+          "unexpected": 0,
+          "p50": 15.193858999999065,
+          "p95": 40.32436199999938,
+          "p99": 65.25976300000184,
+          "statuses": {
+            "201": 400
+          }
+        },
+        "LOSS": {
+          "sent": 206,
+          "answered": 206,
+          "unexpected": 0,
+          "p50": 12.677373999998963,
+          "p95": 28.371663999991142,
+          "p99": 60.54693899999984,
+          "statuses": {
+            "201": 206
+          }
+        },
+        "REFUND": {
+          "sent": 77,
+          "answered": 77,
+          "unexpected": 0,
+          "p50": 15.218121999991126,
+          "p95": 32.81026299999212,
+          "p99": 85.16242300000158,
+          "statuses": {
+            "201": 77
+          }
+        },
+        "ROLLBACK": {
+          "sent": 43,
+          "answered": 43,
+          "unexpected": 0,
+          "p50": 14.274343999990379,
+          "p95": 25.568041999998968,
+          "p99": 40.7279469999994,
+          "statuses": {
+            "201": 43
+          }
+        },
+        "READ_WALLET": {
+          "sent": 98,
+          "answered": 98,
+          "unexpected": 0,
+          "p50": 4.131089000002248,
+          "p95": 9.6417849999998,
+          "p99": 27.612433000002056,
+          "statuses": {
+            "200": 98
+          }
+        },
+        "READ_TRANSACTION": {
+          "sent": 181,
+          "answered": 181,
+          "unexpected": 0,
+          "p50": 4.3559929999901215,
+          "p95": 10.972494000001461,
+          "p99": 34.141852000000654,
+          "statuses": {
+            "200": 181
+          }
+        }
+      },
+      "reasons": []
+    },
+    {
+      "rate": 150,
+      "seconds": 20,
+      "elapsedSeconds": 19.99727805899999,
+      "sent": 3000,
+      "answered": 3000,
+      "lost": 0,
+      "serverErrors": 0,
+      "errorRate": 0,
+      "maxInFlight": 25,
+      "p50": 15.752219333327957,
+      "p95": 88.07348566668225,
+      "p99": 156.93256400000246,
+      "max": 302.9131720000005,
+      "distinctP99": 153.75789066667494,
+      "hotP99": 161.01376166667615,
+      "lagP99Ms": 1.3912530000088736,
+      "maxLagMs": 21.218619000006584,
+      "drainSeconds": 0.0007910480000136886,
+      "violations": 0,
+      "duplicates": 0,
+      "eventsCreated": 4479,
+      "lockWaitersMean": 0.1717171717171717,
+      "lockWaitersMax": 3,
+      "idleInTransactionMean": 2.3737373737373737,
+      "idleInTransactionMax": 13,
+      "connectionsMax": 31,
+      "cpuPercent": {
+        "api-1": 29.90406985569038,
+        "api-2": 30.55415833081408,
+        "api-3": 30.15410388458411,
+        "worker-1": 4.600626131644672,
+        "worker-2": 4.950673772095898,
+        "postgres": 53.036,
+        "localstack": 9.126249999999999
+      },
+      "generatorCpuPercent": 5.216955012187144,
+      "peakRssMiB": {
+        "api-1": 148.359375,
+        "api-2": 148.78125,
+        "api-3": 155.375,
+        "worker-1": 94.59765625,
+        "worker-2": 102.4921875
+      },
+      "statusMix": {
+        "200": 597,
+        "201": 2403
+      },
+      "lostReasons": {},
+      "byKind": {
+        "BET": {
+          "sent": 1299,
+          "answered": 1299,
+          "unexpected": 0,
+          "p50": 17.662131666671485,
+          "p95": 92.17920066668012,
+          "p99": 151.47026899999764,
+          "statuses": {
+            "201": 1299
+          }
+        },
+        "REPLAY": {
+          "sent": 135,
+          "answered": 135,
+          "unexpected": 0,
+          "p50": 6.304294000001391,
+          "p95": 52.9814383333287,
+          "p99": 129.6078536666755,
+          "statuses": {
+            "200": 135
+          }
+        },
+        "WIN": {
+          "sent": 630,
+          "answered": 630,
+          "unexpected": 0,
+          "p50": 19.398263333336217,
+          "p95": 100.10784100000456,
+          "p99": 175.38280233333353,
+          "statuses": {
+            "201": 630
+          }
+        },
+        "LOSS": {
+          "sent": 327,
+          "answered": 327,
+          "unexpected": 0,
+          "p50": 17.82228500000201,
+          "p95": 111.19070766666846,
+          "p99": 196.54023700000835,
+          "statuses": {
+            "201": 327
+          }
+        },
+        "REFUND": {
+          "sent": 84,
+          "answered": 84,
+          "unexpected": 0,
+          "p50": 24.659825666676625,
+          "p95": 68.01448700000765,
+          "p99": 128.5019830000092,
+          "statuses": {
+            "201": 84
+          }
+        },
+        "ROLLBACK": {
+          "sent": 63,
+          "answered": 63,
+          "unexpected": 0,
+          "p50": 25.493308333330788,
+          "p95": 95.80569700000342,
+          "p99": 144.77123166667297,
+          "statuses": {
+            "201": 63
+          }
+        },
+        "READ_WALLET": {
+          "sent": 166,
+          "answered": 166,
+          "unexpected": 0,
+          "p50": 5.922030333327712,
+          "p95": 32.980156666671974,
+          "p99": 74.05575700000918,
+          "statuses": {
+            "200": 166
+          }
+        },
+        "READ_TRANSACTION": {
+          "sent": 296,
+          "answered": 296,
+          "unexpected": 0,
+          "p50": 6.523967000000994,
+          "p95": 40.28747900000599,
+          "p99": 88.02793500000553,
+          "statuses": {
+            "200": 296
+          }
+        }
+      },
+      "reasons": []
+    },
+    {
+      "rate": 200,
+      "seconds": 20,
+      "elapsedSeconds": 20.004271859,
+      "sent": 4000,
+      "answered": 4000,
+      "lost": 0,
+      "serverErrors": 0,
+      "errorRate": 0,
+      "maxInFlight": 40,
+      "p50": 26.952836999989813,
+      "p95": 151.38554499999736,
+      "p99": 262.16363999999885,
+      "max": 504.27808099999675,
+      "distinctP99": 247.49713599999086,
+      "hotP99": 337.3146679999918,
+      "lagP99Ms": 1.5260479999997187,
+      "maxLagMs": 9.424599999998463,
+      "drainSeconds": 0.0007909360000048764,
+      "violations": 0,
+      "duplicates": 0,
+      "eventsCreated": 5975,
+      "lockWaitersMean": 0.8469387755102041,
+      "lockWaitersMax": 8,
+      "idleInTransactionMean": 5.081632653061225,
+      "idleInTransactionMax": 16,
+      "connectionsMax": 35,
+      "cpuPercent": {
+        "api-1": 32.29310242098926,
+        "api-2": 30.5934654514635,
+        "api-3": 31.9931664851906,
+        "worker-1": 4.649007004879256,
+        "worker-2": 5.198889553843468,
+        "postgres": 66.85549999999999,
+        "localstack": 10.810500000000001
+      },
+      "generatorCpuPercent": 6.380247224173659,
+      "peakRssMiB": {
+        "api-1": 154.01953125,
+        "api-2": 159.03515625,
+        "api-3": 159.29296875,
+        "worker-1": 105.00390625,
+        "worker-2": 106.26953125
+      },
+      "statusMix": {
+        "200": 820,
+        "201": 3180
+      },
+      "lostReasons": {},
+      "byKind": {
+        "BET": {
+          "sent": 1799,
+          "answered": 1799,
+          "unexpected": 0,
+          "p50": 28.707815999994637,
+          "p95": 152.2746449999977,
+          "p99": 274.88437599998724,
+          "statuses": {
+            "201": 1799
+          }
+        },
+        "REPLAY": {
+          "sent": 189,
+          "answered": 189,
+          "unexpected": 0,
+          "p50": 8.49516799999401,
+          "p95": 47.89569999999367,
+          "p99": 106.04405699999188,
+          "statuses": {
+            "200": 189
+          }
+        },
+        "WIN": {
+          "sent": 794,
+          "answered": 794,
+          "unexpected": 0,
+          "p50": 42.89293599998928,
+          "p95": 192.34107999999833,
+          "p99": 298.2633269999933,
+          "statuses": {
+            "201": 794
+          }
+        },
+        "LOSS": {
+          "sent": 385,
+          "answered": 385,
+          "unexpected": 0,
+          "p50": 32.543247999987216,
+          "p95": 141.56158499998855,
+          "p99": 258.82373799999186,
+          "statuses": {
+            "201": 385
+          }
+        },
+        "REFUND": {
+          "sent": 118,
+          "answered": 118,
+          "unexpected": 0,
+          "p50": 38.65787699999055,
+          "p95": 193.70056099999056,
+          "p99": 239.1068149999919,
+          "statuses": {
+            "201": 118
+          }
+        },
+        "ROLLBACK": {
+          "sent": 84,
+          "answered": 84,
+          "unexpected": 0,
+          "p50": 38.28050899998925,
+          "p95": 198.93357999999716,
+          "p99": 307.072497000001,
+          "statuses": {
+            "201": 84
+          }
+        },
+        "READ_WALLET": {
+          "sent": 225,
+          "answered": 225,
+          "unexpected": 0,
+          "p50": 10.064673000000766,
+          "p95": 53.30805999999575,
+          "p99": 101.00394699999015,
+          "statuses": {
+            "200": 225
+          }
+        },
+        "READ_TRANSACTION": {
+          "sent": 406,
+          "answered": 406,
+          "unexpected": 0,
+          "p50": 8.970013999991352,
+          "p95": 60.88275199999043,
+          "p99": 139.28126299999713,
+          "statuses": {
+            "200": 406
+          }
+        }
+      },
+      "reasons": []
+    }
+  ],
+  "agreedRate": 200,
+  "firstFailingRate": null,
+  "concurrencyConflicts": 0,
+  "totalSent": 10000,
+  "phases": {
+    "auth_ms": {
+      "count": 10553,
+      "meanMs": 3.2527210485170115,
+      "maxMs": 176.6558490000025
+    },
+    "request_validation_ms": {
+      "count": 8918,
+      "meanMs": 0.030577344247496085,
+      "maxMs": 13.654078000006848
+    },
+    "transaction_begin_ms": {
+      "count": 8918,
+      "meanMs": 1.760606133662266,
+      "maxMs": 99.89335700000811
+    },
+    "wallet_lock_wait_ms": {
+      "count": 8429,
+      "meanMs": 4.216356092656262,
+      "maxMs": 265.91505500000494
+    },
+    "settlement_ms": {
+      "count": 8429,
+      "meanMs": 11.866231836516805,
+      "maxMs": 183.40351499999815
+    },
+    "transaction_work_ms": {
+      "count": 8918,
+      "meanMs": 22.672727344808248,
+      "maxMs": 328.217392999999
+    },
+    "transaction_commit_ms": {
+      "count": 8918,
+      "meanMs": 2.6776741342229435,
+      "maxMs": 83.07742699999653
+    },
+    "processing_latency_ms": {
+      "count": 8918,
+      "meanMs": 27.12896648957167,
+      "maxMs": 401.8784270000033
+    },
+    "replay_latency_ms": {
+      "count": 489,
+      "meanMs": 5.550692247443746,
+      "maxMs": 59.45153799999389
+    },
+    "outbox_claim_ms": {
+      "count": 1726,
+      "meanMs": 4.848636673812355,
+      "maxMs": 127.76116199999996
+    },
+    "outbox_publish_ms": {
+      "count": 1332,
+      "meanMs": 12.255558911411352,
+      "maxMs": 93.87660000000324
+    },
+    "outbox_lag_seconds": {
+      "count": 15890,
+      "meanMs": 0.2184920704845807,
+      "maxMs": 0.529
+    }
+  }
+}

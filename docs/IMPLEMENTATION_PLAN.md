@@ -79,3 +79,17 @@ summarises the slices and what each one proved.
 - Authentication is not an IdP integration (ADR 0007): API keys with two roles, a hashed key table, provider scope and a CLI to create and revoke keys.
 - Load test: pinned to 1, 2 and 4 CPUs on one cloud VM. Agreed rates 25, 100 and 200 req/s; first failing 50, 125 and 300. Records in `docs/load/results/`, report in `docs/LOAD_TEST_RESULTS.md`. It is not in `check:all`.
 - Dead-letter replay tooling and a scheduled reconciliation job.
+
+## Finalization review (this branch)
+
+Changes of the review, each with its evidence in the commit message and in `DECISIONS.md` section P:
+
+- Queue and HTTP share one parser for the business fields (`d437452`); a dead-letter copy keeps one copy inside the
+  broker's window (`ebc9589`); a duplicate that waits for the lock records no second inbox row (`a10fd11`).
+- Phase instrumentation of the transaction, the lock and the outbox (`ceb60c7`), and the load harness reads it
+  (`e6b0380`).
+- Outbox batches in due order, which fixed an order defect (`89b7bc1`); fewer round trips on the lock path, with an
+  outcome query that uses the partial indexes (`9e8dabe`).
+- The crash test runs on its own (`f0f1f9b`); test fixtures fail on a missing value (`336110b`).
+- Protected mode, an optional Nginx edge with per-client limits, and its suite (`66c590f`).
+- The pinned load report of this host: 100, 200 and 400 req/s agreed on 1, 2 and 4 CPUs.

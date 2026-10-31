@@ -574,18 +574,11 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
 - **Dead-letter duplicates after the deduplication window.** A crash between a dead-letter send and its
   acknowledgement leaves one copy. A redelivery more than five minutes later adds another. A dead-letter
   consumer must still deduplicate by the message body (`deadLetterDeduplicationId`).
-- **The HTTP changes of this review are not measured.** The headers, the explicit body limit and the
-  correlation check are on the request path. The load report predates them, and it was not regenerated.
-- **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed
-  rates were 25, 100 and 200 requests per second, and the first failing rates 50, 125 and 300
-  (`docs/LOAD_TEST_RESULTS.md`). The predicted ceiling, from the CPU per request, matched on one and two
-  CPUs. On four CPUs the limit was lock contention on the hot wallet, not CPU (`DECISIONS.md`, N-23). The
-  earlier cloud runs are superseded (`docs/LOAD_TEST_HISTORY.md`).
-- **The outbox publisher sends one batch at a time, from one process.** A batch is up to twenty events, sent in
-  requests of ten. Parallel sends were not built: the publisher's drain time is measured after each load step.
-- **Percentiles are not kept per process.** The phase summaries hold the count, the sum and the maximum
-  (section 11). Percentiles come from the load test, which measures each request from its send time.
-- **`FAILED` has no producer** in this build (section 2).
+- **Load was measured on a four-vCPU sandbox VM, with the stack pinned to 1, 2 and 4 CPUs.** The pinned report
+  (`docs/LOAD_TEST_RESULTS.md`) agreed 100, 200 and 400 req/s, and failed at 125 and 300 on 1 and 2 CPUs. On 4 CPUs
+  the top step, 400 req/s, passed. The generator shared those four CPUs with the stack, so the 4-CPU figure is a
+  lower bound. The paired runs before and after each change are in `docs/LOAD_TEST_HISTORY.md`. The cloud-VM
+  runs are superseded and stay in git history.
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is
   a pure function, and it could move to its own file if the class grows.

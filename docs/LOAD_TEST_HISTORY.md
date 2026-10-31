@@ -62,3 +62,36 @@ a second one.
 Run `bun run test:load` on that machine, and keep its `LOAD_TEST_RESULTS.md` with its environment
 table. The same ramp, the same constraints and the same method then give a number that is comparable
 with this one. The numbers from this cloud machine must not be quoted for another machine.
+
+## Runs of the finalization review, on the sandbox host
+
+These runs are on a different host from the cloud VM above: a four-vCPU Firecracker VM with 16 GiB of memory,
+Docker, PostgreSQL 17, LocalStack 4.14, and Bun 1.4.4, with the same harness. The figures are not comparable with
+the cloud runs. They are comparable with each other.
+
+**Before and after, on the same host, two CPUs, the same rates (50, 100, 150, 200 req/s).** Each label is a
+record in `docs/load/paired/<label>/cpus-2.json`.
+
+| Label  | Commit it measured                                  |   Agreed | p99 at 100 req/s | p99 at 150 req/s | CPU per request at 100 req/s |
+| ------ | --------------------------------------------------- | -------: | ---------------: | ---------------: | ---------------------------: |
+| A1, A2 | `a10fd11`, before this review's performance work    | 100, 100 |      120, 134 ms |       2.5, 2.6 s |                16.1, 15.8 ms |
+| B1, B2 | `e6b0380`, with the phase instrumentation           | 100, 100 |      463, 189 ms |       2.0, 2.6 s |                17.0, 15.7 ms |
+| C1, C2 | `89b7bc1`, outbox batches in due order              | 150, 200 |        70, 60 ms |      233, 157 ms |                12.9, 11.8 ms |
+| E1, E2 | `9e8dabe`, lock path with the indexed outcome query | 200, 200 |        31, 32 ms |       75, 116 ms |                 9.7, 10.0 ms |
+
+The instrumentation (B) costs nothing measurable: its CPU per request is within the spread of the baseline. The
+batching (C) and the lock path (E) each reproduced in both runs. A third configuration, the lock path with the
+single `kind IN (...)` outcome query, was run twice and then discarded. `EXPLAIN` on 20,000 rows had shown that
+query scanning the table, and its runs had worse tails at 150 req/s (`DECISIONS.md`, P-07).
+
+**Full ramp, the baseline, `a10fd11`** (`docs/load/paired/baseline-a10fd11/`): 1 CPU agreed 25 req/s and failed at
+50; 2 CPUs agreed 150 and failed at 200; 4 CPUs was invalid, because the generator shared all four CPUs with the
+stack and failed the generator-lag constraint at 50 req/s.
+
+**The pinned report, `HEAD` of this review** (`docs/LOAD_TEST_RESULTS.md`, `docs/load/results/`): 1 CPU agreed 100
+and failed at 125; 2 CPUs agreed 200 and failed at 300; 4 CPUs passed every step up to 400, the top of the
+configured ramp. The 4-CPU ceiling is above 400 in this measurement, and it was not found. The generator shared
+the four CPUs with the stack in that run, so the figure is a lower bound for the stack alone.
+
+The cloud-VM records were the pinned report before this review. They are in git history, in `docs/load/results/`
+at commit `596e9fc`.

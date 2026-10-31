@@ -187,20 +187,19 @@ the first failing step. The method is in `DECISIONS.md`, group N.
 The planner and the parsers are unit tested in `test/unit/load/`, so the mix and the arithmetic are
 checked without a server. The driver is checked by its runs.
 
-**Results.** The committed results are in `docs/load/results/cpus-<N>.json`, one per CPU count, and the
-report that reads them is `docs/LOAD_TEST_RESULTS.md`. On the cloud machine used for this work (four
-vCPUs), the agreed rates were:
+**Results.** The pinned results are in `docs/load/results/cpus-<N>.json`, one per CPU count, and the report that
+reads them is `docs/LOAD_TEST_RESULTS.md`. On the sandbox host used for this review (four vCPUs), the agreed rates
+were:
 
-| Stack CPUs | Agreed rate | First failing rate | What failed at the first failing rate                      |
-| ---------: | ----------: | -----------------: | ---------------------------------------------------------- |
-|          1 |    25 req/s |           50 req/s | latency, at 87% of the CPU                                 |
-|          2 |   100 req/s |          125 req/s | one lost request, at 90% of the CPU                        |
-|          4 |   200 req/s |          300 req/s | latency, at 70% of the CPU, with sessions waiting on locks |
+| Stack CPUs | Agreed rate | First failing rate | What failed at the first failing rate         |
+| ---------: | ----------: | -----------------: | --------------------------------------------- |
+|          1 |   100 req/s |          125 req/s | p95 4176 ms, at 83% of the CPU                |
+|          2 |   200 req/s |          300 req/s | p95 3408 ms, at 72% of the CPU                |
+|          4 |   400 req/s |               none | 400 is the top configured step, and it passed |
 
-The predicted ceiling (the CPUs divided by the CPU per request) matched the first failing rate on one and
-two CPUs. On four CPUs it did not, because the limit there is lock contention on the hot wallet, not CPU.
-The superseded cloud runs are in [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md); they were pessimistic
-because of the driver's own process starts (N-16).
+The predicted ceiling (the CPUs divided by the CPU per request) was 120 req/s on one CPU and 276 on two, against
+first failing rates of 125 and 300. The 4-CPU ceiling is above 400 in this measurement. The paired before-and-after
+runs, and the baseline they compare with, are in [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md).
 
 **What these runs prove, and what they do not:**
 

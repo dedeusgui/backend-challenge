@@ -421,9 +421,11 @@ IN (...)` over all four kinds was tried first and rejected: `EXPLAIN (ANALYZE, B
 - **P-10 Authentication stays one lookup per request, and its result is not cached.** On an idle system the
   lookup takes 0.8 ms (mean, 3000 calls). The 7 ms seen under load is contention for the two saturated CPUs. A
   cache would keep a revoked key valid for as long as it lived. Cost: one database round trip per request.
-- **P-11 The 4-CPU load figure is not a capacity figure on this host.** With the stack given all four CPUs, the
-  generator shares them, and the generator-lag constraint fails at 50 req/s. The 1- and 2-CPU figures are the
-  valid ones here. The published cloud-VM report keeps its own numbers.
+- **P-11 The 4-CPU load figure is measured with the generator on the same CPUs.** Before this review's
+  changes, the 4-CPU run failed the generator-lag constraint at 50 req/s, because the stack had every CPU and the
+  generator shared them. After the batching and the lock-path changes, the same run passed every step up to 400
+  req/s, with the lag inside its limit. The figure is therefore reported, with that caveat: it is a lower bound for
+  the stack alone, and the ceiling above 400 was not searched. The 1- and 2-CPU figures leave CPUs to the generator.
 
 ## Q. The protected mode
 

@@ -58,6 +58,7 @@ import {
   type StepRecord,
 } from './records';
 import { readRuns, renderReport, writeRun } from './report';
+import { duplicateAuditSql, PRODUCTION_TABLES } from './audit';
 import {
   acceptableAnswers,
   appliedBy,
@@ -766,12 +767,7 @@ async function runStep(input: StepInput): Promise<StepRecord> {
            OR w.balance < 0`,
     ),
   );
-  const duplicates = Number(
-    await input.scalar(
-      `SELECT count(*)::text FROM (SELECT external_transaction_id FROM wager_transactions
-         GROUP BY external_transaction_id HAVING count(*) > 1) d`,
-    ),
-  );
+  const duplicates = Number(await input.scalar(duplicateAuditSql(PRODUCTION_TABLES)));
 
   const answered = samples.filter((sample) => sample.outcome !== 'LOST');
   const latencies = sortedLatencies(answered);

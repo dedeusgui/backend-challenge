@@ -9,6 +9,10 @@
 > pinned runs in `LOAD_TEST_RESULTS.md` replace them. The runs stay here as the record of what was
 > measured, and of why the driver changed.
 
+The pinned runs that replace these are in `docs/LOAD_TEST_RESULTS.md`, with one record per CPU count in
+`docs/load/results/`. The first 4-CPU record was replaced by its rerun, because the first driver did not
+raise the generator's in-flight limit when the generator had no CPUs of its own.
+
 `docs/LOAD_TEST_RESULTS.md` is written again by every run, so it holds only the last one. This
 file keeps the others. The numbers were copied from the run logs. Every run is on the same machine,
 a 4-vCPU cloud VM with 15.7 GiB of memory, with all components on it: three API processes, two

@@ -415,11 +415,13 @@ config` validates the file. No test starts a container and kills it.
   `walletVersion`.
 - **Reconciliation runs on demand.** There is no scheduled job.
 - **No dead-letter replay tooling.**
-- **Load was measured on one cloud machine, six runs, with every component on it.** The agreed figure is
-  150 requests per second sustained, with 200 as the observed ceiling (`docs/LOAD_TEST_HISTORY.md`).
-  At 300 requests per second the latency rises for every wallet, and PostgreSQL reaches one full core.
-  The outbox publisher sends one event at a time, so its drain takes 10 s at 200 requests per second and
-  21 s at 300. Parallel or batched sends were not built.
+- **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed
+  rates were 25, 100 and 200 requests per second, and the first failing rates 50, 125 and 300
+  (`docs/LOAD_TEST_RESULTS.md`). The predicted ceiling, from the CPU per request, matched on one and two
+  CPUs. On four CPUs the limit was lock contention on the hot wallet, not CPU (`DECISIONS.md`, N-23). The
+  earlier cloud runs are superseded (`docs/LOAD_TEST_HISTORY.md`).
+- **The outbox publisher sends one event at a time.** Its drain time is measured after each step of the
+  load test, and the report shows it. Parallel or batched sends were not built.
 - **Lock waits are not measured.** `concurrency_conflicts_total` counts lost races, and nothing
   counts the time a request waits for the wallet lock.
 - **`FAILED` has no producer** in this build (section 2).

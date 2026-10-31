@@ -74,5 +74,5 @@ summarises the slices and what each one proved.
 ## Not in this build
 
 - Authentication is not an IdP integration (ADR 0007): API keys with two roles, a hashed key table, provider scope and a CLI to create and revoke keys.
-- Load test: six runs on one cloud machine, with constraints and a history. The agreed figure is 150 requests per second, and 200 is the ceiling. See `docs/LOAD_TEST_HISTORY.md`. It is not in `check:all`.
+- Load test: pinned to 1, 2 and 4 CPUs on one cloud VM. Agreed rates 25, 100 and 200 req/s; first failing 50, 125 and 300. Records in `docs/load/results/`, report in `docs/LOAD_TEST_RESULTS.md`. It is not in `check:all`.
 - Dead-letter replay tooling and a scheduled reconciliation job.

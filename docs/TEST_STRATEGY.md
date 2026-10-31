@@ -7,18 +7,18 @@ what mutation evidence says about whether they can fail.
 
 ## Suites and commands
 
-| Command                    | What it runs                                                                                         | Real infrastructure       |
-| -------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------- |
-| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                 | none                      |
-| `bun run lint`             | oxlint on `src` and `test`                                                                           | none                      |
-| `bun run format:check`     | Prettier                                                                                             | none                      |
-| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops       | none                      |
-| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table | PostgreSQL and LocalStack |
-| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown     | PostgreSQL and LocalStack |
-| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys                                            | PostgreSQL and LocalStack |
-| `bun run test:load`        | `test/load/load-test.ts`: optional load run; writes `docs/LOAD_TEST_RESULTS.md`                      | PostgreSQL and LocalStack |
-| `bun run check:fast`       | typecheck, lint, format, unit                                                                        | none                      |
-| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                | all of the above          |
+| Command                    | What it runs                                                                                             | Real infrastructure       |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                     | none                      |
+| `bun run lint`             | oxlint on `src` and `test`                                                                               | none                      |
+| `bun run format:check`     | Prettier                                                                                                 | none                      |
+| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops           | none                      |
+| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table     | PostgreSQL and LocalStack |
+| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown         | PostgreSQL and LocalStack |
+| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys                                                | PostgreSQL and LocalStack |
+| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md` | PostgreSQL and LocalStack |
+| `bun run check:fast`       | typecheck, lint, format, unit                                                                            | none                      |
+| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                    | all of the above          |
 
 `test:load` is not part of `check:all`. It takes minutes, and its numbers describe the machine
 it runs on.
@@ -139,33 +139,49 @@ survived.
 
 ## Load
 
-`bun run test:load` runs the stack as processes (three API, two workers, PostgreSQL, LocalStack) and
-sends requests on a fixed schedule, in steps of increasing rate. Each step is checked against the
-constraints in `test/load/thresholds.ts`: error rate, lost requests, p95 and p99 latency, generator
+`bun run test:load` measures the stack under a product mix, pinned to a number of CPUs. The stack
+(three API processes, two workers, PostgreSQL, LocalStack) gets `LOAD_CPUS` CPUs, and the generator
+gets the others. Each step sends requests on a fixed schedule at a fixed rate, and is checked against
+the constraints in `test/load/thresholds.ts`: error rate, lost requests, p95 and p99 latency, generator
 lag at p99, outbox drain, memory per process, and the invariant `balance == ledger`. The ramp stops at
-the first step that fails. The method and its reasons are in `DECISIONS.md`, group N.
+the first failing step. The method is in `DECISIONS.md`, group N.
 
-The agreed figure on the cloud machine used for this work is **150 requests per second sustained**,
-with **200 requests per second** as the observed ceiling. Six runs are in
-[LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md). The latest report, with its CPU per component and its
-lost requests, is in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
+| Where                    | What it is                                                                  |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `test/load/workload.ts`  | the product mix and each operation's request, as pure functions             |
+| `test/load/metrics.ts`   | percentiles, CPU lists, `/proc` and `docker stats` parsers, CPU per request |
+| `test/load/records.ts`   | the record of a run, one JSON file per CPU count                            |
+| `test/load/report.ts`    | the report, rendered from the records                                       |
+| `test/load/host.ts`      | pinning: which CPUs each part gets, and the containers' cpusets             |
+| `test/load/load-test.ts` | the driver, which runs the stack and writes the record                      |
+
+The planner and the parsers are unit tested in `test/unit/load/`, so the mix and the arithmetic are
+checked without a server. The driver is checked by its runs.
+
+**Results.** The committed results are in `docs/load/results/cpus-<N>.json`, one per CPU count, and the
+report that reads them is `docs/LOAD_TEST_RESULTS.md`. On the cloud machine used for this work (four
+vCPUs), the agreed rates were:
+
+| Stack CPUs | Agreed rate | First failing rate | What failed at the first failing rate                      |
+| ---------: | ----------: | -----------------: | ---------------------------------------------------------- |
+|          1 |    25 req/s |           50 req/s | latency, at 87% of the CPU                                 |
+|          2 |   100 req/s |          125 req/s | one lost request, at 90% of the CPU                        |
+|          4 |   200 req/s |          300 req/s | latency, at 70% of the CPU, with sessions waiting on locks |
+
+The predicted ceiling (the CPUs divided by the CPU per request) matched the first failing rate on one and
+two CPUs. On four CPUs it did not, because the limit there is lock contention on the hot wallet, not CPU.
+The superseded cloud runs are in [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md); they were pessimistic
+because of the driver's own process starts (N-16).
 
 **What these runs prove, and what they do not:**
 
-- They prove the constraints held for the length of one step, at one rate, on this machine.
+- They prove the constraints held for the length of one step, at one rate, with the stack on that many CPUs.
 - They do not prove a longer run. There is no soak test.
-- The load generator runs on the same CPUs as the system. A dedicated machine would move the knee.
+- The generator runs on the CPUs the stack does not use. On the four-CPU host the stack has every CPU, and
+  the generator shares them, which the report states.
 - The queue is LocalStack, and PostgreSQL has its default configuration, with no replica.
-- The mix is ours: BETs over 50 wallets, about 5% on one hot wallet, about 5% replays. Real traffic
-  has WIN, LOSS, REFUND and ROLLBACK too.
-- Latency is the client view. The percentiles come from our own sample, not from a histogram.
-- Each step ran once in each run, with no confidence interval. Six runs are the basis of the figure.
-- Memory and CPU need Linux or macOS. On Windows, run it inside WSL.
-
-**What the knee suggests.** At 300 requests per second the latency rises for every wallet, and no run
-lost a request at that rate. PostgreSQL reached one full core, and the API processes were at about 43%
-each. The likely limit is PostgreSQL under the hot-row lock, with its default pool of 10 connections per
-process. This is an inference, because lock and pool waits were not measured.
+- The mix is ours, and it goes through HTTP only. The command queue is covered by the concurrency suites.
+- The machine is one cloud VM. Its numbers are not a capacity claim for another machine.
 
 ## Environment notes
 

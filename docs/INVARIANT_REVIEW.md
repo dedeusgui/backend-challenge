@@ -218,7 +218,7 @@ Not enforced by the database, and why:
 
 - Every file path cited in `docs/` and `ARCHITECTURE.md` was checked for existence: 0 missing.
 - The named tests in sections 3 and 4 were checked against the test files.
-- `bun run check:all` passed on the final code before the push: 178 unit, 111 integration, 13
+- `bun run check:all` passed on the final code before the push: 178 unit, 111 integration, 21
   concurrency and 32 e2e tests.
 - Each database rule was checked with a probe that fails before its migration exists and passes
   after it (`schema-constraints.test.ts`).

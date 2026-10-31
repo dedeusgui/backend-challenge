@@ -400,7 +400,7 @@ What is not claimed, and why:
   Dockerfile image build could not run in the authoring sandbox, because its TLS proxy
   blocks package downloads. The stack was verified from clean volumes with an image built
   from the same source and the sandbox CA, outside the repository.
-- **Broker redrive is configured but not exercised** (section 7).
+- **Broker redrive is checked on the provisioned queue** (section 7), not on a queue the test creates.
 - **Metrics are per process.** No aggregation or dashboard.
 - **Fault injection is partial.** Crash after commit and before acknowledgement, and crash
   before commit, are real process crashes of a worker (exit 137, `test/concurrency`). A
@@ -415,7 +415,12 @@ config` validates the file. No test starts a container and kills it.
   `walletVersion`.
 - **Reconciliation runs on demand.** There is no scheduled job.
 - **No dead-letter replay tooling.**
-- **No load test.** The concurrency suites prove correctness under concurrency, not throughput.
+- **Load was measured once, on one machine** (`bun run test:load`, `docs/LOAD_TEST_RESULTS.md`). At
+  about 200 requests per second with 64 lanes, the outbox publisher lagged the writes: the average
+  lag was several seconds, and the maximum was over ten. The publisher sends events one at a time,
+  so it is the bottleneck. Sending in parallel or in batches is the next step, and it was not done.
+- **Lock waits are not measured.** `concurrency_conflicts_total` counts lost races, and nothing
+  counts the time a request waits for the wallet lock.
 - **`FAILED` has no producer** in this build (section 2).
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is

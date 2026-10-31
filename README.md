@@ -11,6 +11,10 @@ against its ledger.
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): suites, isolation, fault injection.
 - [docs/adr](docs/adr): the decisions and their trade-offs.
 - [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md): the three public reference implementations.
+- [DECISIONS.md](DECISIONS.md): every technical decision, with its reason, trade-off, evidence and status.
+- [docs/ENTITY_MAP.md](docs/ENTITY_MAP.md): every entity, its table, its classes and methods, and the flows.
+- [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md): the review of every invariant and constraint, and the decisions the owner must confirm.
+- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md): the optional load test, with its environment.
 
 ## Stack
 
@@ -62,6 +66,7 @@ bun run src/worker.ts         # worker, in another terminal
 | `bun run test:integration` | PostgreSQL and LocalStack integration tests             |
 | `bun run test:concurrency` | real concurrency, and three API processes plus a worker |
 | `bun run test:e2e`         | HTTP end-to-end tests                                   |
+| `bun run test:load`        | optional load run, writes `docs/LOAD_TEST_RESULTS.md`   |
 | `bun run check:fast`       | typecheck, lint, format and unit tests                  |
 | `bun run check:all`        | everything above, which is the final gate               |
 
@@ -122,18 +127,31 @@ worker publishes `WagerTransactionProcessed`, `WagerTransactionRejected`,
 
 ## Simulating concurrency
 
-The distributed proof starts three API processes and one worker, all against the same
-PostgreSQL and LocalStack, and drives them concurrently:
+The distributed proof starts independent processes, all against the same PostgreSQL and LocalStack:
 
 ```bash
 bun run infra:up
 bun run test:concurrency
 ```
 
-Look at `test/concurrency/three-processes.test.ts` for the scenarios: two bets of 80.00
-on 100.00 from two processes at once, fifty identical requests spread over three processes,
-twelve wallets in parallel, a worker killed between commit and acknowledgement, and a
-graceful SIGTERM.
+- `test/concurrency/three-processes.test.ts`: three API processes and a worker. Two bets of 80.00 on
+  100.00 from two processes at once, fifty identical requests over three processes, twelve wallets in
+  parallel, a worker killed between commit and acknowledgement, and a graceful SIGTERM.
+- `test/concurrency/distributed-contention.test.ts`: three API processes and two workers on the same
+  operations. The same request from three processes, one idempotency key with three payloads, a
+  refund and two rollbacks of one BET, a win, a loss and a second win on one BET, forty operations
+  taken by two workers, two publishers over one outbox, and one of two workers killed mid-contention.
+- `test/concurrency/process-crash-and-shutdown.test.ts`: a worker killed inside a transaction before
+  commit, and a worker stopped with SIGTERM during a batch.
+
+Each test asserts that exactly one operation has the effect, and that the rest are replays,
+conflicts or rejections. `docs/TEST_STRATEGY.md` says which spec requirement each test proves.
+
+To run the optional load test against the same kind of stack:
+
+```bash
+bun run test:load   # writes docs/LOAD_TEST_RESULTS.md
+```
 
 ## Tests
 
@@ -152,7 +170,8 @@ These are listed in full in `ARCHITECTURE.md` section 14. The most important:
 - **Broker-side dead-lettering** (after ten deliveries) is configured in Compose and checked on the
   provisioned queue by `test/integration/messaging/broker-redrive.test.ts`.
 - **Metrics are per process**, with no aggregation or dashboard.
-- **No load test.** The suites prove correctness under concurrency, not throughput.
+- **Load is measured once, on one machine.** `docs/LOAD_TEST_RESULTS.md` has the numbers. They are
+  not a capacity claim, and the outbox publisher lags behind the write rate under that load.
 - The repository's Dockerfile image build could not run in the authoring sandbox, whose TLS
   proxy blocks package downloads. The stack was verified from clean volumes with an image
   built from the same source and the sandbox CA.

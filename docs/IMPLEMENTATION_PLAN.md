@@ -7,7 +7,7 @@ summarises the slices and what each one proved.
 ## Foundation and tooling
 
 - [x] Bun 1.4.4 pinned locally, in CI and in the Dockerfile. `bun.lock` committed.
-- [x] `check:fast` and `check:all` run what they announce. CI runs `check:fast`.
+- [x] `check:fast` and `check:all` run what they announce. CI runs `check:all`.
 - [x] Compose starts PostgreSQL 17 and LocalStack 4.14, provisions the FIFO queues and the
       redrive policy, runs the migration once, then starts the API and the worker.
 - [x] Audit findings fixed: the Dockerfile installed without a lockfile, CI used a floating
@@ -67,12 +67,12 @@ summarises the slices and what each one proved.
 ## Documentation and decisions
 
 - [x] `README.md`, `ARCHITECTURE.md` with five Mermaid diagrams, `docs/TEST_STRATEGY.md`.
-- [x] Six ADRs in `docs/adr/`, each with the evidence that supports it.
+- [x] Seven ADRs in `docs/adr/`, each with the evidence that supports it. ADR 0006 is superseded by 0007.
 - [x] `docs/REFERENCE_REVIEW.md` rewritten from the three public repositories, with file citations.
 - [x] `CLAUDE.md` for agents.
 
 ## Not in this build
 
 - Authentication is not an IdP integration (ADR 0007): API keys with two roles, a hashed key table, provider scope and a CLI to create and revoke keys.
-- Load test. Not run. The concurrency suites prove correctness, not throughput.
+- Load test: run once on one machine (`bun run test:load`). See `docs/LOAD_TEST_RESULTS.md`. It is not in `check:all`.
 - Dead-letter replay tooling and a scheduled reconciliation job.

@@ -496,3 +496,54 @@ describe('inbox and outbox constraints', () => {
     expect(await sqlStateOf(insertOutbox)).toBe('23505');
   });
 });
+
+describe('wager_transactions: reference shape and one reversal per reference', () => {
+  test('allows a WIN to carry the reference of the BET it settles', async () => {
+    const walletId = await insertWallet();
+    const bet = await insertWager({
+      walletId,
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'WIN',
+          amount: '40.00',
+          referenceExternalTransactionId: 'bet-of-win',
+          referenceTransactionId: bet,
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          resultingBalance: '115.00',
+        }),
+      ),
+    ).toBe('NO_ERROR');
+  });
+
+  test('allows only one PROCESSED reversal per reference, whatever its kind', async () => {
+    const walletId = await insertWallet();
+    const bet = await insertWager({
+      walletId,
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+    const reversal = (kind: string) =>
+      insertWager({
+        walletId,
+        kind,
+        amount: '25.00',
+        referenceExternalTransactionId: 'bet-once',
+        referenceTransactionId: bet,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        resultingBalance: '100.00',
+      });
+
+    await reversal('REFUND');
+    expect(await sqlStateOf(() => reversal('ROLLBACK'))).toBe('23505');
+  });
+});

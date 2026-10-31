@@ -26,6 +26,8 @@ summarises the slices and what each one proved.
 
 - [x] Migration 1: tables, constraints, partial indexes, append-only trigger.
 - [x] Migration 2: reference schedule, reversible.
+- [x] Migration 3: a referenced transaction is reversed once, whatever the kind of reversal, and a
+      WIN may carry the reference of its BET. Reversible.
 - [x] Repositories with explicit mapping and checked parsing of stored enums.
 - [x] Migrations applied from empty, rolled back to zero, and re-applied.
 

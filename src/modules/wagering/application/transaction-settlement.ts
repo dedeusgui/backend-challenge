@@ -65,11 +65,9 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, evaluation.code, options);
     }
 
-    if (
-      reference !== undefined &&
-      transaction.isReversal() &&
-      (await repositories.wagers.hasProcessedReversal(reference.id, transaction.kind))
-    ) {
+    // A referenced transaction is reversed at most once, whatever the kind of reversal. A
+    // WIN on a BET that was already refunded or rolled back is refused for the same reason.
+    if (reference !== undefined && (await repositories.wagers.hasProcessedReversal(reference.id))) {
       return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
     }
 

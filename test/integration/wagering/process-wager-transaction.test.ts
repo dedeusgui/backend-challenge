@@ -415,3 +415,77 @@ describe('ProcessWagerTransaction: validation and wallet checks', () => {
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
   });
 });
+
+describe('ProcessWagerTransaction: one reversal per bet, and no settlement after one', () => {
+  test('a BET refunded and then rolled back is credited once: the second reversal is rejected', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = `bet-${randomUUID()}`;
+    await processWager.execute(
+      command(wallet, { kind: 'BET', money: brl('25.00'), externalTransactionId: bet }),
+    );
+    await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const rollback = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('25.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+
+    expect(rollback.transaction.status).toBe('REJECTED');
+    expect(rollback.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a BET rolled back once cannot be rolled back again, nor refunded afterwards', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = `bet-${randomUUID()}`;
+    await processWager.execute(
+      command(wallet, { kind: 'BET', money: brl('25.00'), externalTransactionId: bet }),
+    );
+    const first = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('25.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+    const second = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('25.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+    const refund = await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(first.transaction.status).toBe('PROCESSED');
+    expect(second.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(refund.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a WIN cannot settle a BET that was already refunded', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = `bet-${randomUUID()}`;
+    await processWager.execute(
+      command(wallet, { kind: 'BET', money: brl('50.00'), externalTransactionId: bet }),
+    );
+    await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('50.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const win = await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('75.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(win.transaction.status).toBe('REJECTED');
+    expect(win.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+});

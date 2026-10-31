@@ -138,8 +138,9 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   shape: PROCESSED needs `processed_at` and a resulting balance; REJECTED and FAILED
   need a failure code; a held row needs its next lookup time. Composite foreign key
   `(reference_transaction_id, provider_id, wallet_id)`, so a reference must share the
-  provider and the wallet. Partial unique index on `(reference_transaction_id, kind)`
-  where PROCESSED, so each reference is reversed once per kind.
+  provider and the wallet. Partial unique index on `(reference_transaction_id)` where
+  PROCESSED and the kind is REFUND or ROLLBACK, so each reference is reversed once, whatever
+  the kind of reversal. A WIN may carry the reference of the BET it settles.
 - `inbox_messages`: primary key `(consumer_name, message_id)`.
 - `outbox_messages`: primary key is the stable event id.
 
@@ -148,7 +149,7 @@ Indexes exist for a named query each:
 | Index                                                                                      | Query it serves                                |
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
 | `ledger_wallet_seq_idx (wallet_id, seq)`                                                   | ledger pages for one wallet, in sequence order |
-| `wager_one_processed_reversal_per_kind` (partial)                                          | the "reversed once per kind" rule              |
+| `wager_one_processed_reversal_per_reference` (partial)                                     | the "reversed once" rule, whatever the kind    |
 | `wager_pending_reference_due_idx (reference_next_attempt_at)` (partial, PENDING_REFERENCE) | the reference worker's due scan                |
 | `outbox_due_unpublished_idx (next_attempt_at)` (partial, unpublished)                      | the publisher's claim                          |
 
@@ -336,6 +337,15 @@ These are choices the specification leaves open. Each one is tested.
   outcome is replayable and auditable.
 - `OPENING` is written under the internal provider id `system`.
 - A replay of a still-pending transaction returns its current state.
+- **A referenced transaction is reversed at most once, whatever the kind of reversal.** Rule 4
+  of the specification says "pelo mesmo tipo de operação", which would allow a REFUND and then a
+  ROLLBACK of the same BET, and that credits the stake twice. This breaks the global rule that
+  credits are never duplicated, so the stricter reading is adopted. Enforced in code and by the
+  partial unique index `wager_one_processed_reversal_per_reference`. The specification owner
+  should confirm this reading.
+- A WIN on a BET that was already refunded or rolled back is rejected with
+  `REFERENCE_ALREADY_REVERSED`. A WIN may carry its BET's reference (optional, not amount-bound).
+  The reference-shape CHECK allows it.
 
 ## 14. Limitations
 
@@ -359,6 +369,9 @@ What is not claimed, and why:
 - **No dead-letter replay tooling.**
 - **No load test.** The concurrency suites prove correctness under concurrency, not throughput.
 - **`FAILED` has no producer** in this build (section 2).
+- **Open interpretation: a REFUND or ROLLBACK of a BET after a WIN on that BET is accepted.**
+  The specification is silent. Accepting it lets a round pay its win and return its stake. It
+  is recorded here so that the owner of the specification can decide.
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is
   a pure function, and it could move to its own file if the class grows.

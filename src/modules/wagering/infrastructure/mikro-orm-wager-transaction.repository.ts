@@ -10,10 +10,7 @@ import {
   WagerTransaction,
   type WagerTransactionState,
 } from '../domain/wager-transaction';
-import {
-  WAGER_TRANSACTION_KINDS,
-  type WagerTransactionKind,
-} from '../domain/wager-transaction-kind';
+import { WAGER_TRANSACTION_KINDS } from '../domain/wager-transaction-kind';
 import { WagerTransactionRecord } from './wager-transaction.record';
 
 type WagerLookup = Partial<
@@ -69,13 +66,10 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     return this.findOneBy({ providerId, externalTransactionId });
   }
 
-  async hasProcessedReversal(
-    referenceTransactionId: string,
-    kind: WagerTransactionKind,
-  ): Promise<boolean> {
+  async hasProcessedReversal(referenceTransactionId: string): Promise<boolean> {
     const count = await this.em.count(WagerTransactionRecord, {
       referenceTransactionId,
-      kind,
+      kind: { $in: ['REFUND', 'ROLLBACK'] },
       status: 'PROCESSED',
     });
     return count > 0;

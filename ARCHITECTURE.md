@@ -166,10 +166,16 @@ Reference lookup by `(provider_id, external_transaction_id)` uses the unique con
 
 ## 5. Concurrency
 
-The unit of concurrency is the wallet. Every financial operation takes the wallet's
-row lock first (`SELECT ... FOR UPDATE`), then decides idempotency and balance under
-it, then writes everything in one transaction. Operations on one wallet are serialized.
-Operations on different wallets never wait for each other.
+The unit of concurrency is the wallet. A new financial operation takes the wallet's row
+lock first (`SELECT ... FOR UPDATE`), looks again for the same identity under that lock,
+then decides the balance, then writes everything in one transaction. Operations on one
+wallet are serialized. Operations on different wallets never wait for each other.
+
+A replay takes no lock. A stored transaction's payload never changes, and the replay writes
+nothing, so it is answered from the stored row before the wallet is locked. The lookup
+order is: inbox check, idempotency lookup, then, only for a new identity, the lock and a
+second lookup. The second lookup stops an identical request that waited for the lock from
+inserting, colliding on the unique key and retrying, which under load could end in a 503.
 
 ```mermaid
 sequenceDiagram
@@ -179,11 +185,14 @@ sequenceDiagram
   participant DB as PostgreSQL
   Client->>API: POST /wagering/transactions + Idempotency-Key
   API->>UC: execute(command)
-  UC->>DB: BEGIN, SELECT wallet FOR UPDATE
-  UC->>DB: find by key, then by external id
-  alt same key or id, same payload
-    UC-->>API: replay, no writes
+  UC->>DB: BEGIN, find by key, then by external id (no lock)
+  alt stored, same payload
+    UC-->>API: replay, no writes, no lock
+  else stored, other payload
+    UC-->>API: 409 IDEMPOTENCY_CONFLICT
   else new
+    UC->>DB: SELECT wallet FOR UPDATE
+    UC->>DB: find by key, then by external id again
     UC->>DB: INSERT wager, UPDATE wallet WHERE version = n, INSERT ledger, INSERT outbox
     UC->>DB: COMMIT
     UC-->>API: outcome
@@ -209,8 +218,10 @@ The `Idempotency-Key` is required. Identity is per provider. A request is a repl
 the business payload hash matches a stored transaction found by key, or by external id.
 The hash is SHA-256 over canonical JSON of the business fields, with keys sorted, and it
 excludes transport metadata. A replay returns the original result, including the balance
-observed at that time (`resultingBalance`), even if the wallet has changed since. A
-different payload is `IDEMPOTENCY_CONFLICT`. Decision: [ADR 0003](docs/adr/0003-idempotency-scope-and-payload-hash.md).
+observed at that time (`resultingBalance`), even if the wallet has changed since. A held
+transaction replays the balance it was held with (migration 7). A different payload is
+`IDEMPOTENCY_CONFLICT`, also when the new request names a wallet that does not exist, since
+the key was already used. The conflict is checked before the wallet. Decision: [ADR 0003](docs/adr/0003-idempotency-scope-and-payload-hash.md).
 
 ## 7. Queue ingress, inbox and dead letters
 

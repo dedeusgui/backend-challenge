@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { SQL } from 'bun';
 import {
+  ConcurrencyConflictError,
   IdempotencyConflictError,
   WalletNotFoundError,
 } from '../../../src/shared/application/application-errors';
@@ -8,6 +10,7 @@ import { DomainError } from '../../../src/shared/domain/domain-error';
 import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
+import { InboxMessage } from '../../../src/modules/messaging/domain/inbox-message';
 import {
   ProcessWagerTransaction,
   type ProcessWagerCommand,
@@ -241,6 +244,86 @@ describe('ProcessWagerTransaction: idempotency', () => {
     });
 
     await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+});
+
+/** A one-shot signal: `open` releases everyone waiting on `wait`. */
+function gate(): { open: () => void; wait: Promise<void> } {
+  let open: () => void = () => undefined;
+  const wait = new Promise<void>((resolve) => {
+    open = () => resolve();
+  });
+  return { open: () => open(), wait };
+}
+
+/**
+ * Holds the row lock of a wallet from another database connection, as a concurrent operation on
+ * that wallet would. The returned function releases it and waits for the transaction to end.
+ */
+async function holdWalletLock(walletId: string): Promise<() => Promise<void>> {
+  const sql = new SQL(database.url);
+  const locked = gate();
+  const released = gate();
+  const holder = sql
+    .begin(async (tx) => {
+      await tx`SELECT id FROM wallets WHERE id = ${walletId} FOR UPDATE`;
+      locked.open();
+      await released.wait;
+    })
+    .finally(() => sql.close());
+  await locked.wait;
+  return async () => {
+    released.open();
+    await holder;
+  };
+}
+
+const TIMED_OUT = Symbol('timed out');
+
+describe('ProcessWagerTransaction: early replay, and the lookup order', () => {
+  test('a replay is answered without waiting for the wallet lock', async () => {
+    const wallet = await fundedWallet('100.00');
+    const original = command(wallet, { kind: 'BET', money: brl('25.00') });
+    await processWager.execute(original);
+
+    const release = await holdWalletLock(wallet.walletId);
+    try {
+      const replay = await Promise.race([
+        processWager.execute(original),
+        new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), 2_000)),
+      ]);
+
+      expect(replay === TIMED_OUT ? 'waited for the wallet lock' : replay.idempotentReplay).toBe(
+        true,
+      );
+    } finally {
+      await release();
+    }
+  });
+
+  test('a key already used with another payload is a conflict, even when the new request names an unknown wallet', async () => {
+    const wallet = await fundedWallet('100.00');
+    const original = command(wallet, { kind: 'BET', money: brl('25.00') });
+    await processWager.execute(original);
+
+    const attempt = processWager.execute({ ...original, walletId: randomUUID() });
+
+    await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  test('a second inbox record for one message is a lost race, which the use case retries, not a failure', async () => {
+    const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
+    const inbound = InboxMessage.receive({
+      consumerName: 'wager-commands',
+      messageId: `msg-${randomUUID()}`,
+      payloadHash: 'a'.repeat(64),
+      receivedAt: NOW,
+    });
+    await unitOfWork.run((repositories) => repositories.inbox.insert(inbound));
+
+    await expect(
+      unitOfWork.run((repositories) => repositories.inbox.insert(inbound)),
+    ).rejects.toBeInstanceOf(ConcurrencyConflictError);
   });
 });
 

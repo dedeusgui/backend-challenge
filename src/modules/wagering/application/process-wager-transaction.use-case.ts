@@ -98,13 +98,41 @@ export class ProcessWagerTransaction {
     command: ProcessWagerCommand,
     payloadHash: string,
   ): Promise<ProcessWagerOutcome> {
+    const inboundRecorded = await this.isInboundRecorded(repositories, command, payloadHash);
+
+    // A stored transaction is answered without the wallet lock. Its payload never changes, and a replay
+    // writes nothing except, for a new delivery, its inbox record.
+    const stored = await this.findStored(repositories, command);
+    if (stored !== undefined) {
+      return this.answerReplay(repositories, command, stored, payloadHash, inboundRecorded);
+    }
+
+    // A new transaction takes the wallet lock first, then looks again. A request that committed the
+    // same identity while this one waited is a replay, not a second effect. Without this second look,
+    // the waiting request would insert, collide on the unique key and retry, and under load it could use
+    // up its attempts and answer 503 to an identical request.
     const wallet = await repositories.wallets.findForUpdate(command.walletId);
     if (wallet === undefined) {
       throw new WalletNotFoundError(command.walletId);
     }
+    const committed = await this.findStored(repositories, command);
+    if (committed !== undefined) {
+      return this.answerReplay(repositories, command, committed, payloadHash, inboundRecorded);
+    }
 
-    const inboundRecorded = await this.isInboundRecorded(repositories, command, payloadHash);
-    const existing =
+    const outcome = await this.settleNew(repositories, command, payloadHash, wallet);
+    if (command.inbound !== undefined && !inboundRecorded) {
+      await this.recordInbound(repositories, command.inbound, payloadHash);
+    }
+    return outcome;
+  }
+
+  /** The idempotency key is the source of truth; the external id is the second lookup of the same identity. */
+  private async findStored(
+    repositories: FinancialRepositories,
+    command: ProcessWagerCommand,
+  ): Promise<WagerTransaction | undefined> {
+    return (
       (await repositories.wagers.findByIdempotencyKey(
         command.providerId,
         command.idempotencyKey,
@@ -112,13 +140,18 @@ export class ProcessWagerTransaction {
       (await repositories.wagers.findByExternalId(
         command.providerId,
         command.externalTransactionId,
-      ));
+      ))
+    );
+  }
 
-    const outcome =
-      existing === undefined
-        ? await this.settleNew(repositories, command, payloadHash, wallet)
-        : this.replay(existing, payloadHash);
-
+  private async answerReplay(
+    repositories: FinancialRepositories,
+    command: ProcessWagerCommand,
+    existing: WagerTransaction,
+    payloadHash: string,
+    inboundRecorded: boolean,
+  ): Promise<ProcessWagerOutcome> {
+    const outcome = this.replay(existing, payloadHash);
     if (command.inbound !== undefined && !inboundRecorded) {
       await this.recordInbound(repositories, command.inbound, payloadHash);
     }

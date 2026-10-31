@@ -1,4 +1,6 @@
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { ConcurrencyConflictError } from '../../../shared/application/application-errors';
 import type { InboxRepository } from '../application/inbox-repository.port';
 import { InboxMessage } from '../domain/inbox-message';
 import { InboxMessageRecord } from './inbox.record';
@@ -24,13 +26,23 @@ export class MikroOrmInboxRepository implements InboxRepository {
     });
   }
 
+  /** A unique violation means a concurrent delivery of the same message recorded it first: a lost race. */
   async insert(message: InboxMessage): Promise<void> {
-    await this.em.insert(InboxMessageRecord, {
-      consumerName: message.consumerName,
-      messageId: message.messageId,
-      payloadHash: message.payloadHash,
-      receivedAt: message.receivedAt,
-      processedAt: message.processedAt ?? null,
-    });
+    try {
+      await this.em.insert(InboxMessageRecord, {
+        consumerName: message.consumerName,
+        messageId: message.messageId,
+        payloadHash: message.payloadHash,
+        receivedAt: message.receivedAt,
+        processedAt: message.processedAt ?? null,
+      });
+    } catch (error) {
+      if (error instanceof UniqueConstraintViolationException) {
+        throw new ConcurrencyConflictError(
+          `Message ${message.messageId} was recorded concurrently`,
+        );
+      }
+      throw error;
+    }
   }
 }

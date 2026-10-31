@@ -1,5 +1,12 @@
-import { type EntityManager, LockMode } from '@mikro-orm/postgresql';
-import { ConcurrencyConflictError } from '../../../shared/application/application-errors';
+import {
+  UniqueConstraintViolationException,
+  type EntityManager,
+  LockMode,
+} from '@mikro-orm/postgresql';
+import {
+  ConcurrencyConflictError,
+  WalletAlreadyExistsError,
+} from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
 import type { WalletRepository } from '../application/wallet-repository.port';
 import { Wallet } from '../domain/wallet';
@@ -24,7 +31,14 @@ export class MikroOrmWalletRepository implements WalletRepository {
   }
 
   async insert(wallet: Wallet): Promise<void> {
-    await this.em.insert(WalletRecord, toRecordData(wallet));
+    try {
+      await this.em.insert(WalletRecord, toRecordData(wallet));
+    } catch (error) {
+      if (error instanceof UniqueConstraintViolationException) {
+        throw new WalletAlreadyExistsError(wallet.playerId, wallet.currency);
+      }
+      throw error;
+    }
   }
 
   async save(wallet: Wallet, expectedVersion: number): Promise<void> {

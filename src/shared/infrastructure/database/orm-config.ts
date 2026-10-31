@@ -2,6 +2,8 @@ import type { Options } from '@mikro-orm/postgresql';
 import { WalletLedgerEntryRecord } from '../../../modules/wallet/infrastructure/wallet-ledger-entry.record';
 import { WalletRecord } from '../../../modules/wallet/infrastructure/wallet.record';
 import { WagerTransactionRecord } from '../../../modules/wagering/infrastructure/wager-transaction.record';
+import { InboxMessageRecord } from '../../../modules/messaging/infrastructure/inbox.record';
+import { OutboxMessageRecord } from '../../../modules/messaging/infrastructure/outbox.record';
 
 /**
  * MikroORM configuration shared by the HTTP process, workers and tests. Schema
@@ -11,7 +13,13 @@ import { WagerTransactionRecord } from '../../../modules/wagering/infrastructure
 export function ormOptions(clientUrl: string): Options {
   return {
     clientUrl,
-    entities: [WalletRecord, WalletLedgerEntryRecord, WagerTransactionRecord],
+    entities: [
+      WalletRecord,
+      WalletLedgerEntryRecord,
+      WagerTransactionRecord,
+      InboxMessageRecord,
+      OutboxMessageRecord,
+    ],
     migrations: {
       path: `${import.meta.dir}/migrations`,
       pathTs: `${import.meta.dir}/migrations`,

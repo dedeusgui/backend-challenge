@@ -1,29 +1,74 @@
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { ConcurrencyConflictError } from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
+import { nullableToOptional, oneOf } from '../../../shared/infrastructure/database/stored-values';
 import type { WagerTransactionRepository } from '../application/wager-transaction-repository.port';
-import { oneOf, nullableToOptional } from '../../../shared/infrastructure/database/stored-values';
 import { FAILURE_CODES } from '../domain/failure-code';
-import { WAGER_TRANSACTION_KINDS } from '../domain/wager-transaction-kind';
 import {
   WAGER_TRANSACTION_STATUSES,
   WagerTransaction,
   type WagerTransactionState,
 } from '../domain/wager-transaction';
+import {
+  WAGER_TRANSACTION_KINDS,
+  type WagerTransactionKind,
+} from '../domain/wager-transaction-kind';
 import { WagerTransactionRecord } from './wager-transaction.record';
+
+type WagerLookup = Partial<
+  Pick<WagerTransactionRecord, 'id' | 'providerId' | 'idempotencyKey' | 'externalTransactionId'>
+>;
 
 export class MikroOrmWagerTransactionRepository implements WagerTransactionRepository {
   constructor(private readonly em: EntityManager) {}
 
+  /** A unique violation means a concurrent transaction committed the same identity first. */
   async insert(transaction: WagerTransaction): Promise<void> {
-    await this.em.insert(WagerTransactionRecord, toRecordData(transaction.toState()));
+    try {
+      await this.em.insert(WagerTransactionRecord, toRecordData(transaction.toState()));
+    } catch (error) {
+      if (error instanceof UniqueConstraintViolationException) {
+        throw new ConcurrencyConflictError(
+          `Transaction ${transaction.id} collides with a committed identity`,
+        );
+      }
+      throw error;
+    }
   }
 
   async findById(transactionId: string): Promise<WagerTransaction | undefined> {
-    const record = await this.em.findOne(
-      WagerTransactionRecord,
-      { id: transactionId },
-      { refresh: true },
-    );
+    return this.findOneBy({ id: transactionId });
+  }
+
+  async findByIdempotencyKey(
+    providerId: string,
+    idempotencyKey: string,
+  ): Promise<WagerTransaction | undefined> {
+    return this.findOneBy({ providerId, idempotencyKey });
+  }
+
+  async findByExternalId(
+    providerId: string,
+    externalTransactionId: string,
+  ): Promise<WagerTransaction | undefined> {
+    return this.findOneBy({ providerId, externalTransactionId });
+  }
+
+  async hasProcessedReversal(
+    referenceTransactionId: string,
+    kind: WagerTransactionKind,
+  ): Promise<boolean> {
+    const count = await this.em.count(WagerTransactionRecord, {
+      referenceTransactionId,
+      kind,
+      status: 'PROCESSED',
+    });
+    return count > 0;
+  }
+
+  private async findOneBy(where: WagerLookup): Promise<WagerTransaction | undefined> {
+    const record = await this.em.findOne(WagerTransactionRecord, where, { refresh: true });
     return record ? WagerTransaction.rehydrate(toState(record)) : undefined;
   }
 }

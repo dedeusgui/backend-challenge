@@ -18,7 +18,12 @@ let commit: string;
 
 beforeAll(async () => {
   outDir = await mkdtemp(join(tmpdir(), 'showcase-'));
-  const result = await buildSite({ root: ROOT, outDir, builtAt: new Date('2026-10-31T22:00:00.000Z'), branch: 'test-branch' });
+  const result = await buildSite({
+    root: ROOT,
+    outDir,
+    builtAt: new Date('2026-10-31T22:00:00.000Z'),
+    branch: 'test-branch',
+  });
   commit = result.commit;
   html = await readFile(join(outDir, 'index.html'), 'utf8');
 }, 60_000);
@@ -28,14 +33,27 @@ afterAll(async () => {
 });
 
 function attributes(attribute: string): string[] {
-  return [...html.matchAll(new RegExp(`${attribute}="([^"]*)"`, 'g'))].map((match) => match[1] ?? '');
+  return [...html.matchAll(new RegExp(`${attribute}="([^"]*)"`, 'g'))].map(
+    (match) => match[1] ?? '',
+  );
 }
 
 describe('the static showcase', () => {
   test('is a complete, labelled Portuguese page with the sections a reviewer needs', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true);
     expect(html).toContain('<html lang="pt-BR">');
-    for (const id of ['visao', 'arquitetura', 'fluxos', 'garantias', 'testes', 'desempenho', 'decisoes', 'limitacoes', 'executar', 'documentos']) {
+    for (const id of [
+      'visao',
+      'arquitetura',
+      'fluxos',
+      'garantias',
+      'testes',
+      'desempenho',
+      'decisoes',
+      'limitacoes',
+      'executar',
+      'documentos',
+    ]) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('Esta página é estática');
@@ -65,7 +83,7 @@ describe('the static showcase', () => {
   });
 
   test('every figure has alt text, and every chart has a title and a description', () => {
-    const images = [...html.matchAll(/<img [^>]*>/g)].map((match) => match[0]);
+    const images = [...html.matchAll(/<img\b[^>]*>/g)].map((match) => match[0]);
     expect(images.length).toBe(3);
     for (const image of images) {
       expect(image).toMatch(/alt="[^"]{10,}"/);
@@ -75,13 +93,18 @@ describe('the static showcase', () => {
   });
 
   test('links to files and trees point at this exact commit; links to a listed commit name a full hash', () => {
-    const links = attributes('href').filter((href) => href.includes('github.com/dedeusgui/backend-challenge'));
+    const links = attributes('href').filter((href) =>
+      href.includes('github.com/dedeusgui/backend-challenge'),
+    );
     expect(links.length).toBeGreaterThan(10);
     for (const link of links) {
       const match = /backend-challenge\/(blob|tree|commit)\/([0-9a-f]+)/.exec(link);
       const reference = match?.[2];
       if (match?.[1] === 'commit') {
-        expect({ link, fullHash: /^[0-9a-f]{40}$/.test(reference ?? '') }).toEqual({ link, fullHash: true });
+        expect({ link, fullHash: /^[0-9a-f]{40}$/.test(reference ?? '') }).toEqual({
+          link,
+          fullHash: true,
+        });
       } else {
         expect({ link, pinned: reference }).toEqual({ link, pinned: commit });
       }
@@ -95,16 +118,20 @@ describe('the static showcase', () => {
   });
 
   test('the numbers match the files they come from', async () => {
-    const gate = JSON.parse(await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8')) as Record<string, unknown>;
-    expect(html).toContain(`<td>${String(gate.unit)}</td><td>0</td>`);
-    expect(html).toContain(`<td>${String(gate.e2e)}</td><td>0</td>`);
+    const gate = JSON.parse(
+      await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(html).toMatch(new RegExp(`<td>${String(gate.unit)}</td>\\s*<td>0</td>`));
+    expect(html).toMatch(new RegExp(`<td>${String(gate.e2e)}</td>\\s*<td>0</td>`));
     const matrix = await readFile(join(ROOT, 'docs/REQUIREMENTS_MATRIX.md'), 'utf8');
     expect(html).toContain(`<strong>${countMatrixRows(matrix)}</strong> identificadores`);
   });
 
   test('each load run shows its agreed rate, its first failing rate, and the machine it ran on', async () => {
     for (const cpus of [1, 2, 4]) {
-      const run = JSON.parse(await readFile(join(ROOT, `docs/load/results/cpus-${cpus}.json`), 'utf8')) as {
+      const run = JSON.parse(
+        await readFile(join(ROOT, `docs/load/results/cpus-${cpus}.json`), 'utf8'),
+      ) as {
         agreedRate: number;
         environment: { cpuModel: string };
       };
@@ -116,9 +143,11 @@ describe('the static showcase', () => {
   });
 
   test('the commits listed are exactly the ones after the review base, oldest first', async () => {
-    const listed = [...html.matchAll(/<li><a href="https:\/\/github\.com\/dedeusgui\/backend-challenge\/commit\/([0-9a-f]{40})">/g)].map(
-      (match) => match[1] ?? '',
-    );
+    const listed = [
+      ...html.matchAll(
+        /<li><a href="https:\/\/github\.com\/dedeusgui\/backend-challenge\/commit\/([0-9a-f]{40})">/g,
+      ),
+    ].map((match) => match[1] ?? '');
     const range = `${REVIEW_BASE_COMMIT}..HEAD`;
     const expected = (await gitLines(['rev-list', '--reverse', range])).map((line) => line.trim());
 

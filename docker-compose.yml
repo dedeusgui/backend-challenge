@@ -60,6 +60,8 @@ services:
       PORT: '3000'
     ports:
       - '3000:3000'
+    # A crashed process is restarted. `docker stop` still stops it for good.
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -70,6 +72,7 @@ services:
     build: .
     command: ['bun', 'run', 'src/worker.ts']
     environment: *app-environment
+    restart: unless-stopped
     stop_grace_period: 30s
     depends_on:
       migrate:

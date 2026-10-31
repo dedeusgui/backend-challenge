@@ -76,14 +76,25 @@ export class ProcessCluster {
     return managed;
   }
 
-  /** Starts an HTTP process on a free port and waits until its readiness endpoint answers 200. */
+  /**
+   * Starts an HTTP process on a free port and waits until its readiness endpoint answers 200.
+   * The port is reserved by the kernel and released before the child binds it, so another
+   * process can take it in between. A child that exits before it is ready is retried on a new port.
+   */
   async startApi(name: string): Promise<string> {
-    const port = 20_000 + Math.floor(Math.random() * 20_000);
-    const managed = this.spawn(name, 'src/main.ts', { PORT: String(port) });
-    const baseUrl = `http://127.0.0.1:${port}`;
-    await waitUntilReady(baseUrl, managed);
-    this.apiUrls.push(baseUrl);
-    return baseUrl;
+    const attempts = 3;
+    for (let attempt = 1; ; attempt++) {
+      const port = freePort();
+      const managed = this.spawn(name, 'src/main.ts', { PORT: String(port) });
+      const baseUrl = `http://127.0.0.1:${port}`;
+      try {
+        await waitUntilReady(baseUrl, managed);
+        this.apiUrls.push(baseUrl);
+        return baseUrl;
+      } catch (error) {
+        if (managed.process.exitCode === null || attempt === attempts) throw error;
+      }
+    }
   }
 
   startWorker(
@@ -103,6 +114,14 @@ export class ProcessCluster {
     }
     await this.database.drop();
   }
+}
+
+/** Asks the kernel for a port that is free at this moment. */
+function freePort(): number {
+  const probe = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data() {} } });
+  const { port } = probe;
+  probe.stop(true);
+  return port;
 }
 
 /** Polls readiness until it answers 200. Fails with the process output if the process exits first. */

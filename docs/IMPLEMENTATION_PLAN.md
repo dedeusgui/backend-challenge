@@ -42,7 +42,7 @@ summarises the slices and what each one proved.
 
 - [x] Command consumer: ACK after commit, permanent to the DLQ, transient with backoff.
 - [x] Outbox publisher: claim and lease with `SKIP LOCKED`, lease-owned marks, at-least-once.
-- [x] Broker-side redrive after five deliveries is verified on the Compose-provisioned queue.
+- [x] Broker-side redrive after ten deliveries is verified on the Compose-provisioned queue.
 
 ## HTTP, health and observability
 

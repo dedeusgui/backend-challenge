@@ -233,9 +233,11 @@ sequenceDiagram
 
 Classification (`failure-classification.ts`). Permanent failures go to the dead-letter
 queue. Transient ones are redelivered with visibility backoff of 2 s, 4 s, 8 s, up to 300 s.
-The queue's redrive policy (`maxReceiveCount = 5`) moves a message that keeps failing to
-the dead-letter queue. The redrive policy is provisioned by `docker/localstack/init-sqs.sh`
-and verified in LocalStack. The tests do not yet exercise the broker-side move.
+The queue's redrive policy (`maxReceiveCount = 10`) moves a message that keeps failing to
+the dead-letter queue. Ten deliveries outlast the consumer's backoff for a transient outage, so
+a valid command is not dead-lettered by a short failure. The policy is provisioned by
+`docker/localstack/init-sqs.sh`, and `test/integration/messaging/broker-redrive.test.ts` checks
+the broker-side move on the provisioned queue.
 
 ## 8. Transactional outbox
 

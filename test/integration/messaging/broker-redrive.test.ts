@@ -5,12 +5,13 @@ import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-
 import { queueUrlByName, testSqsClient } from '../support/sqs-test-queues';
 
 /**
- * The command queue that Compose provisions has a redrive policy: after five deliveries the
- * broker itself moves a message to the dead-letter queue. This test runs against that
- * provisioned pair, because the policy is the thing under test. It needs `bun run infra:up`.
+ * The command queue that Compose provisions has a redrive policy: after ten deliveries the
+ * broker itself moves a message to the dead-letter queue. Ten is above the retry window of the
+ * consumer, so a transient outage does not dead-letter a valid command. This test runs against
+ * that provisioned pair, because the policy is the thing under test. It needs `bun run infra:up`.
  */
 describe('broker redrive of the provisioned command queue', () => {
-  test('the command queue redrives to the dead-letter queue after five deliveries', async () => {
+  test('the command queue redrives to the dead-letter queue after ten deliveries', async () => {
     const client = testSqsClient();
     const commandUrl = await queueUrlByName(client, 'wager-transactions.fifo');
     const deadLetterUrl = await queueUrlByName(client, 'wager-transactions-dlq.fifo');
@@ -21,7 +22,7 @@ describe('broker redrive of the provisioned command queue', () => {
       deadLetterTargetArn?: string;
       maxReceiveCount?: string | number;
     };
-    expect(String(policy.maxReceiveCount)).toBe('5');
+    expect(String(policy.maxReceiveCount)).toBe('10');
     expect(policy.deadLetterTargetArn?.endsWith(':wager-transactions-dlq.fifo')).toBe(true);
 
     const group = `redrive-${randomUUID()}`;
@@ -32,7 +33,7 @@ describe('broker redrive of the provisioned command queue', () => {
 
     // Receive without acknowledging, and make the message visible again at once. Each receive counts as a delivery.
     let movedToDeadLetter = false;
-    for (let delivery = 0; delivery < 10 && !movedToDeadLetter; delivery += 1) {
+    for (let delivery = 0; delivery < 15 && !movedToDeadLetter; delivery += 1) {
       const received = await command.receive({
         maxMessages: 1,
         waitSeconds: 1,

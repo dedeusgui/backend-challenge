@@ -132,7 +132,8 @@ These are listed in full in `ARCHITECTURE.md` section 14. The most important:
 - **No authentication.** Any caller can name any provider. The API must stay on a trusted
   network. `docs/adr/0006-authentication-deferred.md` describes the extension point.
 - **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
-- **Broker-side dead-lettering** (after five deliveries) is configured but not exercised by tests.
+- **Broker-side dead-lettering** (after ten deliveries) is configured in Compose and checked on the
+  provisioned queue by `test/integration/messaging/broker-redrive.test.ts`.
 - **Metrics are per process**, with no aggregation or dashboard.
 - **No load test.** The suites prove correctness under concurrency, not throughput.
 - The repository's Dockerfile image build could not run in the authoring sandbox, whose TLS

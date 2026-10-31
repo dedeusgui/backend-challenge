@@ -282,12 +282,14 @@ a valid command is not dead-lettered by a short failure. The policy is provision
 the broker-side move on the provisioned queue.
 
 Recovery after a crash in the dead-letter path is tested, not assumed. A crash after the dead-letter
-send and before the acknowledgement leaves the message in the command queue. It is dead-lettered again
-on redelivery, so the dead-letter queue holds one copy per delivery: at least once, never fewer. No
-effect is applied, because a dead-lettered command never reaches the use case's write path. A dead-letter
-send that the broker refuses is not acknowledged, so the message is retried on redelivery. The tests are
-`integration: crash after the dead-letter send` and `integration: dead-letter send refused` in
-`test/integration/messaging/wager-command-consumer.test.ts`.
+send and before the acknowledgement leaves the message in the command queue. On redelivery it is
+dead-lettered again with the same body, and that send carries a deduplication id derived from the body
+(SHA-256, 64 hex characters). The broker accepts the repeated send once inside its five-minute window, so
+the dead-letter queue keeps one copy. After the window, a repeated send is a new copy: at least once, never
+fewer. No effect is applied, because a dead-lettered command never reaches the use case's write path. A
+dead-letter send that the broker refuses is not acknowledged, so the message is retried on redelivery. The
+tests are `integration: crash after the dead-letter send` (one copy) and `integration: dead-letter send
+refused` in `test/integration/messaging/wager-command-consumer.test.ts`.
 
 ### Duplicates: what each layer stops
 
@@ -518,8 +520,9 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
   throttle would count per process, so it would not limit across instances.
 - **No dead-letter replay tooling.**
 - **A win resent under a new external id is a second credit** unless it names its BET (section 7).
-- **Dead-letter duplicates after a crash.** A crash between a dead-letter send and its acknowledgement
-  leaves one copy per delivery. A dead-letter consumer must deduplicate by the message body.
+- **Dead-letter duplicates after the deduplication window.** A crash between a dead-letter send and its
+  acknowledgement leaves one copy. A redelivery more than five minutes later adds another. A dead-letter
+  consumer must still deduplicate by the message body (`deadLetterDeduplicationId`).
 - **The HTTP changes of this review are not measured.** The headers, the explicit body limit and the
   correlation check are on the request path. The load report predates them, and it was not regenerated.
 - **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed

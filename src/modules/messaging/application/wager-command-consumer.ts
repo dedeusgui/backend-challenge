@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type {
   ProcessWagerCommand,
   ProcessWagerOutcome,
@@ -97,7 +97,11 @@ export class WagerCommandConsumer {
       return true;
     }
     if (disposition === 'DEAD') {
-      await deadLetters.send(message.body, DEAD_LETTER_GROUP, randomUUID());
+      await deadLetters.send(
+        message.body,
+        DEAD_LETTER_GROUP,
+        deadLetterDeduplicationId(message.body),
+      );
       await queue.acknowledge(message.receiptHandle);
       return true;
     }
@@ -123,6 +127,15 @@ export class WagerCommandConsumer {
       return { disposition, messageId, failure: describeError(error) };
     }
   }
+}
+
+/**
+ * The same body always gets the same id. A dead-letter send that a crash repeats on redelivery is then
+ * accepted once inside the broker's five-minute deduplication window, so the dead-letter queue keeps one
+ * copy of it. After the window, a repeated send is a new copy, so a message is never lost.
+ */
+export function deadLetterDeduplicationId(body: string): string {
+  return createHash('sha256').update(body, 'utf8').digest('hex');
 }
 
 /** Exponential backoff for redelivery: 2 s, 4 s, 8 s, ... capped at 5 minutes. */

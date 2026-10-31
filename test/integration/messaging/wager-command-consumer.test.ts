@@ -231,8 +231,9 @@ describe('WagerCommandConsumer', () => {
 
     expect(redelivered).toBe(1);
     expect(await drain(queues.commandQueueUrl)).toBe(0);
-    // Each delivery that reached the dead-letter queue left a copy: at least once, never a lost message.
-    expect(await drain(queues.deadLetterQueueUrl)).toBe(2);
+    // The copy's deduplication id is derived from its body, so the send repeated on redelivery is accepted
+    // once inside the broker's five-minute window: one copy in the dead-letter queue, never zero.
+    expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
     expect(await transactionsFor(externalTransactionId)).toBe(0);
   });
 

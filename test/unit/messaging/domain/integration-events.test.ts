@@ -130,7 +130,7 @@ describe('Concrete integration events', () => {
       kind: 'ROLLBACK',
       referenceExternalTransactionId: 'bet-missing',
     });
-    pending.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
+    pending.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00'));
 
     const envelope = WagerTransactionPendingReference.from(pending, context()).toJSON();
 

@@ -36,7 +36,10 @@ export interface WagerTransactionState {
   status: WagerTransactionStatus;
   referenceTransactionId: string | undefined;
   failureCode: FailureCode | undefined;
-  /** Balance after a PROCESSED transaction, or the balance observed when it was REJECTED or FAILED. */
+  /**
+   * The balance this transaction reports: the balance after a PROCESSED transaction, or the balance
+   * observed when it was held, REJECTED or FAILED. A replay returns it, so it never changes afterwards.
+   */
   resultingBalance: Money | undefined;
   processedAt: Date | undefined;
   /** Reference lookups that found the reference missing or still pending. */
@@ -290,11 +293,16 @@ export class WagerTransaction {
     return { outcome: 'READY' };
   }
 
-  /** Holds the transaction until its reference arrives. The first lookup is due at `nextAttemptAt`. */
-  markPendingReference(nextAttemptAt: Date): void {
+  /**
+   * Holds the transaction until its reference arrives. The first lookup is due at `nextAttemptAt`.
+   * `observedBalance` is the wallet balance at the moment of the hold. It is kept as the snapshot
+   * a replay returns, so a later balance change does not alter the answer to the same request.
+   */
+  markPendingReference(nextAttemptAt: Date, observedBalance: Money): void {
     this.assertTransitionFrom(['PENDING']);
     this.currentStatus = 'PENDING_REFERENCE';
     this.currentReferenceNextAttemptAt = nextAttemptAt;
+    this.currentResultingBalance = observedBalance;
   }
 
   /** The reference was still missing. Schedules the next lookup, or reports that the limit is reached. */

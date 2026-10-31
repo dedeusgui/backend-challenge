@@ -137,7 +137,8 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
   `ROLLBACK` must carry a reference, a `BET` or `OPENING` must not, and a `WIN` or `LOSS` may carry one (migration 6, challenge 6.3). Status
   shape: PROCESSED needs `processed_at` and a resulting balance; REJECTED and FAILED
-  need a failure code; a held row needs its next lookup time. Composite foreign key
+  need a failure code; a held row needs its next lookup time and the balance it was held with
+  (migration 7). Composite foreign key
   `(reference_transaction_id, provider_id, wallet_id)`, so a reference must share the
   provider and the wallet. Partial unique index on `(reference_transaction_id)` where
   PROCESSED and the kind is REFUND or ROLLBACK, so each reference is reversed once, whatever
@@ -383,7 +384,9 @@ These are choices the specification leaves open. Each one is tested.
 - A currency or player mismatch is a persisted rejection, not an HTTP error, so the
   outcome is replayable and auditable.
 - `OPENING` is written under the internal provider id `system`.
-- A replay of a still-pending transaction returns its current state.
+- A replay of a held transaction returns its current status with the balance observed when it was
+  held (migration 7). Later changes to the wallet do not alter that answer, and a replay that arrives
+  after the reference is resolved returns the processed result.
 - **A referenced transaction is reversed at most once, whatever the kind of reversal.** Rule 4
   of the specification says "pelo mesmo tipo de operação", which would allow a REFUND and then a
   ROLLBACK of the same BET, and that credits the stake twice. This breaks the global rule that

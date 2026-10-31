@@ -82,6 +82,7 @@ interface WagerOverrides {
   failureCode?: string | null;
   resultingBalance?: string | null;
   processedAt?: Date | null;
+  referenceNextAttemptAt?: Date | null;
 }
 
 async function insertWager(overrides: WagerOverrides): Promise<string> {
@@ -95,8 +96,8 @@ async function insertWager(overrides: WagerOverrides): Promise<string> {
        id, provider_id, external_transaction_id, idempotency_key, payload_hash,
        wallet_id, player_id, round_id, game_id, kind, amount, currency,
        reference_external_transaction_id, reference_transaction_id,
-       status, failure_code, resulting_balance, processed_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fortune-chimp', ?, ?, ?, ?, ?, ?, ?, ?, ?, now())`,
+       status, failure_code, resulting_balance, processed_at, reference_next_attempt_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fortune-chimp', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())`,
     [
       id,
       overrides.providerId ?? 'provider-a',
@@ -115,6 +116,7 @@ async function insertWager(overrides: WagerOverrides): Promise<string> {
       overrides.failureCode ?? null,
       overrides.resultingBalance ?? null,
       overrides.processedAt ?? null,
+      overrides.referenceNextAttemptAt ?? null,
     ],
   );
   return id;
@@ -363,6 +365,41 @@ describe('wager_transactions identity and shape', () => {
         insertWager({ walletId, status: 'PENDING', failureCode: 'INSUFFICIENT_BALANCE' }),
       ),
     ).toBe('23514');
+  });
+});
+
+describe('wager_transactions: a held transaction keeps the balance it was held with', () => {
+  test('rejects a PENDING_REFERENCE without the balance observed when it was held', async () => {
+    const walletId = await insertWallet();
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'REFUND',
+          referenceExternalTransactionId: 'bet-late',
+          status: 'PENDING_REFERENCE',
+          referenceNextAttemptAt: new Date(Date.now() + 60_000),
+        }),
+      ),
+    ).toBe('23514');
+  });
+
+  test('accepts a PENDING_REFERENCE that carries the balance observed when it was held', async () => {
+    const walletId = await insertWallet();
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'REFUND',
+          referenceExternalTransactionId: 'bet-late',
+          status: 'PENDING_REFERENCE',
+          resultingBalance: '100.00',
+          referenceNextAttemptAt: new Date(Date.now() + 60_000),
+        }),
+      ),
+    ).toBe('NO_ERROR');
   });
 });
 

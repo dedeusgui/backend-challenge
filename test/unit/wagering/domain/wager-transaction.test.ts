@@ -255,7 +255,7 @@ describe('WagerTransaction transitions', () => {
       props({ kind: 'ROLLBACK', referenceExternalTransactionId: 'bet-1', money: brl('25.00') }),
     );
 
-    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
+    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00'));
     expect(rollback.status).toBe('PENDING_REFERENCE');
 
     rollback.markProcessed({
@@ -271,7 +271,7 @@ describe('WagerTransaction transitions', () => {
     const rollback = WagerTransaction.create(
       props({ kind: 'ROLLBACK', referenceExternalTransactionId: 'bet-1' }),
     );
-    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
+    rollback.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00'));
 
     rollback.reject({ code: 'REFERENCE_NOT_FOUND', observedBalance: brl('100.00') });
 
@@ -295,13 +295,24 @@ describe('WagerTransaction transitions', () => {
     ).toBe('INVALID_TRANSACTION');
   });
 
+  test('a held transaction keeps the balance observed when it was held', () => {
+    const refund = WagerTransaction.create(
+      props({ kind: 'REFUND', referenceExternalTransactionId: 'bet-late' }),
+    );
+
+    refund.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00'));
+    refund.recordReferenceMiss(new Date('2026-07-29T15:00:02.000Z'));
+
+    expect(refund.resultingBalance?.toString()).toBe('100.00');
+  });
+
   test('markPendingReference is only valid from PENDING', () => {
     const transaction = bet();
-    transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z'));
+    transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00'));
 
     expect(
       domainErrorCodeOf(() =>
-        transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z')),
+        transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00')),
       ),
     ).toBe('INVALID_TRANSACTION_TRANSITION');
   });
@@ -333,7 +344,7 @@ describe('WagerTransaction terminal states', () => {
     expect(transaction.status).toBe(status);
 
     const attempts: Array<() => unknown> = [
-      () => transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z')),
+      () => transaction.markPendingReference(new Date('2026-07-29T15:00:01.000Z'), brl('100.00')),
       () =>
         transaction.markProcessed({
           referenceTransactionId: undefined,

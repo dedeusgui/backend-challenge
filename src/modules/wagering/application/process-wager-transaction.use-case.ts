@@ -117,7 +117,7 @@ export class ProcessWagerTransaction {
     const outcome =
       existing === undefined
         ? await this.settleNew(repositories, command, payloadHash, wallet)
-        : this.replay(existing, payloadHash, wallet);
+        : this.replay(existing, payloadHash);
 
     if (command.inbound !== undefined && !inboundRecorded) {
       await this.recordInbound(repositories, command.inbound, payloadHash);
@@ -161,22 +161,19 @@ export class ProcessWagerTransaction {
     return true;
   }
 
-  private replay(
-    existing: WagerTransaction,
-    payloadHash: string,
-    wallet: Wallet,
-  ): ProcessWagerOutcome {
+  private replay(existing: WagerTransaction, payloadHash: string): ProcessWagerOutcome {
     if (!existing.matchesPayload(payloadHash)) {
       throw new IdempotencyConflictError(
         `Idempotency key or external transaction ${existing.externalTransactionId} was used with a different payload`,
       );
     }
     this.metrics.increment('idempotent_replays_total');
-    return {
-      transaction: existing,
-      balance: existing.resultingBalance ?? wallet.balance,
-      idempotentReplay: true,
-    };
+    const balance = existing.resultingBalance;
+    if (balance === undefined) {
+      // Every stored transaction keeps the balance it reported, and the database enforces it. Without it a replay is wrong.
+      throw new Error(`Transaction ${existing.id} has no balance to replay`);
+    }
+    return { transaction: existing, balance, idempotentReplay: true };
   }
 
   private async recordInbound(

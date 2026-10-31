@@ -175,6 +175,7 @@ export class TransactionSettlement {
     if (!options.existing) {
       transaction.markPendingReference(
         new Date(this.context.clock().getTime() + referenceRetryDelayMs(0)),
+        wallet.balance,
       );
       await repositories.wagers.insert(transaction);
       await repositories.outbox.enqueue(

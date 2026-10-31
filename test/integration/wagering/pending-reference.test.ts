@@ -139,6 +139,33 @@ describe('pending references', () => {
     ]);
   });
 
+  test('a replay of a held REFUND returns the balance it was held with, not the balance after a later change', async () => {
+    const wallet = await fundedWallet('100.00');
+    const refund = command(wallet.playerId, wallet.walletId, {
+      kind: 'REFUND',
+      money: Money.from({ amount: '25.00', currency: 'BRL' }),
+      externalTransactionId: `refund-${randomUUID()}`,
+      referenceExternalTransactionId: 'bet-not-yet',
+    });
+    const held = await processWager.execute(refund);
+    expect(held.transaction.status).toBe('PENDING_REFERENCE');
+    expect(held.balance.toString()).toBe('100.00');
+    await processWager.execute(
+      command(wallet.playerId, wallet.walletId, {
+        kind: 'BET',
+        money: Money.from({ amount: '30.00', currency: 'BRL' }),
+        externalTransactionId: `bet-other-${randomUUID()}`,
+      }),
+    );
+    expect(await balanceOf(wallet.walletId)).toBe('70.00');
+
+    const replay = await processWager.execute(refund);
+
+    expect(replay.idempotentReplay).toBe(true);
+    expect(replay.transaction.status).toBe('PENDING_REFERENCE');
+    expect(replay.balance.toString()).toBe('100.00');
+  });
+
   test('retries are scheduled with backoff and are not attempted before they are due', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;

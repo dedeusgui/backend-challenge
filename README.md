@@ -104,11 +104,11 @@ Além de provar a integridade financeira sob concorrência, o projeto mede desem
 **carga aberta, limites explícitos e reconciliação de todas as carteiras**. Os resultados
 abaixo são de execuções registradas, não de uma estimativa de capacidade em produção.
 
-| CPUs destinadas à stack | Maior taxa que passou todos os limites | Próximo degrau |
-| ---: | ---: | --- |
-| 1 | 100 req/s | 125 req/s: falhou por latência |
-| 2 | 200 req/s | 300 req/s: falhou por latência |
-| 4 | 400 req/s | Não medido: a rampa terminava em 400 req/s |
+| CPUs destinadas à stack | Maior taxa que passou todos os limites | Próximo degrau                             |
+| ----------------------: | -------------------------------------: | ------------------------------------------ |
+|                       1 |                              100 req/s | 125 req/s: falhou por latência             |
+|                       2 |                              200 req/s | 300 req/s: falhou por latência             |
+|                       4 |                              400 req/s | Não medido: a rampa terminava em 400 req/s |
 
 Cada degrau durou 20 segundos. Para passar, precisava cumprir simultaneamente p95 ≤ 500 ms,
 p99 ≤ 1.000 ms, zero requisições perdidas, taxa de erro ≤ 0,1%, drenagem da outbox

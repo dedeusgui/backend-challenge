@@ -1,6 +1,7 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
 import { WalletNotFoundError } from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
 import type { Wallet } from '../domain/wallet';
 import type { WalletLedgerEntry } from '../domain/wallet-ledger-entry';
@@ -28,7 +29,11 @@ export interface ReconciliationReport {
  * lock, because reads must never queue behind a financial write.
  */
 export class WalletQueries {
-  constructor(private readonly context: ApplicationContext) {}
+  private readonly metrics: MetricsSink;
+
+  constructor(private readonly context: ApplicationContext) {
+    this.metrics = context.metrics ?? NO_METRICS;
+  }
 
   async getWallet(walletId: string): Promise<Wallet> {
     const wallet = await this.context.unitOfWork.run((repositories) =>
@@ -60,7 +65,7 @@ export class WalletQueries {
   }
 
   async reconcile(walletId: string): Promise<ReconciliationReport> {
-    return this.context.unitOfWork.run(async (repositories) => {
+    const report = await this.context.unitOfWork.run(async (repositories) => {
       const wallet = await this.getWalletOrFail(repositories, walletId);
       const summary = await repositories.ledger.summarize(walletId, wallet.currency);
       const difference = wallet.balance.subtract(summary.calculated);
@@ -73,6 +78,10 @@ export class WalletQueries {
         checkedEntries: summary.entries,
       };
     });
+    if (!report.consistent) {
+      this.metrics.increment('reconciliation_divergences_total');
+    }
+    return report;
   }
 
   private async getWalletOrFail(

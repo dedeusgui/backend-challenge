@@ -1,4 +1,5 @@
 import type { OutboxMessage } from '../domain/outbox-message';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import type { OutboxStore } from './outbox-store.port';
 
 /** The external system an event is published to. The SQS adapter is the only implementation. */
@@ -19,6 +20,7 @@ export interface OutboxPublisherOptions {
   newLeaseToken: () => string;
   leaseDurationMs: number;
   batchSize: number;
+  metrics?: MetricsSink;
 }
 
 /**
@@ -28,7 +30,11 @@ export interface OutboxPublisherOptions {
  * republishes the event later, with the same id. Consumers deduplicate it.
  */
 export class OutboxPublisher {
-  constructor(private readonly options: OutboxPublisherOptions) {}
+  private readonly metrics: MetricsSink;
+
+  constructor(private readonly options: OutboxPublisherOptions) {
+    this.metrics = options.metrics ?? NO_METRICS;
+  }
 
   /** Returns how many events were published successfully in this pass. */
   async publishOnce(): Promise<number> {
@@ -66,9 +72,19 @@ export class OutboxPublisher {
     // Recording the outcome is outside the try: a failure here must surface, not be counted as a send failure.
     if (sent) {
       message.markPublished(attemptAt);
-      await this.options.store.complete(message, token, attemptAt);
+      const recorded = await this.options.store.complete(message, token, attemptAt);
+      if (!recorded) {
+        this.metrics.increment('outbox_lost_lease_total');
+        return false;
+      }
+      this.metrics.increment('outbox_published_total');
+      this.metrics.observe(
+        'outbox_lag_seconds',
+        (attemptAt.getTime() - message.occurredAt.getTime()) / 1000,
+      );
       return true;
     }
+    this.metrics.increment('outbox_publish_failures_total');
     message.scheduleRetry(attemptAt);
     await this.options.store.reschedule(message, token);
     return false;

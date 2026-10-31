@@ -5,6 +5,13 @@ import type { MikroORM } from '@mikro-orm/postgresql';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import type { AppConfig } from './config/app-config';
 import { HealthController } from './health/health.controller';
+import { MetricsController } from './metrics/metrics.controller';
+import { MetricsRegistry, METRICS_REGISTRY } from './shared/observability/metrics';
+import {
+  OPERATION_LOGGER,
+  SILENT_LOGGER,
+  type OperationLogger,
+} from './shared/observability/structured-log';
 import { HEALTH_SERVICE, HealthService } from './health/health.service';
 import { createSqsClient, resolveQueues } from './shared/infrastructure/sqs/sqs-connection';
 import { SQS_CLIENT, SQS_PROBE_CLIENT } from './shared/infrastructure/sqs/sqs.tokens';
@@ -28,11 +35,20 @@ const APPLICATION_CONTEXT = Symbol('APPLICATION_CONTEXT');
  */
 @Module({})
 export class AppModule {
-  static register(config: AppConfig): DynamicModule {
+  static register(config: AppConfig, options: { logger?: OperationLogger } = {}): DynamicModule {
+    const metrics = new MetricsRegistry();
     return {
       module: AppModule,
-      controllers: [HealthController, WalletController, WageringController, ProvidersController],
+      controllers: [
+        HealthController,
+        WalletController,
+        WageringController,
+        ProvidersController,
+        MetricsController,
+      ],
       providers: [
+        { provide: METRICS_REGISTRY, useValue: metrics },
+        { provide: OPERATION_LOGGER, useValue: options.logger ?? SILENT_LOGGER },
         ormProvider(config.databaseUrl),
         DatabaseLifecycle,
         { provide: SQS_CLIENT, useFactory: () => createSqsClient(config.sqs) },
@@ -53,6 +69,7 @@ export class AppModule {
             unitOfWork: new MikroOrmFinancialUnitOfWork(orm),
             clock: () => new Date(),
             newId: randomUUID,
+            metrics,
           }),
         },
         {

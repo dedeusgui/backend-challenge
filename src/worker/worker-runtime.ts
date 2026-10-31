@@ -15,10 +15,13 @@ import { ProcessPendingReferences } from '../modules/wagering/application/proces
 import { MikroOrmFinancialUnitOfWork } from '../shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { ormOptions } from '../shared/infrastructure/database/orm-config';
 import { createSqsClient, resolveQueues } from '../shared/infrastructure/sqs/sqs-connection';
+import { MetricsRegistry } from '../shared/observability/metrics';
+import type { OperationLogger } from '../shared/observability/structured-log';
 
 export const WAGER_CONSUMER_NAME = 'wager-transactions';
 
 export interface WorkerRuntime {
+  metrics: MetricsRegistry;
   consumer: WagerCommandConsumer;
   publisher: OutboxPublisher;
   pendingReferences: ProcessPendingReferences;
@@ -29,6 +32,8 @@ export interface WorkerRuntime {
 export interface WorkerRuntimeOptions {
   /** Test-only seam. Production never passes it. */
   faults?: ConsumerFaults;
+  logger?: OperationLogger;
+  metrics?: MetricsRegistry;
 }
 
 /**
@@ -42,10 +47,12 @@ export async function createWorkerRuntime(
   const orm = await MikroORM.init(ormOptions(config.databaseUrl));
   const sqs = createSqsClient(config.sqs);
   const queues = await resolveQueues(sqs, config.sqs);
+  const metrics = options.metrics ?? new MetricsRegistry();
   const context = {
     unitOfWork: new MikroOrmFinancialUnitOfWork(orm),
     clock: () => new Date(),
     newId: randomUUID,
+    metrics,
   };
 
   const consumer = new WagerCommandConsumer({
@@ -55,6 +62,8 @@ export async function createWorkerRuntime(
     process: new ProcessWagerTransaction(context),
     visibilityTimeoutSeconds: config.consumerVisibilitySeconds,
     faults: options.faults ?? NO_FAULTS,
+    metrics,
+    logger: options.logger,
   });
   const publisher = new OutboxPublisher({
     store: new MikroOrmOutboxStore(orm),
@@ -63,9 +72,11 @@ export async function createWorkerRuntime(
     newLeaseToken: randomUUID,
     leaseDurationMs: config.outboxLeaseMs,
     batchSize: config.outboxBatchSize,
+    metrics,
   });
 
   return {
+    metrics,
     consumer,
     publisher,
     pendingReferences: new ProcessPendingReferences(context),

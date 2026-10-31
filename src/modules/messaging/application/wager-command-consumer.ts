@@ -6,6 +6,8 @@ import type {
 import type { MessageQueue, ReceivedMessage } from './message-queue.port';
 import { classifyCommandFailure } from './failure-classification';
 import { parseWagerCommandMessage } from './wager-command-message';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
+import { SILENT_LOGGER, type OperationLogger } from '../../../shared/observability/structured-log';
 
 /** Test-only seam at the point where a crash would hurt most. The production default does nothing. */
 export interface ConsumerFaults {
@@ -27,6 +29,8 @@ export interface WagerCommandConsumerOptions {
   process: CommandProcessor;
   visibilityTimeoutSeconds: number;
   faults: ConsumerFaults;
+  metrics?: MetricsSink;
+  logger?: OperationLogger;
 }
 
 const BATCH_SIZE = 10;
@@ -42,7 +46,13 @@ type Disposition = 'APPLIED' | 'DEAD' | 'RETRY';
  * with backoff. After repeated deliveries, the broker redrive policy takes over.
  */
 export class WagerCommandConsumer {
-  constructor(private readonly options: WagerCommandConsumerOptions) {}
+  private readonly metrics: MetricsSink;
+  private readonly logger: OperationLogger;
+
+  constructor(private readonly options: WagerCommandConsumerOptions) {
+    this.metrics = options.metrics ?? NO_METRICS;
+    this.logger = options.logger ?? SILENT_LOGGER;
+  }
 
   /** Returns how many messages left the command queue (applied or dead-lettered). */
   async pollOnce(): Promise<number> {
@@ -64,7 +74,9 @@ export class WagerCommandConsumer {
 
   private async settle(message: ReceivedMessage): Promise<boolean> {
     const { queue, deadLetters, faults } = this.options;
-    const disposition = await this.attempt(message);
+    const { disposition, messageId } = await this.attempt(message);
+    this.metrics.increment('commands_total', { result: disposition });
+    this.logger({ operation: 'command.settle', status: disposition, messageId });
 
     if (disposition === 'APPLIED') {
       // Outside the attempt on purpose: a crash here must leave the message for redelivery.
@@ -81,19 +93,24 @@ export class WagerCommandConsumer {
     return false;
   }
 
-  private async attempt(message: ReceivedMessage): Promise<Disposition> {
+  /** `messageId` is read from the body when the body parses, so logs name the message that was handled. */
+  private async attempt(
+    message: ReceivedMessage,
+  ): Promise<{ disposition: Disposition; messageId: string | undefined }> {
     let command: ProcessWagerCommand;
     try {
       command = parseWagerCommandMessage(message.body, this.options.consumerName);
     } catch {
-      return 'DEAD';
+      return { disposition: 'DEAD', messageId: undefined };
     }
+    const messageId = command.inbound?.messageId;
 
     try {
       await this.options.process.execute(command);
-      return 'APPLIED';
+      return { disposition: 'APPLIED', messageId };
     } catch (error) {
-      return classifyCommandFailure(error) === 'PERMANENT' ? 'DEAD' : 'RETRY';
+      const disposition = classifyCommandFailure(error) === 'PERMANENT' ? 'DEAD' : 'RETRY';
+      return { disposition, messageId };
     }
   }
 }

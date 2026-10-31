@@ -1,6 +1,7 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
 import { WalletNotFoundError } from '../../../shared/application/application-errors';
 import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import { TransactionSettlement } from './transaction-settlement';
 
 const BATCH_SIZE = 20;
@@ -12,9 +13,11 @@ const BATCH_SIZE = 20;
  */
 export class ProcessPendingReferences {
   private readonly settlement: TransactionSettlement;
+  private readonly metrics: MetricsSink;
 
   constructor(private readonly context: ApplicationContext) {
     this.settlement = new TransactionSettlement(context);
+    this.metrics = context.metrics ?? NO_METRICS;
   }
 
   /** Returns how many due transactions were examined in this pass. */
@@ -46,11 +49,12 @@ export class ProcessPendingReferences {
       return 0;
     }
 
-    await this.settlement.settle(repositories, transaction, wallet, {
+    const outcome = await this.settlement.settle(repositories, transaction, wallet, {
       existing: true,
       correlationId: transaction.id,
       causationId: undefined,
     });
+    this.metrics.increment('reference_resolutions_total', { status: outcome.transaction.status });
     return 1;
   }
 }

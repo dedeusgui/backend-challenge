@@ -1,4 +1,8 @@
-import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, Res } from '@nestjs/common';
+import {
+  OPERATION_LOGGER,
+  type OperationLogger,
+} from '../../../shared/observability/structured-log';
 import { randomUUID } from 'node:crypto';
 import {
   ProcessWagerTransaction,
@@ -26,6 +30,7 @@ export class WageringController {
   constructor(
     private readonly processWager: ProcessWagerTransaction,
     private readonly queries: WagerQueries,
+    @Inject(OPERATION_LOGGER) private readonly logger: OperationLogger,
   ) {}
 
   @Get(':transactionId')
@@ -41,9 +46,20 @@ export class WageringController {
     @Res({ passthrough: true }) response: StatusSetter,
   ): Promise<WagerTransactionResponse> {
     const { command } = parseProcessWagerRequest(body, idempotencyKey);
+    const resolvedCorrelationId = correlationId ?? randomUUID();
+    const started = performance.now();
     const outcome = await this.processWager.execute({
       ...command,
-      correlationId: correlationId ?? randomUUID(),
+      correlationId: resolvedCorrelationId,
+    });
+    this.logger({
+      operation: 'wager.submit',
+      status: outcome.transaction.status,
+      correlationId: resolvedCorrelationId,
+      transactionId: outcome.transaction.id,
+      walletId: outcome.transaction.walletId,
+      providerId: outcome.transaction.providerId,
+      durationMs: Math.round(performance.now() - started),
     });
     response.status(statusOf(outcome));
     return presentOutcome(outcome);

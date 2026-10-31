@@ -10,6 +10,7 @@ import type { FailureCode } from '../domain/failure-code';
 import { referenceRetryDelayMs } from '../domain/reference-retry-policy';
 import type { Money } from '../../../shared/domain/money';
 import type { WagerTransaction } from '../domain/wager-transaction';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 
 export interface SettlementOutcome {
   transaction: WagerTransaction;
@@ -31,7 +32,11 @@ export interface SettlementOptions {
  * rules exist in one implementation. The caller holds the wallet lock and the unit of work.
  */
 export class TransactionSettlement {
-  constructor(private readonly context: ApplicationContext) {}
+  private readonly metrics: MetricsSink;
+
+  constructor(private readonly context: ApplicationContext) {
+    this.metrics = context.metrics ?? NO_METRICS;
+  }
 
   async settle(
     repositories: FinancialRepositories,
@@ -172,6 +177,7 @@ export class TransactionSettlement {
 
     const { exhausted } = transaction.recordReferenceMiss(this.context.clock());
     if (exhausted) {
+      this.metrics.increment('reference_exhausted_total');
       return this.reject(repositories, transaction, wallet, 'REFERENCE_NOT_FOUND', options);
     }
     await repositories.wagers.update(transaction);

@@ -8,6 +8,7 @@ import {
 import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
 import { DomainError } from '../../../shared/domain/domain-error';
 import type { Money } from '../../../shared/domain/money';
+import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import { InboxMessage } from '../../messaging/domain/inbox-message';
 import type { Wallet } from '../../wallet/domain/wallet';
 import { hashOf } from '../domain/wager-payload';
@@ -51,9 +52,11 @@ const MAX_CONCURRENCY_ATTEMPTS = 3;
  */
 export class ProcessWagerTransaction {
   private readonly settlement: TransactionSettlement;
+  private readonly metrics: MetricsSink;
 
   constructor(private readonly context: ApplicationContext) {
     this.settlement = new TransactionSettlement(context);
+    this.metrics = context.metrics ?? NO_METRICS;
   }
 
   async execute(command: ProcessWagerCommand): Promise<ProcessWagerOutcome> {
@@ -65,15 +68,22 @@ export class ProcessWagerTransaction {
     }
     const payloadHash = hashOf(businessFieldsOf(command));
 
+    const started = performance.now();
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await this.context.unitOfWork.run((repositories) =>
+        const outcome = await this.context.unitOfWork.run((repositories) =>
           this.process(repositories, command, payloadHash),
         );
+        this.metrics.increment('transactions_total', { status: outcome.transaction.status });
+        this.metrics.observe('processing_latency_ms', performance.now() - started);
+        return outcome;
       } catch (error) {
         // The failed unit of work has rolled back, so no effect was committed. A retry reads the winner.
-        if (error instanceof ConcurrencyConflictError && attempt < MAX_CONCURRENCY_ATTEMPTS) {
-          continue;
+        if (error instanceof ConcurrencyConflictError) {
+          this.metrics.increment('concurrency_conflicts_total');
+          if (attempt < MAX_CONCURRENCY_ATTEMPTS) {
+            continue;
+          }
         }
         throw error;
       }
@@ -158,6 +168,7 @@ export class ProcessWagerTransaction {
         `Idempotency key or external transaction ${existing.externalTransactionId} was used with a different payload`,
       );
     }
+    this.metrics.increment('idempotent_replays_total');
     return {
       transaction: existing,
       balance: existing.resultingBalance ?? wallet.balance,

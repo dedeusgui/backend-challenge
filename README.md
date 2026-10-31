@@ -29,10 +29,10 @@ curl http://localhost:3000/health/live
 # {"status":"ok"}
 ```
 
-Alternatively, build and run the minimal API inside Compose:
+Alternatively, start all infrastructure and the minimal API together:
 
 ```bash
-docker compose --profile app up --build
+docker compose up --build
 ```
 
 The Compose stack creates PostgreSQL and three SQS queues:

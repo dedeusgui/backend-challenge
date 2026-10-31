@@ -1,109 +1,164 @@
 # Distributed Wagering Processor
 
 Implementation of the [Jungle Gaming backend challenge](https://github.com/junglegaming/backend-challenge).
-The [original challenge specification](docs/CHALLENGE.md) is preserved verbatim.
+The [original specification](docs/CHALLENGE.md) is kept verbatim. This service applies wager
+operations (BET, WIN, LOSS, REFUND, ROLLBACK) from game providers over HTTP and SQS, keeps
+balances consistent under concurrency, duplicates and crashes, and reconciles each wallet
+against its ledger.
 
-> **Current status: foundation only.** The HTTP process boots and exposes liveness.
-> Financial endpoints, persistence entities/migrations, SQS consumption/publication,
-> readiness, and concurrency tests are **not implemented yet**.
+- [ARCHITECTURE.md](ARCHITECTURE.md): components, guarantees, diagrams, limitations.
+- [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md): each requirement, its test and its status.
+- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): suites, isolation, fault injection.
+- [docs/adr](docs/adr): the decisions and their trade-offs.
+- [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md): the three public reference implementations.
 
 ## Stack
 
-Bun 1.x · TypeScript strict · NestJS · PostgreSQL · MikroORM · AWS SQS (LocalStack) · Docker Compose.
+Bun 1.4.4 · TypeScript (strict) · NestJS 12 · MikroORM 7 · PostgreSQL 17 · AWS SQS (LocalStack 4.14) · Docker Compose.
 
-## Run locally
+## Requirements
 
-Requirements: Bun **1.4.4** (the version pinned in `.github/workflows/ci.yml`
-and the `Dockerfile`) and Docker with Compose.
+- Bun **1.4.4**, the version pinned in CI and the Dockerfile.
+- Docker with Compose, for PostgreSQL and LocalStack.
 
-```bash
-cp .env.example .env
-bun install
-docker compose up -d postgres localstack
-bun run dev
-```
-
-Check the currently implemented endpoint:
-
-```bash
-curl http://localhost:3000/health/live
-# {"status":"ok"}
-```
-
-Alternatively, start all infrastructure and the minimal API together:
+## Run the whole stack
 
 ```bash
 docker compose up --build
 ```
 
-The Compose stack creates PostgreSQL and three SQS queues:
-`wager-transactions.fifo`, `wager-transactions-dlq.fifo`, and
-`wager-events.fifo`. The first two form the inbound command queue and DLQ;
-the last queue will eventually receive committed integration events.
+Compose starts PostgreSQL and LocalStack, which provisions the queues
+`wager-transactions.fifo`, `wager-transactions-dlq.fifo` and `wager-events.fifo`. It then
+runs the migrations once, and starts the API on port 3000 and the worker. The API starts
+only after the migration has succeeded.
 
-### Developer commands
+```bash
+curl http://localhost:3000/health/ready
+# {"status":"ok","checks":{"database":"up","sqs":"up"}}
+```
 
-| Command                | Purpose                                    |
-| ---------------------- | ------------------------------------------ |
-| `bun run dev`          | Restart-on-change HTTP entrypoint          |
-| `bun run start`        | Start HTTP process                         |
-| `bun run typecheck`    | Check strict TypeScript types              |
-| `bun run lint`         | Run oxlint on `src` and `test`             |
-| `bun run test:unit`    | Run Bun unit tests                         |
-| `bun run test`         | Run all currently available Bun tests      |
-| `bun run format:check` | Validate formatting                        |
-| `bun run check:fast`   | typecheck + lint + format:check + unit     |
-| `docker compose down`  | Stop containers (preserve database volume) |
+For local development without the API and worker containers:
 
-Dependencies are pinned by `bun.lock`, which is committed. Install with
-`bun install --frozen-lockfile` (CI and the Docker image do the same).
-Never commit `.env` or actual credentials.
+```bash
+cp .env.example .env
+bun install --frozen-lockfile
+bun run infra:up              # PostgreSQL and LocalStack, with health checks
+bun run db:migrate            # apply migrations
+bun run dev                   # API with restart on change
+bun run src/worker.ts         # worker, in another terminal
+```
 
-## Layout
+## Commands
+
+| Command                    | Purpose                                                 |
+| -------------------------- | ------------------------------------------------------- |
+| `bun run db:migrate`       | apply pending migrations and exit                       |
+| `bun run typecheck`        | strict TypeScript check                                 |
+| `bun run lint`             | oxlint                                                  |
+| `bun run format:check`     | Prettier                                                |
+| `bun run test:unit`        | domain and pure-logic tests, no infrastructure          |
+| `bun run test:integration` | PostgreSQL and LocalStack integration tests             |
+| `bun run test:concurrency` | real concurrency, and three API processes plus a worker |
+| `bun run test:e2e`         | HTTP end-to-end tests                                   |
+| `bun run check:fast`       | typecheck, lint, format and unit tests                  |
+| `bun run check:all`        | everything above, which is the final gate               |
+
+Run `bun run infra:up` before the suites that need PostgreSQL or LocalStack.
+
+## Endpoints
+
+Amounts are always `{ "amount": "25.00", "currency": "BRL" }`.
+
+```bash
+# Open a wallet, with an optional opening balance
+curl -X POST localhost:3000/wallets -H 'content-type: application/json' \
+  -d '{"playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","initialBalance":{"amount":"100.00","currency":"BRL"}}'
+
+# Submit a BET. The Idempotency-Key header is required and is the source of truth.
+curl -X POST localhost:3000/wagering/transactions \
+  -H 'content-type: application/json' -H 'Idempotency-Key: provider-a:transaction-123' \
+  -d '{"providerId":"provider-a","externalTransactionId":"transaction-123","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<wallet id>","roundId":"round-987","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
+```
+
+| Method and path                                                           | Purpose                                                                                 |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `POST /wallets`                                                           | create a wallet (201, or 409 if one exists for the player and currency)                 |
+| `GET /wallets/:walletId`                                                  | balance, version, currency                                                              |
+| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | ledger pages in sequence order, with an opaque `nextCursor`                             |
+| `POST /wagering/transactions`                                             | submit an operation. 201 applied, 200 replay, 202 waiting for a reference, 422 rejected |
+| `GET /wagering/transactions/:transactionId`                               | one transaction                                                                         |
+| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | the same, by provider id                                                                |
+| `POST /wallets/:walletId/reconciliation`                                  | recompute the balance from the ledger and report any divergence. It never corrects      |
+| `GET /health/live`                                                        | the process is up                                                                       |
+| `GET /health/ready`                                                       | PostgreSQL and the command queue answer                                                 |
+| `GET /metrics`                                                            | counters and summaries of this process                                                  |
+
+A rejected operation returns 422 with a `failureCode`. The codes and the status taxonomy
+are in `ARCHITECTURE.md` sections 3 and 10.
+
+## Queue contract
+
+The worker consumes `WagerTransactionRequested` messages from `wager-transactions.fifo`
+with the body shape in the specification (section 10). A message is acknowledged only after
+its transaction commits. Permanent failures go to `wager-transactions-dlq.fifo`. The
+worker publishes `WagerTransactionProcessed`, `WagerTransactionRejected`,
+`WalletBalanceChanged` and `WagerTransactionPendingReference` to `wager-events.fifo`.
+
+## Simulating concurrency
+
+The distributed proof starts three API processes and one worker, all against the same
+PostgreSQL and LocalStack, and drives them concurrently:
+
+```bash
+bun run infra:up
+bun run test:concurrency
+```
+
+Look at `test/concurrency/three-processes.test.ts` for the scenarios: two bets of 80.00
+on 100.00 from two processes at once, fifty identical requests spread over three processes,
+twelve wallets in parallel, a worker killed between commit and acknowledgement, and a
+graceful SIGTERM.
+
+## Tests
+
+The layers and what each may replace are in `docs/TEST_STRATEGY.md`. In short: domain
+rules are unit tested; persistence, constraints, messaging and concurrency run against
+real PostgreSQL and real LocalStack, without mocks.
+
+## Limitations
+
+These are listed in full in `ARCHITECTURE.md` section 14. The most important:
+
+- **No authentication.** Any caller can name any provider. The API must stay on a trusted
+  network. `docs/adr/0006-authentication-deferred.md` describes the extension point.
+- **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
+- **Broker-side dead-lettering** (after five deliveries) is configured but not exercised by tests.
+- **Metrics are per process**, with no aggregation or dashboard.
+- **No load test.** The suites prove correctness under concurrency, not throughput.
+- The repository's Dockerfile image build could not run in the authoring sandbox, whose TLS
+  proxy blocks package downloads. The stack was verified from clean volumes with an image
+  built from the same source and the sandbox CA.
+
+## Repository layout
 
 ```text
 src/
-  main.ts                  # HTTP bootstrap
-  app.module.ts            # minimal Nest module
-  health/                  # liveness (implemented)
+  main.ts                 API entrypoint (HTTP)
+  worker.ts               worker entrypoint (SQS consumer, outbox publisher, reference resolver)
+  migrate.ts              one-shot schema migration
+  app.module.ts           composition root shared by production and tests
+  config/                 environment parsing, fail-fast
+  health/ metrics/        probes and the metrics endpoint
   modules/
-    wallet/                # aggregate, ledger and reconciliation (planned)
-    wagering/              # transaction lifecycle and use cases (planned)
-    messaging/             # Inbox, Outbox and SQS adapters (planned)
-  shared/
-    domain/                # shared Money value object (planned)
-    application/ports/     # provider identity extension port
-    infrastructure/        # cross-module persistence boundary (planned)
+    wallet/               Wallet, ledger, opening, queries, reconciliation
+    wagering/             WagerTransaction, settlement, references, HTTP
+    messaging/            inbox, outbox, SQS adapters, command consumer, publisher
+  shared/                 Money, errors, unit of work port, events, validation, observability
+  shared/infrastructure/database/migrations/   versioned, reversible migrations
 test/
-  unit/                    # liveness smoke test
-  integration/             # PostgreSQL + LocalStack (planned)
-  concurrency/             # real multi-process tests (planned)
-docker/localstack/          # queue provisioning
+  unit/                   domain and pure logic
+  integration/            schema, persistence, use cases, messaging, faults
+  concurrency/            parallel connections and three real processes
+  e2e/                    HTTP
+docker/localstack/        queue provisioning
 ```
-
-See [module boundaries](src/modules/README.md), [architecture and decisions](ARCHITECTURE.md),
-[implementation checklist](docs/IMPLEMENTATION_PLAN.md), and
-[public implementation review](docs/REFERENCE_REVIEW.md).
-
-## Delivery scope
-
-Planned HTTP endpoints: `POST /wallets`, `GET /wallets/:walletId`,
-`GET /wallets/:walletId/ledger`, `GET /wagering/transactions/:transactionId`,
-`GET /providers/:providerId/wagering/transactions/:externalTransactionId`,
-`POST /wagering/transactions`, `POST /wallets/:walletId/reconciliation`,
-`GET /health/live`, and `GET /health/ready`.
-
-Planned operations: `BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`;
-`OPENING` must remain internal. Both HTTP and SQS will use one application
-use case. The PostgreSQL transaction will atomically persist wallet, wager,
-ledger, inbox (if applicable) and outbox.
-
-See the [original README](docs/CHALLENGE.md) for authoritative behavior,
-evaluation criteria, required test scenarios, and event contracts.
-
-## Integrity and limitations
-
-Do not treat the current bootstrap as a complete submission.
-The only implemented route is `/health/live`. It **does not** prove database
-or queue readiness. Authentication is intentionally not implemented in this
-foundation, as permitted by the challenge when documented.

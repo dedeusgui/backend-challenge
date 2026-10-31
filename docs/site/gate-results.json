@@ -1,8 +1,8 @@
 {
-  "commit": "af998ff873a371a6348c09ec6488efb42f0bcb46",
-  "ciRun": "https://github.com/dedeusgui/backend-challenge/actions/runs/41251559996",
-  "command": "bun run check:all, job checks, GitHub Actions run 41251559996",
-  "unit": 362,
+  "commit": "ee2369ad759baef732c30a3b1eadcc7c8ff52ef8",
+  "ciRun": "https://github.com/dedeusgui/backend-challenge/actions/runs/41253951516",
+  "command": "bun run check:all, job checks, GitHub Actions run 41253951516",
+  "unit": 384,
   "infra": 4,
   "integration": 151,
   "concurrency": 23,

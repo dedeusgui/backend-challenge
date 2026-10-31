@@ -1,5 +1,14 @@
 # Load test history
 
+> **Read this first: runs 0 to 6 are superseded.** They were made with a driver that started `ps` and
+> `docker stats` from inside the load generator's own loop, every 500 ms and on every reading. Those
+> process starts delayed the generator, and the delay went into the latency. On the same stack at
+> 50 req/s, the first driver measured a p99 of 478 ms and the one that starts no process during a step
+> measured 48 ms, with the generator's lag p99 going from 44 ms to 1.9 ms (`DECISIONS.md`, N-16). So the
+> latencies below are pessimistic, and so is the agreed figure of 150 req/s that was drawn from them. The
+> pinned runs in `LOAD_TEST_RESULTS.md` replace them. The runs stay here as the record of what was
+> measured, and of why the driver changed.
+
 `docs/LOAD_TEST_RESULTS.md` is written again by every run, so it holds only the last one. This
 file keeps the others. The numbers were copied from the run logs. Every run is on the same machine,
 a 4-vCPU cloud VM with 15.7 GiB of memory, with all components on it: three API processes, two

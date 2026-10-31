@@ -14,7 +14,7 @@ against its ledger.
 - [DECISIONS.md](DECISIONS.md): every technical decision, with its reason, trade-off, evidence and status.
 - [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.md): the flow of data: colour-coded graphs, the function-by-entity matrix, the response table, and every entity with its table and methods.
 - [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md): the review of every invariant and constraint, and the decisions the owner must confirm.
-- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md): the optional load test, with its environment.
+- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md): the optional load test, one run per CPU count, with its environment and its limits.
 
 ## Stack
 
@@ -66,7 +66,7 @@ bun run src/worker.ts         # worker, in another terminal
 | `bun run test:integration` | PostgreSQL and LocalStack integration tests             |
 | `bun run test:concurrency` | real concurrency, and three API processes plus a worker |
 | `bun run test:e2e`         | HTTP end-to-end tests                                   |
-| `bun run test:load`        | optional load run, writes `docs/LOAD_TEST_RESULTS.md`   |
+| `bun run test:load`        | optional load run per CPU count, writes the report      |
 | `bun run check:fast`       | typecheck, lint, format and unit tests                  |
 | `bun run check:all`        | everything above, which is the final gate               |
 
@@ -147,12 +147,18 @@ bun run test:concurrency
 Each test asserts that exactly one operation has the effect, and that the rest are replays,
 conflicts or rejections. `docs/TEST_STRATEGY.md` says which spec requirement each test proves.
 
-To run the optional load test against the same kind of stack. It ramps the rate in steps and checks
-every step against the constraints in `test/load/thresholds.ts`:
+To run the optional load test. It pins the stack to a number of CPUs, sends a product mix on a fixed
+schedule, ramps the rate in steps, and checks every step against the constraints in
+`test/load/thresholds.ts`. The generator runs on the CPUs the stack does not use:
 
 ```bash
-bun run test:load   # writes docs/LOAD_TEST_RESULTS.md; the runs are in docs/LOAD_TEST_HISTORY.md
+bun run test:load                 # every CPU of the host, one run, written to docs/load/results/cpus-<N>.json
+LOAD_CPUS=1 bun run test:load     # the stack on one CPU; repeat for 2, 4, ...
 ```
+
+Each run writes its record, then the report `docs/LOAD_TEST_RESULTS.md` from every record in the
+directory. The method is in `DECISIONS.md`, group N. The superseded runs are in `docs/LOAD_TEST_HISTORY.md`.
+Pinning needs Linux.
 
 ## Tests
 
@@ -171,8 +177,9 @@ These are listed in full in `ARCHITECTURE.md` section 14. The most important:
 - **Broker-side dead-lettering** (after ten deliveries) is configured in Compose and checked on the
   provisioned queue by `test/integration/messaging/broker-redrive.test.ts`.
 - **Metrics are per process**, with no aggregation or dashboard.
-- **Load is measured on one cloud machine.** The agreed figure is 150 requests per second sustained,
-  with 200 as the observed ceiling. The numbers are not a capacity claim for any other machine.
+- **Load is measured on one cloud machine, with the stack pinned to 1, 2 and 4 CPUs.** The report gives the
+  agreed rate, the CPU per request and the predicted ceiling for each count. The numbers are not a capacity
+  claim for any other machine: each is for the machine that ran it, and its environment is next to it.
 - The repository's Dockerfile image build could not run in the authoring sandbox, whose TLS
   proxy blocks package downloads. The stack was verified from clean volumes with an image
   built from the same source and the sandbox CA.
@@ -198,5 +205,6 @@ test/
   integration/            schema, persistence, use cases, messaging, faults
   concurrency/            parallel connections and three real processes
   e2e/                    HTTP
+  load/                   optional load test: workload, pinning, measurement, report
 docker/localstack/        queue provisioning
 ```

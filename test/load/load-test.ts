@@ -1,157 +1,101 @@
 /**
- * Load test, an optional differential of the challenge (section 14).
+ * Load test (ARCHITECTURE.md section 14). It runs the real stack as independent processes, three API
+ * processes and two workers, on one PostgreSQL and one LocalStack, under a product mix (test/load/workload.ts).
  *
- * It runs the real stack as independent processes: three API processes and two workers, sharing one
- * PostgreSQL and one LocalStack. Requests are sent on a schedule, at a fixed rate per step (an open
- * model): the next request is sent when its time comes, whether or not the previous one has answered.
- * Latency is measured from the scheduled time, so a slow system cannot hide its queue by slowing the
- * sender (coordinated omission).
+ * The stack is pinned to a number of CPUs (LOAD_CPUS, default: every CPU of the host). The processes
+ * are pinned with taskset and the containers with their cpuset, and the generator runs on the CPUs the
+ * stack does not use. So the figures are for a machine with that many CPUs, and the CPU per request does
+ * not count the generator.
  *
- * Each step is checked against LOAD_THRESHOLDS: errors, lost requests, latency, generator lag, outbox
- * drain, memory, and the invariant `wallet.balance == ledger` for every wallet. The ramp stops at the
- * first failing step. The agreed rate is the highest step that passed. The report is written to
- * docs/LOAD_TEST_RESULTS.md, with its limits.
+ * Requests are sent on a schedule at a fixed rate per step: an open model. The next request is sent when
+ * its time comes, whether or not the previous one has answered. Latency is measured from the scheduled
+ * time, so a slow system cannot hide its queue by slowing the sender (coordinated omission).
  *
- * Run with `bun run test:load`. It is not part of `check:all`. Its numbers describe the machine that
- * runs it. For a quick check, set LOAD_RATES=25,50 and LOAD_STEP_SECONDS=3.
+ * Each step is checked against LOAD_THRESHOLDS. The ramp stops at the first failing step, and the agreed
+ * rate is the highest step that passed. Each CPU count writes docs/load/results/cpus-<N>.json, and the
+ * report (docs/LOAD_TEST_RESULTS.md) is rendered from all of them.
+ *
+ * Run with `bun run test:load`. It is not part of `check:all`. Its numbers describe the machine that runs
+ * it. For a quick check, set LOAD_RATES=25,50 and LOAD_STEP_SECONDS=3, and point LOAD_RESULTS_DIR and
+ * LOAD_REPORT_PATH at a scratch directory, so that the committed results are not overwritten.
  */
-import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import { CreateApiClient } from '../../src/modules/auth/application/create-api-client.use-case';
 import { MikroOrmApiClientRepository } from '../../src/modules/auth/infrastructure/mikro-orm-api-client.repository';
 import { ProcessCluster, type ManagedProcess } from '../concurrency/support/process-cluster';
+import {
+  affinityOf,
+  allowedCpus,
+  containersOf,
+  cpusetOf,
+  planPinning,
+  setCpuset,
+  type PinningPlan,
+} from './host';
+import {
+  LINUX_CLOCK_TICKS,
+  formatCpuList,
+  parseCpuList,
+  parseDockerStats,
+  parsePidTable,
+  parseProcStatRssKiB,
+  parseProcStatTicks,
+  percentile,
+  stripTerminalCodes,
+} from './metrics';
+import {
+  RUN_FORMAT,
+  RUN_VERSION,
+  type KindRecord,
+  type RunRecord,
+  type StepRecord,
+} from './records';
+import { readRuns, renderReport, writeRun } from './report';
 import { LOAD_THRESHOLDS } from './thresholds';
+import {
+  WORKLOAD_KINDS,
+  createPlanner,
+  requestFor,
+  type PlannedOperation,
+  type RequestContext,
+  type WorkloadKind,
+  type WorkloadWallet,
+} from './workload';
 
-const RATES: readonly number[] = process.env.LOAD_RATES
-  ? process.env.LOAD_RATES.split(',').map(Number)
+const env = process.env;
+const RATES: readonly number[] = env.LOAD_RATES
+  ? env.LOAD_RATES.split(',').map(Number)
   : LOAD_THRESHOLDS.stepRatesPerSecond;
-const STEP_SECONDS = Number(process.env.LOAD_STEP_SECONDS ?? LOAD_THRESHOLDS.stepSeconds);
-const REPORT_PATH = `${import.meta.dir}/../../docs/LOAD_TEST_RESULTS.md`;
+const STEP_SECONDS = Number(env.LOAD_STEP_SECONDS ?? LOAD_THRESHOLDS.stepSeconds);
+const IDLE_SECONDS = Number(env.LOAD_IDLE_SECONDS ?? LOAD_THRESHOLDS.idleSeconds);
+const WARMUP_SECONDS = Number(env.LOAD_WARMUP_SECONDS ?? LOAD_THRESHOLDS.warmupSeconds);
+const RESULTS_DIR = env.LOAD_RESULTS_DIR ?? `${import.meta.dir}/../../docs/load/results`;
+const REPORT_PATH = env.LOAD_REPORT_PATH ?? `${import.meta.dir}/../../docs/LOAD_TEST_RESULTS.md`;
 const DRAIN_CAP_SECONDS = 120;
-
-type Outcome = number | 'LOST';
-
-interface Operation {
-  key: string;
-  body: string;
-  hot: boolean;
-  replay: boolean;
-}
+const PROVIDER_ID = 'provider-a';
+const GAME_ID = 'fortune-chimp';
+const CONTAINER_SERVICES = ['postgres', 'localstack'] as const;
+/** The generator re-launches itself with this set, so that it does not plan its pinning twice. */
+const PLAN_MARK = 'LOAD_PINNING_PLAN';
+const LOCK_SAMPLE_MS = 200;
+const RSS_SAMPLE_MS = 500;
 
 interface Sample {
+  kind: WorkloadKind;
   latencyMs: number;
-  outcome: Outcome;
+  outcome: number | 'LOST';
+  expected: number;
   hot: boolean;
   /** For a lost request: the error class and its message. Never a payload. */
   lostReason?: string;
 }
 
-interface StepReport {
-  rate: number;
-  seconds: number;
-  sent: number;
-  answered: number;
-  lost: number;
-  serverErrors: number;
-  errorRate: number;
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
-  hotP99: number;
-  distinctP99: number;
-  /** CPU use of each stack process during the step, as a percent of one CPU. */
-  cpuPercent: Map<string, number>;
-  /** CPU use of the load generator itself, as a percent of one CPU. */
+interface CpuWindow {
+  elapsedSeconds: number;
+  cpuPercent: Record<string, number>;
   generatorCpuPercent: number;
-  containerCpuPercent: Map<string, number>;
-  lostReasons: Map<string, number>;
-  maxLagMs: number;
-  lagP99Ms: number;
-  drainSeconds: number;
-  violations: number;
-  duplicates: number;
-  peakRssMiB: Map<string, number>;
-  statusMix: Map<string, number>;
-  reasons: string[];
-}
-
-function percentile(sorted: number[], fraction: number): number {
-  if (sorted.length === 0) return Number.NaN;
-  return sorted[Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1)] as number;
-}
-
-/** Clock ticks per second on Linux, where /proc reports CPU time. */
-const LINUX_CLOCK_TICKS = 100;
-
-/**
- * Cumulative CPU seconds of each process. On Linux the exact figure comes from /proc/<pid>/stat, in
- * clock ticks. Elsewhere it comes from ps, in whole seconds. A process that cannot be read is absent.
- */
-async function cpuSecondsOf(pids: number[]): Promise<Map<number, number>> {
-  const result = new Map<number, number>();
-  const fromProc = await Promise.all(
-    pids.map(async (pid) => {
-      try {
-        const stat = await Bun.file(`/proc/${pid}/stat`).text();
-        // The command name is in parentheses and may contain spaces. The fields after it start at state.
-        const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-        const ticks = Number(fields[11]) + Number(fields[12]);
-        return Number.isFinite(ticks) ? ([pid, ticks / LINUX_CLOCK_TICKS] as const) : undefined;
-      } catch {
-        return undefined;
-      }
-    }),
-  );
-  for (const entry of fromProc) {
-    if (entry !== undefined) result.set(entry[0], entry[1]);
-  }
-  if (result.size > 0) return result;
-
-  const child = Bun.spawn(['ps', '-o', 'pid=,cputimes=', '-p', pids.join(',')], {
-    stdout: 'pipe',
-    stderr: 'ignore',
-  });
-  const text = await new Response(child.stdout).text();
-  await child.exited;
-  for (const line of text.split('\n')) {
-    const [pid, seconds] = line.trim().split(/\s+/).map(Number);
-    if (
-      pid !== undefined &&
-      seconds !== undefined &&
-      Number.isFinite(pid) &&
-      Number.isFinite(seconds)
-    ) {
-      result.set(pid, seconds);
-    }
-  }
-  return result;
-}
-
-/** CPU percent of each infrastructure container, from docker stats. Empty when Docker is not available. */
-async function containerCpuSample(): Promise<Map<string, number>> {
-  try {
-    const child = Bun.spawn(
-      ['docker', 'stats', '--no-stream', '--format', '{{.Name}}\t{{.CPUPerc}}'],
-      {
-        stdout: 'pipe',
-        stderr: 'ignore',
-      },
-    );
-    const text = await new Response(child.stdout).text();
-    await child.exited;
-    const result = new Map<string, number>();
-    for (const line of text.split('\n')) {
-      const [name, cpu] = line.split('\t');
-      const value = Number.parseFloat(cpu ?? '');
-      if (name !== undefined && Number.isFinite(value)) result.set(name, value);
-    }
-    return result;
-  } catch {
-    return new Map();
-  }
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -167,577 +111,771 @@ async function waitUntil(condition: () => Promise<boolean>, timeoutMs: number): 
   return false;
 }
 
-/** Resident memory in MiB of each process, from `ps`. Works on Linux and macOS. */
-async function rssMiBOf(pids: number[]): Promise<Map<number, number>> {
-  const child = Bun.spawn(['ps', '-o', 'pid=,rss=', '-p', pids.join(',')], {
-    stdout: 'pipe',
-    stderr: 'ignore',
-  });
-  const text = await new Response(child.stdout).text();
-  await child.exited;
-  const result = new Map<number, number>();
-  for (const line of text.split('\n')) {
-    const [pid, rss] = line.trim().split(/\s+/).map(Number);
-    if (pid !== undefined && rss !== undefined && Number.isFinite(pid) && Number.isFinite(rss)) {
-      result.set(pid, rss / 1024);
+/** The output of a command. Its exit status is not an error here: `ps` fails when a process has just gone. */
+async function capture(command: string[]): Promise<string> {
+  try {
+    const child = Bun.spawn(command, { stdout: 'pipe', stderr: 'ignore' });
+    const text = await new Response(child.stdout).text();
+    await child.exited;
+    return text;
+  } catch {
+    return '';
+  }
+}
+
+function pick<T>(items: readonly T[], index: number): T {
+  const item = items[index % items.length];
+  if (item === undefined) throw new Error('no items to pick from');
+  return item;
+}
+
+function finite(value: number): number | null {
+  return Number.isFinite(value) ? value : null;
+}
+
+function mean(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  return finite(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+/** The record name of a container, from its docker name. Other containers are not part of the stack. */
+function componentOf(name: string): (typeof CONTAINER_SERVICES)[number] | undefined {
+  return CONTAINER_SERVICES.find((service) => name.includes(service));
+}
+
+/** Cumulative CPU seconds of each process. /proc gives it exactly on Linux; elsewhere ps gives whole seconds. */
+async function cpuSecondsOf(pids: number[]): Promise<Map<number, number>> {
+  const fromProc = new Map<number, number>();
+  for (const pid of pids) {
+    try {
+      const stat = await Bun.file(`/proc/${pid}/stat`).text();
+      fromProc.set(pid, parseProcStatTicks(stat) / LINUX_CLOCK_TICKS);
+    } catch {
+      // The process has gone, or /proc is not there.
     }
+  }
+  if (fromProc.size > 0) return fromProc;
+  return parsePidTable(await capture(['ps', '-o', 'pid=,cputimes=', '-p', pids.join(',')]));
+}
+
+/** Resident memory in MiB of each process: from /proc on Linux, from ps elsewhere. */
+async function rssMiBOf(pids: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  for (const pid of pids) {
+    try {
+      const kib = parseProcStatRssKiB(await Bun.file(`/proc/${pid}/status`).text());
+      if (kib !== undefined) result.set(pid, kib / 1024);
+    } catch {
+      // The process has gone, or /proc is not there.
+    }
+  }
+  if (result.size > 0) return result;
+  const table = parsePidTable(await capture(['ps', '-o', 'pid=,rss=', '-p', pids.join(',')]));
+  return new Map([...table].map(([pid, kib]) => [pid, kib / 1024] as const));
+}
+
+/** Runs a sample on a loop until it is stopped, with a pause between samples. */
+function sampler(intervalMs: number, tick: () => Promise<void>): { stop: () => Promise<void> } {
+  const state = { running: true };
+  const loop = (async () => {
+    while (state.running) {
+      await tick();
+      if (state.running) await sleep(intervalMs);
+    }
+  })();
+  return {
+    stop: async () => {
+      state.running = false;
+      await loop;
+    },
+  };
+}
+
+/**
+ * CPU of the containers, from one long-lived `docker stats` stream. The generator reads it
+ * asynchronously and never starts a process while it sends requests. Each reading is timestamped, and
+ * a window averages the readings taken inside it. The stream is sampled, not counted: docker reports a
+ * percentage per reading.
+ */
+function startContainerStream(): {
+  finish: (start: number, end: number) => Record<string, number>;
+  stop: () => void;
+} {
+  const readings: Array<{ at: number; component: string; cpu: number }> = [];
+  let stdout: ReadableStream<Uint8Array> | undefined;
+  let kill: () => void = () => undefined;
+  try {
+    const child = Bun.spawn(['docker', 'stats', '--format', '{{.Name}}\t{{.CPUPerc}}'], {
+      stdout: 'pipe',
+      stderr: 'ignore',
+    });
+    stdout = child.stdout;
+    kill = () => child.kill();
+  } catch {
+    // Without docker there are no container figures; the report shows them as n/a.
+  }
+  const readStream = async (): Promise<void> => {
+    if (stdout === undefined) return;
+    const decoder = new TextDecoder();
+    let pending = '';
+    for await (const chunk of stdout) {
+      pending += decoder.decode(chunk, { stream: true });
+      const lines = pending.split('\n');
+      pending = lines.pop() ?? '';
+      for (const line of lines) {
+        const at = performance.now();
+        for (const [name, cpu] of parseDockerStats(stripTerminalCodes(line))) {
+          const component = componentOf(name);
+          if (component !== undefined) readings.push({ at, component, cpu });
+        }
+      }
+    }
+  };
+  // The stream is read in the background and never awaited: the generator must not wait on docker.
+  readStream().catch(() => undefined);
+  return {
+    finish: (start, end) => {
+      const sums = new Map<string, number[]>();
+      for (const entry of readings) {
+        if (entry.at < start || entry.at > end) continue;
+        sums.set(entry.component, [...(sums.get(entry.component) ?? []), entry.cpu]);
+      }
+      return Object.fromEntries(
+        [...sums].map(([component, values]) => [
+          component,
+          values.reduce((sum, value) => sum + value, 0) / values.length,
+        ]),
+      );
+    },
+    stop: () => kill(),
+  };
+}
+
+/** Measures the CPU of the stack and of the generator over one piece of work. */
+async function measureWindow(
+  names: ReadonlyMap<number, string>,
+  containers: ReturnType<typeof startContainerStream>,
+  work: () => Promise<void>,
+): Promise<CpuWindow> {
+  const pids = [...names.keys()];
+  const cpuBefore = await cpuSecondsOf(pids);
+  const generatorBefore = process.cpuUsage();
+  const start = performance.now();
+  await work();
+  const generatorUsed = process.cpuUsage(generatorBefore);
+  const end = performance.now();
+  const cpuAfter = await cpuSecondsOf(pids);
+  const elapsedSeconds = (end - start) / 1000;
+
+  const cpuPercent: Record<string, number> = {};
+  for (const [pid, seconds] of cpuAfter) {
+    const before = cpuBefore.get(pid);
+    const name = names.get(pid);
+    if (before !== undefined && name !== undefined) {
+      cpuPercent[name] = ((seconds - before) / elapsedSeconds) * 100;
+    }
+  }
+  Object.assign(cpuPercent, containers.finish(start, end));
+  return {
+    elapsedSeconds,
+    cpuPercent,
+    generatorCpuPercent: ((generatorUsed.user + generatorUsed.system) / 1e6 / elapsedSeconds) * 100,
+  };
+}
+
+function hotOf(operation: PlannedOperation): boolean {
+  return operation.kind === 'READ_WALLET' ? operation.wallet === 0 : operation.bet.hot;
+}
+
+function sortedLatencies(samples: readonly Sample[]): number[] {
+  return samples.map((sample) => sample.latencyMs).sort((left, right) => left - right);
+}
+
+function kindRecords(samples: readonly Sample[]): Record<string, KindRecord> {
+  const result: Record<string, KindRecord> = {};
+  for (const kind of WORKLOAD_KINDS) {
+    const own = samples.filter((sample) => sample.kind === kind);
+    if (own.length === 0) continue;
+    const answered = own.filter((sample) => sample.outcome !== 'LOST');
+    const latencies = sortedLatencies(answered);
+    const statuses: Record<string, number> = {};
+    for (const sample of own) {
+      const key = String(sample.outcome);
+      statuses[key] = (statuses[key] ?? 0) + 1;
+    }
+    result[kind] = {
+      sent: own.length,
+      answered: answered.length,
+      unexpected: answered.filter((sample) => sample.outcome !== sample.expected).length,
+      p50: finite(percentile(latencies, 0.5)),
+      p95: finite(percentile(latencies, 0.95)),
+      p99: finite(percentile(latencies, 0.99)),
+      statuses,
+    };
   }
   return result;
 }
 
-async function main(): Promise<number> {
-  const cluster = await ProcessCluster.create();
-  const steps: StepReport[] = [];
+function cpuModelName(): string {
+  return cpus()[0]?.model ?? 'unknown';
+}
+
+/** Starts the stack, pinned as the plan says, and returns what the run needs. */
+async function runLoad(plan: PinningPlan): Promise<number> {
+  const stackList = formatCpuList(plan.stack);
+  const generatorList = plan.generator.length > 0 ? formatCpuList(plan.generator) : null;
+  const cluster = await ProcessCluster.create({ cpus: plan.pinned ? stackList : undefined });
+  const containerCpusets: Record<string, string> = {};
+  const restores: Array<() => Promise<void>> = [];
+  const containers = startContainerStream();
   try {
-    const scalar = async (sql: string, params: unknown[] = []): Promise<string> => {
-      const rows = (await cluster.database.orm.em.getConnection().execute(sql, params)) as Array<
-        Record<string, string>
-      >;
-      return Object.values(rows[0] ?? {})[0] ?? '';
-    };
-    const clients = new CreateApiClient({
-      repository: new MikroOrmApiClientRepository(cluster.database.orm),
-      clock: () => new Date(),
-      newId: randomUUID,
-    });
-    const operatorKey = (await clients.execute({ name: 'operator', role: 'OPERATOR' })).apiKey;
-    const providerKey = (
-      await clients.execute({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
-    ).apiKey;
-    const apis: string[] = [];
-    for (let index = 0; index < LOAD_THRESHOLDS.apiProcesses; index += 1) {
-      apis.push(await cluster.startApi(`api-${index + 1}`));
-    }
-    for (let index = 0; index < LOAD_THRESHOLDS.workerProcesses; index += 1) {
-      cluster.startWorker(`worker-${index + 1}`);
-    }
-
-    const wallets: Array<{ id: string; playerId: string }> = [];
-    for (let index = 0; index < LOAD_THRESHOLDS.wallets; index += 1) {
-      const playerId = randomUUID();
-      const response = await fetch(`${apis[index % apis.length] as string}/wallets`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${operatorKey}` },
-        body: JSON.stringify({
-          playerId,
-          initialBalance: { amount: LOAD_THRESHOLDS.startingBalance, currency: 'BRL' },
-        }),
-      });
-      wallets.push({ id: ((await response.json()) as { id: string }).id, playerId });
-    }
-
-    const buildOperations = (count: number): Operation[] => {
-      const operations: Operation[] = [];
-      for (let index = 0; index < count; index += 1) {
-        if (operations.length > 0 && Math.random() < LOAD_THRESHOLDS.replayShare) {
-          const original = operations[Math.floor(Math.random() * operations.length)] as Operation;
-          operations.push({ ...original, replay: true });
-          continue;
-        }
-        const hot = Math.random() < LOAD_THRESHOLDS.hotShare;
-        const wallet = hot
-          ? (wallets[0] as (typeof wallets)[number])
-          : (wallets[Math.floor(Math.random() * wallets.length)] as (typeof wallets)[number]);
-        const externalTransactionId = `load-${index}-${randomUUID()}`;
-        operations.push({
-          key: `provider-a:${externalTransactionId}`,
-          body: JSON.stringify({
-            providerId: 'provider-a',
-            externalTransactionId,
-            playerId: wallet.playerId,
-            walletId: wallet.id,
-            roundId: 'round-987',
-            gameId: 'fortune-chimp',
-            kind: 'BET',
-            money: { amount: LOAD_THRESHOLDS.stake, currency: 'BRL' },
-          }),
-          hot,
-          replay: false,
-        });
-      }
-      return operations;
-    };
-
-    const runStep = async (rate: number): Promise<StepReport> => {
-      const total = Math.round(rate * STEP_SECONDS);
-      const interval = 1000 / rate;
-      const operations = buildOperations(total);
-      const samples: Sample[] = [];
-      const peakRssMiB = new Map<string, number>();
-      const pidNames = new Map(
-        cluster.processes.map((managed: ManagedProcess) => [managed.process.pid, managed.name]),
-      );
-      const lags: number[] = [];
-
-      const sampleRss = async () => {
-        const rss = await rssMiBOf([...pidNames.keys()]);
-        for (const [pid, mib] of rss) {
-          const name = pidNames.get(pid) ?? String(pid);
-          peakRssMiB.set(name, Math.max(peakRssMiB.get(name) ?? 0, mib));
-        }
-      };
-      const sampler = setInterval(() => void sampleRss(), 500);
-
-      const fire = async (index: number, scheduled: number): Promise<void> => {
-        const operation = operations[index] as Operation;
-        const api = apis[index % apis.length] as string;
-        try {
-          const response = await fetch(`${api}/wagering/transactions`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${providerKey}`,
-              'idempotency-key': operation.key,
-            },
-            body: operation.body,
-            signal: AbortSignal.timeout(LOAD_THRESHOLDS.requestTimeoutMs),
-          });
-          await response.text();
-          samples.push({
-            latencyMs: performance.now() - scheduled,
-            outcome: response.status,
-            hot: operation.hot,
-          });
-        } catch (error) {
-          samples.push({
-            latencyMs: performance.now() - scheduled,
-            outcome: 'LOST',
-            hot: operation.hot,
-            lostReason: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-          });
-        }
-      };
-
-      const containerSamples = new Map<string, number[]>();
-      const containerState = { sampling: true };
-      const containerLoop = (async () => {
-        while (containerState.sampling) {
-          for (const [name, cpu] of await containerCpuSample()) {
-            containerSamples.set(name, [...(containerSamples.get(name) ?? []), cpu]);
-          }
-        }
-      })();
-      const cpuBefore = await cpuSecondsOf([...pidNames.keys()]);
-      const generatorBefore = process.cpuUsage();
-      const start = performance.now();
-      const inFlight: Promise<void>[] = [];
-      let next = 0;
-      while (next < total) {
-        const due = start + next * interval;
-        const now = performance.now();
-        if (now < due) {
-          await sleep(due - now);
-          continue;
-        }
-        // Send every request that is due. Catching up keeps the schedule, and the lag is recorded.
-        while (next < total && start + next * interval <= performance.now()) {
-          const scheduled = start + next * interval;
-          lags.push(performance.now() - scheduled);
-          inFlight.push(fire(next, scheduled));
-          next += 1;
-        }
-      }
-      await Promise.all(inFlight);
-      const maxLagMs = Math.max(0, ...lags);
-      const lagP99Ms = percentile(
-        [...lags].sort((left, right) => left - right),
-        0.99,
-      );
-      const elapsedSeconds = (performance.now() - start) / 1000;
-      const generatorUsed = process.cpuUsage(generatorBefore);
-      const generatorCpuPercent =
-        ((generatorUsed.user + generatorUsed.system) / 1e6 / elapsedSeconds) * 100;
-      const cpuAfter = await cpuSecondsOf([...pidNames.keys()]);
-      const cpuPercent = new Map<string, number>();
-      for (const [pid, seconds] of cpuAfter) {
-        const before = cpuBefore.get(pid);
-        if (before !== undefined) {
-          cpuPercent.set(
-            pidNames.get(pid) ?? String(pid),
-            ((seconds - before) / elapsedSeconds) * 100,
+    if (plan.pinned) {
+      for (const service of CONTAINER_SERVICES) {
+        for (const container of await containersOf(service)) {
+          const original = await cpusetOf(container);
+          restores.push(() =>
+            setCpuset(container, original === '' ? formatCpuList(plan.allowed) : original),
           );
+          await setCpuset(container, stackList);
+          containerCpusets[service] = stackList;
         }
       }
-      clearInterval(sampler);
-      containerState.sampling = false;
-      await containerLoop;
-      const containerCpuPercent = new Map(
-        [...containerSamples].map(
-          ([name, values]) =>
-            [name, values.reduce((sum, value) => sum + value, 0) / values.length] as const,
-        ),
-      );
-      await sampleRss();
-
-      const drainStarted = performance.now();
-      const drained = await waitUntil(
-        async () =>
-          (await scalar(
-            `SELECT count(*)::text FROM outbox_messages WHERE published_at IS NULL`,
-          )) === '0',
-        DRAIN_CAP_SECONDS * 1000,
-      );
-      const drainSeconds = drained
-        ? (performance.now() - drainStarted) / 1000
-        : Number.POSITIVE_INFINITY;
-
-      const violations = Number(
-        await scalar(
-          `SELECT count(*)::text FROM wallets w
-            WHERE w.balance <> (SELECT COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE -amount END), 0)
-                                  FROM wallet_ledger_entries l WHERE l.wallet_id = w.id)
-               OR w.balance < 0`,
-        ),
-      );
-      const duplicates = Number(
-        await scalar(
-          `SELECT count(*)::text FROM (SELECT external_transaction_id FROM wager_transactions
-             GROUP BY external_transaction_id HAVING count(*) > 1) d`,
-        ),
-      );
-
-      const answered = samples.filter((sample) => sample.outcome !== 'LOST');
-      const latencies = answered
-        .map((sample) => sample.latencyMs)
-        .sort((left, right) => left - right);
-      const distinctLatencies = answered
-        .filter((sample) => !sample.hot)
-        .map((sample) => sample.latencyMs)
-        .sort((left, right) => left - right);
-      const hotLatencies = answered
-        .filter((sample) => sample.hot)
-        .map((sample) => sample.latencyMs)
-        .sort((left, right) => left - right);
-      const lost = samples.length - answered.length;
-      const serverErrors = samples.filter(
-        (sample) =>
-          sample.outcome === 'LOST' ||
-          (typeof sample.outcome === 'number' && sample.outcome >= 500),
-      ).length;
-      const statusMix = new Map<string, number>();
-      for (const sample of samples) {
-        const key = String(sample.outcome);
-        statusMix.set(key, (statusMix.get(key) ?? 0) + 1);
-      }
-      const lostReasons = new Map<string, number>();
-      for (const sample of samples) {
-        if (sample.lostReason !== undefined) {
-          lostReasons.set(sample.lostReason, (lostReasons.get(sample.lostReason) ?? 0) + 1);
-        }
-      }
-      const errorRate = samples.length === 0 ? 1 : serverErrors / samples.length;
-
-      const reasons: string[] = [];
-      if (lost > LOAD_THRESHOLDS.maxLostRequests)
-        reasons.push(`${lost} requests lost (max ${LOAD_THRESHOLDS.maxLostRequests})`);
-      if (errorRate > LOAD_THRESHOLDS.maxErrorRate)
-        reasons.push(
-          `error rate ${(errorRate * 100).toFixed(3)}% (max ${LOAD_THRESHOLDS.maxErrorRate * 100}%)`,
-        );
-      if (!(percentile(latencies, 0.95) <= LOAD_THRESHOLDS.maxP95Ms))
-        reasons.push(
-          `p95 ${percentile(latencies, 0.95).toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP95Ms})`,
-        );
-      if (!(percentile(latencies, 0.99) <= LOAD_THRESHOLDS.maxP99Ms))
-        reasons.push(
-          `p99 ${percentile(latencies, 0.99).toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP99Ms})`,
-        );
-      if (!(lagP99Ms <= LOAD_THRESHOLDS.maxGeneratorLagP99Ms)) {
-        reasons.push(
-          `generator lag p99 ${lagP99Ms.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxGeneratorLagP99Ms})`,
-        );
-      }
-      if (!(drainSeconds <= LOAD_THRESHOLDS.maxOutboxDrainSeconds))
-        reasons.push(
-          `outbox drained in ${Number.isFinite(drainSeconds) ? drainSeconds.toFixed(1) : 'more than ' + DRAIN_CAP_SECONDS} s (max ${LOAD_THRESHOLDS.maxOutboxDrainSeconds})`,
-        );
-      if (violations > 0)
-        reasons.push(`${violations} wallets where balance differs from the ledger`);
-      if (duplicates > 0) reasons.push(`${duplicates} transactions processed more than once`);
-      for (const [name, mib] of peakRssMiB) {
-        if (mib > LOAD_THRESHOLDS.maxRssMiBPerProcess)
-          reasons.push(
-            `${name} peaked at ${mib.toFixed(0)} MiB (max ${LOAD_THRESHOLDS.maxRssMiBPerProcess})`,
-          );
-      }
-
-      const report: StepReport = {
-        rate,
-        seconds: STEP_SECONDS,
-        sent: samples.length,
-        answered: answered.length,
-        lost,
-        serverErrors,
-        errorRate,
-        p50: percentile(latencies, 0.5),
-        p95: percentile(latencies, 0.95),
-        p99: percentile(latencies, 0.99),
-        max: latencies.at(-1) ?? Number.NaN,
-        hotP99: percentile(hotLatencies, 0.99),
-        distinctP99: percentile(distinctLatencies, 0.99),
-        cpuPercent,
-        generatorCpuPercent,
-        containerCpuPercent,
-        lostReasons,
-        maxLagMs,
-        lagP99Ms,
-        drainSeconds,
-        violations,
-        duplicates,
-        peakRssMiB,
-        statusMix,
-        reasons,
-      };
-      console.log(
-        `rate ${rate}/s: sent ${report.sent}, lost ${lost}, errors ${serverErrors}, p99 ${report.p99.toFixed(1)} ms, drain ${Number.isFinite(drainSeconds) ? drainSeconds.toFixed(1) : 'none'} s, ${reasons.length === 0 ? 'PASS' : 'FAIL: ' + reasons.join('; ')}`,
-      );
-      return report;
-    };
-
-    for (const rate of RATES) {
-      const report = await runStep(rate);
-      steps.push(report);
-      if (report.reasons.length > 0) break;
     }
-
-    // Stop the workers gracefully, so that they print their final metrics.
-    const workers = cluster.processes.filter((managed) => managed.name.startsWith('worker-'));
-    for (const worker of workers) {
-      worker.process.kill('SIGTERM');
-      await worker.process.exited;
-    }
-    const apiCounters = await Promise.all(
-      apis.map(async (api) => {
-        const response = await fetch(`${api}/metrics`, {
-          headers: { authorization: `Bearer ${operatorKey}` },
-        });
-        return ((await response.json()) as { counters: Record<string, number> }).counters;
-      }),
-    );
-    const concurrencyConflicts = apiCounters.reduce(
-      (sum, counters) => sum + (counters['concurrency_conflicts_total'] ?? 0),
-      0,
-    );
-    const passing = steps.filter((step) => step.reasons.length === 0);
-    const agreed = passing.at(-1);
-    const failing = steps.find((step) => step.reasons.length > 0);
-    const totalSent = steps.reduce((sum, step) => sum + step.sent, 0);
-    const report = renderReport({
-      steps,
-      agreed,
-      failing,
-      totalSent,
-      concurrencyConflicts,
-    });
-    await writeFile(REPORT_PATH, report);
-    console.log(`\nagreed sustained rate: ${agreed ? `${agreed.rate} requests/s` : 'none'}`);
-    console.log(`report written to docs/LOAD_TEST_RESULTS.md`);
-    return agreed === undefined ? 1 : 0;
+    return await measureRun(cluster, plan, containers, stackList, generatorList, containerCpusets);
   } finally {
+    containers.stop();
+    for (const restore of restores.reverse()) {
+      try {
+        await restore();
+      } catch (error) {
+        console.error(`could not restore a container cpuset: ${String(error)}`);
+      }
+    }
     await cluster.close();
   }
 }
 
-/** The CPU model from /proc/cpuinfo, on Linux. Elsewhere the report says unknown. */
-function cpuModelName(): string {
-  try {
-    const line = readFileSync('/proc/cpuinfo', 'utf8')
-      .split('\n')
-      .find((candidate) => candidate.startsWith('model name'));
-    return line?.split(':')[1]?.trim() ?? 'unknown';
-  } catch {
-    return 'unknown';
+async function measureRun(
+  cluster: ProcessCluster,
+  plan: PinningPlan,
+  containers: ReturnType<typeof startContainerStream>,
+  stackList: string,
+  generatorList: string | null,
+  containerCpusets: Record<string, string>,
+): Promise<number> {
+  const clients = new CreateApiClient({
+    repository: new MikroOrmApiClientRepository(cluster.database.orm),
+    clock: () => new Date(),
+    newId: randomUUID,
+  });
+  const operatorKey = (await clients.execute({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  const providerKey = (
+    await clients.execute({ name: 'provider a', role: 'PROVIDER', providerId: PROVIDER_ID })
+  ).apiKey;
+
+  const apis: string[] = [];
+  for (let index = 0; index < LOAD_THRESHOLDS.apiProcesses; index += 1) {
+    apis.push(await cluster.startApi(`api-${index + 1}`));
   }
-}
-
-/** One row of the CPU table: each process, then the two containers, then the generator. */
-function componentRow(step: StepReport): string {
-  const processCpu = (name: string) => step.cpuPercent.get(name);
-  const containerCpu = (fragment: string) =>
-    [...step.containerCpuPercent].find(([name]) => name.includes(fragment))?.[1];
-  const values = [
-    processCpu('api-1'),
-    processCpu('api-2'),
-    processCpu('api-3'),
-    processCpu('worker-1'),
-    processCpu('worker-2'),
-    containerCpu('postgres'),
-    containerCpu('localstack'),
-    step.generatorCpuPercent,
-  ];
-  return `| ${step.rate} | ${values.map((value) => (value === undefined ? 'n/a' : cell(value, 0))).join(' | ')} |`;
-}
-
-function cell(value: number, digits = 1): string {
-  return Number.isFinite(value) ? value.toFixed(digits) : 'n/a';
-}
-
-function renderReport(input: {
-  steps: StepReport[];
-  agreed: StepReport | undefined;
-  failing: StepReport | undefined;
-  totalSent: number;
-  concurrencyConflicts: number;
-}): string {
-  const { steps, agreed, failing, totalSent, concurrencyConflicts } = input;
-  const cpuName = cpuModelName();
-  const peakRss = new Map<string, number>();
-  const statusMix = new Map<string, number>();
-  for (const step of steps) {
-    for (const [name, mib] of step.peakRssMiB)
-      peakRss.set(name, Math.max(peakRss.get(name) ?? 0, mib));
-    for (const [status, count] of step.statusMix)
-      statusMix.set(status, (statusMix.get(status) ?? 0) + count);
+  for (let index = 0; index < LOAD_THRESHOLDS.workerProcesses; index += 1) {
+    cluster.startWorker(`worker-${index + 1}`);
   }
-  const rows = steps
-    .map((step) => {
-      const stackCpu = [...step.cpuPercent.values()].reduce((sum, value) => sum + value, 0);
-      const largest = Math.max(0, ...step.peakRssMiB.values());
-      return `| ${step.rate} | ${step.sent} | ${step.lost} | ${step.serverErrors} | ${(step.errorRate * 100).toFixed(3)}% | ${cell(step.p50)} | ${cell(step.p95)} | ${cell(step.p99)} | ${cell(step.distinctP99)} | ${cell(step.hotP99)} | ${cell(step.max)} | ${cell(step.lagP99Ms)} | ${Number.isFinite(step.drainSeconds) ? cell(step.drainSeconds) : 'not drained'} | ${cell(largest, 0)} | ${cell(stackCpu, 0)} | ${cell(step.generatorCpuPercent, 0)} | ${step.reasons.length === 0 ? 'PASS' : 'FAIL'} |`;
-    })
-    .join('\n');
-  const lostRows =
-    steps
-      .flatMap((step) =>
-        [...step.lostReasons].map(([reason, count]) => `| ${step.rate} | ${reason} | ${count} |`),
-      )
-      .join('\n') || '| none | | 0 |';
-  const memory = [...peakRss]
-    .sort(([left], [right]) => (left < right ? -1 : 1))
-    .map(([name, mib]) => `| ${name} | ${cell(mib, 0)} |`)
-    .join('\n');
-  const mix = [...statusMix]
-    .sort(([left], [right]) => (left < right ? -1 : 1))
-    .map(([status, count]) => `| ${status} | ${count} |`)
-    .join('\n');
-  const verdict = agreed
-    ? `**Agreed sustained rate on this machine: ${agreed.rate} requests per second.** It is the highest step that passed every constraint, held for ${agreed.seconds} seconds.`
-    : '**No step passed every constraint.** The lowest rate already breaks at least one constraint. See the first failing step below.';
-  const failure = failing
-    ? `**First failing step: ${failing.rate} requests per second.** It broke: ${failing.reasons.join('; ')}.`
-    : 'No step failed. The ramp reached its last rate.';
-  const limits = [
-    'It proves that the system kept its constraints for the length of one step, at one rate, on this machine.',
-    'It does not prove a rate for longer than a step. There is no soak test.',
-    'The API, the workers, PostgreSQL, LocalStack and the load generator run on the same CPUs. The table of CPU use shows how much of the machine each one took. On a dedicated machine, or on a larger one, the knee would move.',
-    'The queue is LocalStack, not AWS SQS. Its latency and its limits differ from AWS.',
-    'PostgreSQL runs with its default configuration, on local disk, with no replica and no tuning.',
-    'The mix is ours: BET operations over 50 wallets, with about 5% on one hot wallet and about 5% replays. Real provider traffic has WIN, LOSS, REFUND and ROLLBACK as well.',
-    'Latency is the client view, measured from the scheduled send time. The percentiles come from our own sample, not from a histogram.',
-    'Business rejections (422, 409) are answers, not errors. Errors are 5xx and requests that got no response.',
-    'Each step ran once. There is no confidence interval.',
-    'Outbox lag during a step is not measured per event. The drain time after the step is measured, and the server summary gives only the average and the maximum.',
-    'Memory and CPU come from `ps`, so the run needs Linux or macOS. On Windows, run it inside WSL. CPU is in whole seconds, sampled at the start and end of each step.',
-  ]
-    .map((line) => `- ${line}`)
-    .join('\n');
-  return `# Load test results
+  const names = new Map<number, string>(
+    cluster.processes.map((managed: ManagedProcess) => [managed.process.pid, managed.name]),
+  );
 
-Generated by \`bun run test:load\` on ${new Date().toISOString()}. The constraints are in
-\`test/load/thresholds.ts\`. The method is in \`DECISIONS.md\`, group N.
+  const observedAffinity: Record<string, string> = {};
+  if (plan.pinned) {
+    for (const managed of cluster.processes) {
+      const list = await affinityOf(managed.process.pid);
+      if (list !== undefined) observedAffinity[managed.name] = formatCpuList(parseCpuList(list));
+    }
+  }
 
-## Verdict
+  const wallets: WorkloadWallet[] = [];
+  for (let index = 0; index < LOAD_THRESHOLDS.wallets; index += 1) {
+    const playerId = randomUUID();
+    const response = await fetch(`${pick(apis, index)}/wallets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${operatorKey}` },
+      body: JSON.stringify({
+        playerId,
+        initialBalance: { amount: LOAD_THRESHOLDS.startingBalance, currency: 'BRL' },
+      }),
+    });
+    wallets.push({ id: ((await response.json()) as { id: string }).id, playerId });
+  }
 
-${verdict}
+  const context: RequestContext = {
+    providerId: PROVIDER_ID,
+    gameId: GAME_ID,
+    wallets,
+    stake: LOAD_THRESHOLDS.stake,
+    winAmount: LOAD_THRESHOLDS.winAmount,
+  };
+  const planner = createPlanner({
+    mix: LOAD_THRESHOLDS.workloadPercent,
+    wallets: wallets.length,
+    hotShare: LOAD_THRESHOLDS.hotShare,
+    settleAfter: LOAD_THRESHOLDS.settleAfterOperations,
+    readAfter: LOAD_THRESHOLDS.readAfterOperations,
+    replayAfter: LOAD_THRESHOLDS.replayAfterOperations,
+    runId: randomUUID().slice(0, 8),
+    random: Math.random,
+  });
 
-${failure}
+  const outboxCount = async (): Promise<number> =>
+    Number(
+      (
+        (await cluster.database.orm.em
+          .getConnection()
+          .execute('SELECT count(*)::text AS n FROM outbox_messages')) as Array<{ n: string }>
+      )[0]?.n ?? 'NaN',
+    );
+  const unpublished = async (): Promise<number> =>
+    Number(
+      (
+        (await cluster.database.orm.em
+          .getConnection()
+          .execute(
+            'SELECT count(*)::text AS n FROM outbox_messages WHERE published_at IS NULL',
+          )) as Array<{ n: string }>
+      )[0]?.n ?? 'NaN',
+    );
+  const scalar = async (sql: string): Promise<string> => {
+    const rows = (await cluster.database.orm.em.getConnection().execute(sql)) as Array<
+      Record<string, string>
+    >;
+    return Object.values(rows[0] ?? {})[0] ?? '';
+  };
 
-Total requests sent in this run: ${totalSent}. Lost requests in the run: ${steps.reduce((sum, step) => sum + step.lost, 0)}.
-Lock races lost and retried across all API processes: ${concurrencyConflicts}.
+  // The warm-up is run and not kept: its requests warm the stack, and the drain after it keeps the idle
+  // measurement free of publishing.
+  const warmup = await runStep({
+    rate: LOAD_THRESHOLDS.warmupRatePerSecond,
+    seconds: WARMUP_SECONDS,
+    cluster,
+    names,
+    apis,
+    operatorKey,
+    providerKey,
+    context,
+    planner,
+    containers,
+    outboxCount,
+    unpublished,
+    scalar,
+  });
+  const idle = await measureWindow(names, containers, () => sleep(IDLE_SECONDS * 1000));
 
-## Constraints
+  const steps: StepRecord[] = [];
+  for (const rate of RATES) {
+    const step = await runStep({
+      rate,
+      seconds: STEP_SECONDS,
+      cluster,
+      names,
+      apis,
+      operatorKey,
+      providerKey,
+      context,
+      planner,
+      containers,
+      outboxCount,
+      unpublished,
+      scalar,
+    });
+    steps.push(step);
+    console.log(
+      `rate ${rate}/s: sent ${step.sent}, lost ${step.lost}, errors ${step.serverErrors}, p99 ${step.p99?.toFixed(1) ?? 'n/a'} ms, ${step.reasons.length === 0 ? 'PASS' : `FAIL: ${step.reasons.join('; ')}`}`,
+    );
+    if (step.reasons.length > 0) break;
+  }
 
-| Constraint | Value |
-| --- | --- |
-| Error rate (5xx and lost, over requests sent) | at most ${LOAD_THRESHOLDS.maxErrorRate * 100}% |
-| Lost requests (no HTTP response within ${LOAD_THRESHOLDS.requestTimeoutMs / 1000} s) | at most ${LOAD_THRESHOLDS.maxLostRequests} |
-| p95 latency, answered requests | at most ${LOAD_THRESHOLDS.maxP95Ms} ms |
-| p99 latency, answered requests | at most ${LOAD_THRESHOLDS.maxP99Ms} ms |
-| Generator lag behind the schedule, p99 | at most ${LOAD_THRESHOLDS.maxGeneratorLagP99Ms} ms |
-| Outbox drained after the step | within ${LOAD_THRESHOLDS.maxOutboxDrainSeconds} s |
-| Resident memory of any one process | at most ${LOAD_THRESHOLDS.maxRssMiBPerProcess} MiB |
-| Balance equals the ledger, and no balance below zero | every wallet, every step |
-| A transaction processed twice | none |
+  // Stop the workers gracefully, so that they print their final metrics.
+  for (const managed of cluster.processes.filter((candidate) =>
+    candidate.name.startsWith('worker-'),
+  )) {
+    managed.process.kill('SIGTERM');
+    await managed.process.exited;
+  }
+  const apiCounters = await Promise.all(
+    apis.map(async (api) => {
+      const response = await fetch(`${api}/metrics`, {
+        headers: { authorization: `Bearer ${operatorKey}` },
+      });
+      return ((await response.json()) as { counters: Record<string, number> }).counters;
+    }),
+  );
 
-## Steps
+  const passing = steps.filter((step) => step.reasons.length === 0);
+  const run: RunRecord = {
+    format: RUN_FORMAT,
+    version: RUN_VERSION,
+    generatedAt: new Date().toISOString(),
+    stackCpus: plan.stack.length,
+    stackCpuList: plan.pinned ? stackList : 'all',
+    generatorCpuList: generatorList,
+    pinned: plan.pinned,
+    hostLogicalCpus: plan.allowed.length,
+    observedAffinity,
+    containerCpusets,
+    environment: {
+      platform: platform(),
+      release: release(),
+      arch: arch(),
+      cpuModel: cpuModelName(),
+      memoryGiB: totalmem() / 1024 ** 3,
+      bun: Bun.version,
+      topology: `${LOAD_THRESHOLDS.apiProcesses} API, ${LOAD_THRESHOLDS.workerProcesses} workers, one PostgreSQL 17, one LocalStack 4.14`,
+    },
+    constraints: {
+      stepSeconds: STEP_SECONDS,
+      requestTimeoutMs: LOAD_THRESHOLDS.requestTimeoutMs,
+      maxErrorRate: LOAD_THRESHOLDS.maxErrorRate,
+      maxLostRequests: LOAD_THRESHOLDS.maxLostRequests,
+      maxP95Ms: LOAD_THRESHOLDS.maxP95Ms,
+      maxP99Ms: LOAD_THRESHOLDS.maxP99Ms,
+      maxGeneratorLagP99Ms: LOAD_THRESHOLDS.maxGeneratorLagP99Ms,
+      maxOutboxDrainSeconds: LOAD_THRESHOLDS.maxOutboxDrainSeconds,
+      maxRssMiBPerProcess: LOAD_THRESHOLDS.maxRssMiBPerProcess,
+    },
+    workload: {
+      mixPercent: { ...LOAD_THRESHOLDS.workloadPercent },
+      planned: { ...planner.counts },
+      wallets: LOAD_THRESHOLDS.wallets,
+      hotShare: LOAD_THRESHOLDS.hotShare,
+      stake: LOAD_THRESHOLDS.stake,
+      winAmount: LOAD_THRESHOLDS.winAmount,
+      settleAfterOperations: LOAD_THRESHOLDS.settleAfterOperations,
+      readAfterOperations: LOAD_THRESHOLDS.readAfterOperations,
+      replayAfterOperations: LOAD_THRESHOLDS.replayAfterOperations,
+    },
+    warmup: {
+      ratePerSecond: LOAD_THRESHOLDS.warmupRatePerSecond,
+      seconds: WARMUP_SECONDS,
+      sent: warmup.sent,
+    },
+    idle: { seconds: IDLE_SECONDS, cpuPercent: idle.cpuPercent },
+    steps,
+    agreedRate: passing.at(-1)?.rate ?? null,
+    firstFailingRate: steps.find((step) => step.reasons.length > 0)?.rate ?? null,
+    concurrencyConflicts: apiCounters.reduce(
+      (sum, counters) => sum + (counters['concurrency_conflicts_total'] ?? 0),
+      0,
+    ),
+    totalSent: steps.reduce((sum, step) => sum + step.sent, 0),
+  };
 
-Each step sends requests on a fixed schedule for ${STEP_SECONDS} seconds. Latency is measured from
-the scheduled time, in milliseconds. CPU is a percent of one logical CPU, summed over the stack, and
-the generator is shown on its own.
-
-| Rate (req/s) | Sent | Lost | 5xx or lost | Error rate | p50 | p95 | p99 | Distinct-wallet p99 | Hot-wallet p99 | max | Generator lag p99 (ms) | Outbox drain (s) | Largest process RSS (MiB) | Stack CPU (%) | Generator CPU (%) | Verdict |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-${rows}
-
-With ${cpus().length} logical CPUs, a stack CPU of ${cpus().length * 100}% would be the whole machine.
-
-### CPU by component
-
-Each API process and each worker is one Bun process, which runs on one thread. Its CPU cannot pass
-100% of one CPU. PostgreSQL and LocalStack are containers, and their percentages come from
-\`docker stats\`. The generator is the load driver itself.
-
-| Rate (req/s) | api-1 | api-2 | api-3 | worker-1 | worker-2 | PostgreSQL | LocalStack | Generator |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-${steps.map((step) => componentRow(step)).join('\n')}
-
-## Lost requests
-
-Each lost request, with the error the client saw. Only the steps that lost a request are listed.
-
-| Rate (req/s) | Error | Count |
-| ---: | --- | ---: |
-${lostRows}
-
-## Memory
-
-Peak resident memory of each process, over the whole run.
-
-| Process | Peak RSS (MiB) |
-| --- | ---: |
-${memory}
-
-## Status mix
-
-Counted over every step of the run.
-
-| Status | Count |
-| --- | ---: |
-${mix}
-
-## Environment
-
-| Item | Value |
-| --- | --- |
-| Platform | ${platform()} ${release()} (${arch()}) |
-| CPU | ${cpuName} |
-| Logical CPUs | ${cpus().length} |
-| Memory | ${(totalmem() / 1024 ** 3).toFixed(1)} GiB |
-| Bun | ${Bun.version} |
-| Processes | ${LOAD_THRESHOLDS.apiProcesses} API, ${LOAD_THRESHOLDS.workerProcesses} workers, one PostgreSQL 17, one LocalStack 4.14 |
-
-## Definitions
-
-- **Sent**: a request the generator put on the wire at its scheduled time.
-- **Answered**: a request that received an HTTP response of any status.
-- **Lost**: a request that received no response: a timeout, or a connection that closed.
-- **Error**: a 5xx answer, or a lost request. A 4xx answer (422, 409, 400) is a correct answer, and it is not an error.
-- **Generator lag**: how late the generator sent a request compared with its schedule.
-
-## What these numbers prove, and what they do not
-
-${limits}
-
-## How to reproduce on another machine
-
-\`\`\`bash
-bun run infra:up
-bun run test:load
-\`\`\`
-
-Both commands write this file again. For a quick check, use \`LOAD_RATES=25,50 LOAD_STEP_SECONDS=3 bun run test:load\`.
-Do not compare a number from another machine with this one without the environment table next to it.
-`;
+  const written = await writeRun(RESULTS_DIR, run);
+  const runs = await readRuns(RESULTS_DIR);
+  await writeFile(REPORT_PATH, renderReport(runs, new Date().toISOString()));
+  console.log(
+    `\nagreed sustained rate on ${run.stackCpus} CPU${run.stackCpus === 1 ? '' : 's'}: ${run.agreedRate === null ? 'none' : `${run.agreedRate} requests/s`}`,
+  );
+  console.log(`run written to ${written}`);
+  console.log(`report written to ${REPORT_PATH}`);
+  return run.agreedRate === null ? 1 : 0;
 }
 
-process.exitCode = await main();
+interface StepInput {
+  rate: number;
+  seconds: number;
+  cluster: ProcessCluster;
+  names: ReadonlyMap<number, string>;
+  apis: string[];
+  operatorKey: string;
+  providerKey: string;
+  context: RequestContext;
+  planner: ReturnType<typeof createPlanner>;
+  containers: ReturnType<typeof startContainerStream>;
+  outboxCount: () => Promise<number>;
+  unpublished: () => Promise<number>;
+  scalar: (sql: string) => Promise<string>;
+}
+
+async function runStep(input: StepInput): Promise<StepRecord> {
+  const { rate, seconds, cluster, names, apis, operatorKey, providerKey, context, planner } = input;
+  const total = Math.round(rate * seconds);
+  const interval = 1000 / rate;
+  const operations = planner.next(total);
+  const samples: Sample[] = [];
+  const lags: number[] = [];
+  const pids = [...names.keys()];
+  const peakRssMiB = new Map<string, number>();
+  const lockWaiters: number[] = [];
+  const idleInTransaction: number[] = [];
+  let sessionsMax = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
+
+  const sampleRss = async (): Promise<void> => {
+    for (const [pid, mib] of await rssMiBOf(pids)) {
+      const name = names.get(pid);
+      if (name !== undefined) peakRssMiB.set(name, Math.max(peakRssMiB.get(name) ?? 0, mib));
+    }
+  };
+  const rss = sampler(RSS_SAMPLE_MS, sampleRss);
+  const locks = sampler(LOCK_SAMPLE_MS, async () => {
+    const rows = (await cluster.database.orm.em.getConnection().execute(
+      `SELECT count(*) FILTER (WHERE wait_event_type = 'Lock')::text AS locked,
+              count(*) FILTER (WHERE state = 'idle in transaction')::text AS idle_in_transaction,
+              count(*)::text AS sessions
+         FROM pg_stat_activity
+        WHERE datname = current_database() AND backend_type = 'client backend'
+          AND pid <> pg_backend_pid()`,
+    )) as Array<{ locked: string; idle_in_transaction: string; sessions: string }>;
+    lockWaiters.push(Number(rows[0]?.locked ?? 0));
+    idleInTransaction.push(Number(rows[0]?.idle_in_transaction ?? 0));
+    sessionsMax = Math.max(sessionsMax, Number(rows[0]?.sessions ?? 0));
+  });
+  const eventsBefore = await input.outboxCount();
+
+  const fire = async (
+    operation: PlannedOperation,
+    index: number,
+    scheduled: number,
+  ): Promise<void> => {
+    const request = requestFor(operation, context);
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${request.audience === 'operator' ? operatorKey : providerKey}`,
+    };
+    if (request.body !== undefined) headers['content-type'] = 'application/json';
+    if (request.idempotencyKey !== undefined) headers['idempotency-key'] = request.idempotencyKey;
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      const response = await fetch(`${pick(apis, index)}${request.path}`, {
+        method: request.method,
+        headers,
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+        signal: AbortSignal.timeout(LOAD_THRESHOLDS.requestTimeoutMs),
+      });
+      await response.text();
+      samples.push({
+        kind: operation.kind,
+        latencyMs: performance.now() - scheduled,
+        outcome: response.status,
+        expected: request.expectedStatus,
+        hot: hotOf(operation),
+      });
+    } catch (error) {
+      samples.push({
+        kind: operation.kind,
+        latencyMs: performance.now() - scheduled,
+        outcome: 'LOST',
+        expected: request.expectedStatus,
+        hot: hotOf(operation),
+        lostReason: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    } finally {
+      inFlight -= 1;
+    }
+  };
+
+  const cpu = await measureWindow(names, input.containers, async () => {
+    const start = performance.now();
+    const pending: Promise<void>[] = [];
+    let next = 0;
+    while (next < total) {
+      const due = start + next * interval;
+      const now = performance.now();
+      if (now < due) {
+        await sleep(due - now);
+        continue;
+      }
+      // Send every request that is due. Catching up keeps the schedule, and the lag is recorded.
+      while (next < total && start + next * interval <= performance.now()) {
+        const scheduled = start + next * interval;
+        lags.push(performance.now() - scheduled);
+        const operation = operations[next];
+        if (operation !== undefined) pending.push(fire(operation, next, scheduled));
+        next += 1;
+      }
+    }
+    await Promise.all(pending);
+  });
+  await locks.stop();
+  await rss.stop();
+  await sampleRss();
+
+  const eventsCreated = (await input.outboxCount()) - eventsBefore;
+  const drainStarted = performance.now();
+  const drained = await waitUntil(
+    async () => (await input.unpublished()) === 0,
+    DRAIN_CAP_SECONDS * 1000,
+  );
+  const drainSeconds = drained ? (performance.now() - drainStarted) / 1000 : null;
+
+  const violations = Number(
+    await input.scalar(
+      `SELECT count(*)::text FROM wallets w
+        WHERE w.balance <> (SELECT COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE -amount END), 0)
+                              FROM wallet_ledger_entries l WHERE l.wallet_id = w.id)
+           OR w.balance < 0`,
+    ),
+  );
+  const duplicates = Number(
+    await input.scalar(
+      `SELECT count(*)::text FROM (SELECT external_transaction_id FROM wager_transactions
+         GROUP BY external_transaction_id HAVING count(*) > 1) d`,
+    ),
+  );
+
+  const answered = samples.filter((sample) => sample.outcome !== 'LOST');
+  const latencies = sortedLatencies(answered);
+  const distinctLatencies = sortedLatencies(answered.filter((sample) => !sample.hot));
+  const hotLatencies = sortedLatencies(answered.filter((sample) => sample.hot));
+  const lost = samples.length - answered.length;
+  const serverErrors = samples.filter(
+    (sample) =>
+      sample.outcome === 'LOST' || (typeof sample.outcome === 'number' && sample.outcome >= 500),
+  ).length;
+  const statusMix: Record<string, number> = {};
+  const lostReasons: Record<string, number> = {};
+  for (const sample of samples) {
+    const key = String(sample.outcome);
+    statusMix[key] = (statusMix[key] ?? 0) + 1;
+    if (sample.lostReason !== undefined) {
+      lostReasons[sample.lostReason] = (lostReasons[sample.lostReason] ?? 0) + 1;
+    }
+  }
+  const sortedLags = [...lags].sort((left, right) => left - right);
+  const lagP99Ms = percentile(sortedLags, 0.99);
+  const errorRate = samples.length === 0 ? 1 : serverErrors / samples.length;
+  const p95 = percentile(latencies, 0.95);
+  const p99 = percentile(latencies, 0.99);
+
+  const reasons: string[] = [];
+  if (lost > LOAD_THRESHOLDS.maxLostRequests)
+    reasons.push(`${lost} requests lost (max ${LOAD_THRESHOLDS.maxLostRequests})`);
+  if (errorRate > LOAD_THRESHOLDS.maxErrorRate)
+    reasons.push(
+      `error rate ${(errorRate * 100).toFixed(3)}% (max ${LOAD_THRESHOLDS.maxErrorRate * 100}%)`,
+    );
+  if (!(p95 <= LOAD_THRESHOLDS.maxP95Ms))
+    reasons.push(`p95 ${p95.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP95Ms})`);
+  if (!(p99 <= LOAD_THRESHOLDS.maxP99Ms))
+    reasons.push(`p99 ${p99.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP99Ms})`);
+  if (!(lagP99Ms <= LOAD_THRESHOLDS.maxGeneratorLagP99Ms))
+    reasons.push(
+      `generator lag p99 ${lagP99Ms.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxGeneratorLagP99Ms})`,
+    );
+  if (drainSeconds === null || !(drainSeconds <= LOAD_THRESHOLDS.maxOutboxDrainSeconds))
+    reasons.push(
+      `outbox drained in ${drainSeconds === null ? `more than ${DRAIN_CAP_SECONDS} s` : `${drainSeconds.toFixed(1)} s`} (max ${LOAD_THRESHOLDS.maxOutboxDrainSeconds})`,
+    );
+  if (violations > 0) reasons.push(`${violations} wallets where balance differs from the ledger`);
+  if (duplicates > 0) reasons.push(`${duplicates} transactions processed more than once`);
+  for (const [name, mib] of peakRssMiB) {
+    if (mib > LOAD_THRESHOLDS.maxRssMiBPerProcess)
+      reasons.push(
+        `${name} peaked at ${mib.toFixed(0)} MiB (max ${LOAD_THRESHOLDS.maxRssMiBPerProcess})`,
+      );
+  }
+
+  return {
+    rate,
+    seconds,
+    elapsedSeconds: cpu.elapsedSeconds,
+    sent: samples.length,
+    answered: answered.length,
+    lost,
+    serverErrors,
+    errorRate,
+    maxInFlight,
+    p50: finite(percentile(latencies, 0.5)),
+    p95: finite(p95),
+    p99: finite(p99),
+    max: finite(latencies.at(-1) ?? Number.NaN),
+    distinctP99: finite(percentile(distinctLatencies, 0.99)),
+    hotP99: finite(percentile(hotLatencies, 0.99)),
+    lagP99Ms: finite(lagP99Ms),
+    maxLagMs: finite(Math.max(0, ...lags)),
+    drainSeconds,
+    violations,
+    duplicates,
+    eventsCreated,
+    lockWaitersMean: mean(lockWaiters),
+    lockWaitersMax: Math.max(0, ...lockWaiters),
+    idleInTransactionMean: mean(idleInTransaction),
+    idleInTransactionMax: Math.max(0, ...idleInTransaction),
+    connectionsMax: sessionsMax,
+    cpuPercent: cpu.cpuPercent,
+    generatorCpuPercent: finite(cpu.generatorCpuPercent),
+    peakRssMiB: Object.fromEntries(peakRssMiB),
+    statusMix,
+    lostReasons,
+    byKind: kindRecords(samples),
+    reasons,
+  };
+}
+
+/**
+ * The plan of this run. The parent process computes it, from the host and LOAD_CPUS, and the generator
+ * re-launches itself under taskset with the same plan in its environment.
+ */
+async function launch(): Promise<number> {
+  const pinnable = platform() === 'linux';
+  const allowed = await allowedCpus();
+  const stackCount = env.LOAD_CPUS === undefined ? allowed.length : Number(env.LOAD_CPUS);
+  if (!pinnable && stackCount !== allowed.length) {
+    throw new Error('LOAD_CPUS needs Linux, where the stack can be pinned. Leave it unset here.');
+  }
+  const planned = env[PLAN_MARK] === undefined;
+  const plan: PinningPlan = planned
+    ? planPinning({ allowed, stackCount, pinnable })
+    : planFromEnvironment(env[PLAN_MARK] ?? '');
+
+  if (planned && plan.generator.length > 0) {
+    const child = Bun.spawn(
+      ['taskset', '-c', formatCpuList(plan.generator), process.execPath, 'run', import.meta.path],
+      {
+        env: {
+          ...env,
+          [PLAN_MARK]: JSON.stringify({
+            pinned: plan.pinned,
+            allowed: formatCpuList(plan.allowed),
+            stack: formatCpuList(plan.stack),
+            generator: formatCpuList(plan.generator),
+          }),
+          // Raised so that the generator never queues its own requests. The in-flight column shows the count.
+          BUN_CONFIG_MAX_HTTP_REQUESTS: env.BUN_CONFIG_MAX_HTTP_REQUESTS ?? '1024',
+        },
+        stdin: 'ignore',
+        stdout: 'inherit',
+        stderr: 'inherit',
+      },
+    );
+    return child.exited;
+  }
+  return runLoad(plan);
+}
+
+function planFromEnvironment(text: string): PinningPlan {
+  const parsed: unknown = JSON.parse(text);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('pinned' in parsed) ||
+    !('allowed' in parsed) ||
+    !('stack' in parsed) ||
+    !('generator' in parsed) ||
+    typeof parsed.pinned !== 'boolean' ||
+    typeof parsed.allowed !== 'string' ||
+    typeof parsed.stack !== 'string' ||
+    typeof parsed.generator !== 'string'
+  ) {
+    throw new Error(`${PLAN_MARK} is not a pinning plan`);
+  }
+  const allowed = parseCpuList(parsed.allowed);
+  return {
+    pinned: parsed.pinned,
+    hostLogicalCpus: allowed.length,
+    allowed,
+    stack: parseCpuList(parsed.stack),
+    generator: parseCpuList(parsed.generator),
+  };
+}
+
+process.exitCode = await launch();

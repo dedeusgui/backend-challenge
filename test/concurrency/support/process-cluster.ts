@@ -26,9 +26,11 @@ export class ProcessCluster {
     readonly database: TestDatabase,
     readonly queues: TestQueues,
     readonly queueNames: { command: string; deadLetter: string; events: string },
+    /** A taskset CPU list. When set, every process of the cluster is pinned to it. */
+    private readonly cpus: string | undefined,
   ) {}
 
-  static async create(): Promise<ProcessCluster> {
+  static async create(options: { cpus?: string } = {}): Promise<ProcessCluster> {
     const database = await createTestDatabase();
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
     const queueNames = {
@@ -37,7 +39,7 @@ export class ProcessCluster {
       events: `events-${suffix}.fifo`,
     };
     const queues = await createTestQueues(testSqsClient(), queueNames);
-    return new ProcessCluster(database, queues, queueNames);
+    return new ProcessCluster(database, queues, queueNames, options.cpus);
   }
 
   /** Environment shared by every process of this cluster. */
@@ -56,7 +58,14 @@ export class ProcessCluster {
   }
 
   private spawn(name: string, script: string, env: Record<string, string>): ManagedProcess {
-    const child = Bun.spawn(['bun', 'run', `${ROOT}/${script}`], {
+    // taskset execs the command, so the process keeps the pid that the load test measures.
+    const command = [
+      ...(this.cpus === undefined ? [] : ['taskset', '-c', this.cpus]),
+      'bun',
+      'run',
+      `${ROOT}/${script}`,
+    ];
+    const child = Bun.spawn(command, {
       env: this.environment(env),
       stdout: 'pipe',
       stderr: 'pipe',

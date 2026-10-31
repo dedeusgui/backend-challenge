@@ -68,6 +68,9 @@ async function insertWallet(
 interface WagerOverrides {
   id?: string;
   providerId?: string;
+  playerId?: string;
+  roundId?: string;
+  currency?: string;
   externalTransactionId?: string;
   idempotencyKey?: string;
   walletId: string;
@@ -84,14 +87,16 @@ interface WagerOverrides {
 async function insertWager(overrides: WagerOverrides): Promise<string> {
   const id = overrides.id ?? randomUUID();
   const externalId = overrides.externalTransactionId ?? `ext-${randomUUID()}`;
+  const [wallet] = (await sql('SELECT player_id, currency FROM wallets WHERE id = ?', [
+    overrides.walletId,
+  ])) as Array<{ player_id: string; currency: string }>;
   await sql(
     `INSERT INTO wager_transactions (
        id, provider_id, external_transaction_id, idempotency_key, payload_hash,
        wallet_id, player_id, round_id, game_id, kind, amount, currency,
        reference_external_transaction_id, reference_transaction_id,
        status, failure_code, resulting_balance, processed_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'player-1', 'round-987', 'fortune-chimp', ?, ?, 'BRL',
-             ?, ?, ?, ?, ?, ?, now())`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fortune-chimp', ?, ?, ?, ?, ?, ?, ?, ?, ?, now())`,
     [
       id,
       overrides.providerId ?? 'provider-a',
@@ -99,8 +104,11 @@ async function insertWager(overrides: WagerOverrides): Promise<string> {
       overrides.idempotencyKey ?? `provider-a:${externalId}`,
       'a'.repeat(64),
       overrides.walletId,
+      overrides.playerId ?? wallet?.player_id ?? 'player-1',
+      overrides.roundId ?? 'round-987',
       overrides.kind ?? 'BET',
       overrides.amount ?? '25.00',
+      overrides.currency ?? wallet?.currency ?? 'BRL',
       overrides.referenceExternalTransactionId ?? null,
       overrides.referenceTransactionId ?? null,
       overrides.status ?? 'PENDING',
@@ -116,20 +124,25 @@ async function insertLedgerEntry(overrides: {
   walletId: string;
   transactionId: string;
   direction?: string;
+  currency?: string;
   amount?: string;
   balanceBefore?: string;
   balanceAfter?: string;
 }): Promise<void> {
+  const [wallet] = (await sql('SELECT currency FROM wallets WHERE id = ?', [
+    overrides.walletId,
+  ])) as Array<{ currency: string }>;
   await sql(
     `INSERT INTO wallet_ledger_entries (
        id, wallet_id, transaction_id, direction, currency, amount,
        balance_before, balance_after, created_at)
-     VALUES (?, ?, ?, ?, 'BRL', ?, ?, ?, now())`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, now())`,
     [
       randomUUID(),
       overrides.walletId,
       overrides.transactionId,
       overrides.direction ?? 'DEBIT',
+      overrides.currency ?? wallet?.currency ?? 'BRL',
       overrides.amount ?? '25.00',
       overrides.balanceBefore ?? '100.00',
       overrides.balanceAfter ?? '75.00',
@@ -601,5 +614,92 @@ describe('wager_transactions: reference shape and one reversal per reference', (
 
     await reversal('REFUND');
     expect(await sqlStateOf(() => reversal('ROLLBACK'))).toBe('23505');
+  });
+});
+
+describe('wager_transactions: amount, wallet context and round are checked by the database', () => {
+  test('a zero amount is refused for every kind except LOSS', async () => {
+    const walletId = await insertWallet();
+    const bet = await insertWager({
+      walletId,
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+    const loss = (amount: string) =>
+      insertWager({
+        walletId,
+        kind: 'LOSS',
+        amount,
+        referenceExternalTransactionId: 'bet-zero',
+        referenceTransactionId: bet,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        resultingBalance: '75.00',
+      });
+
+    expect(await sqlStateOf(() => insertWager({ walletId, kind: 'BET', amount: '0.00' }))).toBe(
+      '23514',
+    );
+    expect(await sqlStateOf(() => loss('0.00'))).toBe('NO_ERROR');
+  });
+
+  test('a rejected transaction keeps the player and currency it was submitted with', async () => {
+    // A WALLET_PLAYER_MISMATCH or WALLET_CURRENCY_MISMATCH rejection is a row, not an error, so the
+    // database accepts it. The domain is the only check of the player and the currency.
+    const walletId = await insertWallet({ playerId: 'player-owner', currency: 'BRL' });
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          playerId: 'player-stranger',
+          currency: 'USD',
+          status: 'REJECTED',
+          failureCode: 'WALLET_PLAYER_MISMATCH',
+        }),
+      ),
+    ).toBe('NO_ERROR');
+  });
+
+  test('a ledger entry takes the currency of its wallet', async () => {
+    const walletId = await insertWallet({ currency: 'BRL' });
+    const bet = await insertWager({
+      walletId,
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+
+    expect(
+      await sqlStateOf(() => insertLedgerEntry({ walletId, transactionId: bet, currency: 'USD' })),
+    ).toBe('23503');
+  });
+
+  test('a reference must be a transaction of the same round', async () => {
+    const walletId = await insertWallet();
+    const bet = await insertWager({
+      walletId,
+      roundId: 'round-A',
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'WIN',
+          amount: '40.00',
+          roundId: 'round-B',
+          referenceExternalTransactionId: 'bet-round-a',
+          referenceTransactionId: bet,
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          resultingBalance: '115.00',
+        }),
+      ),
+    ).toBe('23503');
   });
 });

@@ -143,6 +143,12 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   PROCESSED and the kind is REFUND or ROLLBACK, so each reference is reversed once, whatever
   the kind of reversal. A BET has at most one PROCESSED result, a WIN or a LOSS, enforced by
   `wager_one_processed_result_per_reference`.
+- Migration 4 (`api_clients`) and migration 5 add, to the wager and ledger tables: a positive
+  amount except for LOSS (`wager_amount_shape`); a ledger entry in its wallet's currency
+  (`ledger_wallet_currency_fk`); and a reference in the same round
+  (`wager_reference_round_key`, `wager_reference_fk`). The player and currency of a transaction
+  are not tied to its wallet in the database. A rejected transaction keeps what it was submitted
+  with, so the domain checks them.
 - `inbox_messages`: primary key `(consumer_name, message_id)`.
 - `outbox_messages`: primary key is the stable event id.
 

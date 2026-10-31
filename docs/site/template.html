@@ -437,10 +437,10 @@
       <section id="testes">
         <h2>Testes e evidências</h2>
         <p>
-          Os números abaixo são do último <code>check:all</code> registrado nesta rodada, sobre a
-          árvore do commit <code>{{GATE_COMMIT}}</code> (<code>docs/site/gate-results.json</code>).
-          Cada suíte roda contra PostgreSQL e LocalStack reais; nenhuma substitui esses serviços por
-          mock.
+          Os números abaixo são do <code>check:all</code> da execução de CI do commit
+          <code>{{GATE_COMMIT_SHORT}}</code> (<a href="{{GATE_RUN_URL}}">registro da execução</a>;
+          os valores estão em <code>docs/site/gate-results.json</code>). Cada suíte roda contra
+          PostgreSQL e LocalStack reais; nenhuma substitui esses serviços por mock.
         </p>
         <div class="table-wrap">
           <table>

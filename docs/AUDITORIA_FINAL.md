@@ -74,62 +74,70 @@ adotada: não cobre dois publicadores, e em carteiras quentes multiplica as requ
 tamanho do lote. Nenhum tempo de execução foi medido para ela, e a conclusão se baseia na contagem de
 requisições, que é determinística.
 
-## Resultado desta rodada
+## Correção desta rodada: CI, benchmark, documentação e Pages
 
-Separado conforme o enunciado (§17). Cada item cita a linha da matriz ou o comando que o prova.
+Esta seção registra o que estava errado na entrega anterior, o que foi corrigido e o que cada correção
+provou. Cada validação cita o commit do código e a execução que a provou. Um commit de documentação posterior
+não muda o código validado.
 
-### Implementado e validado
+### Erros encontrados e corrigidos
 
-- **Compose:** portas publicadas em `127.0.0.1`; no modo protegido, só a borda publica (INF-01 a INF-03).
-- **Container:** API roda como `bun` (uid 1000) e tem healthcheck pelo runtime; a stack inteira subiu a partir da
-  imagem verificada, com `docker compose ps` em `healthy` (INF-04, INF-05).
-- **Modo protegido:** `bun run test:edge`, 12 de 12, contra a stack em execução (INF-06).
-- **Autorização:** 28 casos adversariais; esquema `Bearer` case-insensitive (AUTH-06). Transação alheia por UUID
-  mantém `403`, decisão registrada em ARCHITECTURE §12.
-- **Mensageria:** sequência E1, E2, E3 da mesma wallet, com o estado do outbox e a ordem no SQS real (OUT-12).
-  Garantia para consumidores documentada em ARCHITECTURE §8.
-- **Observabilidade:** superfície interna do worker, com métricas enquanto roda (OBS-06).
-- **Contrato:** OpenAPI com 10 operações, verificado contra as rotas e contra as respostas reais (DOC-01 a DOC-04).
-- **Documentação:** README em português, `README.en.md`, guia do avaliador e glossário (PT-BR).
-- **Demonstração:** `bun run demo:finance` passa as 5 seções, sem `.env`, contra a stack padrão (INF-07).
-- **Vitrine:** `bun run site:build` gera a página a partir de dados do repositório; 10 casos de verificação (SHW-01, SHW-02).
+| Erro                                                                   | Causa                                                                                                                                          | Correção                                                                                                                                               | Commit             | Prova                                                                                                                                                 |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI do `828822e` falhou com `fatal: ambiguous argument 'f12191b..HEAD'` | O job `checks` usava checkout raso, sem o commit-base da vitrine. O teste da vitrine falhou no `beforeAll`, e o gate parou antes da integração | `fetch-depth: 0` no job `checks`. Sem fallback: a ausência da base continua falhando                                                                   | `a34ff4d`          | Clone raso reproduz a falha. Clone completo passa (10 de 10). CI `41250517354`: `checks` e `image` verdes                                             |
+| Respostas inesperadas não reprovavam um degrau                         | `unexpected` era calculado e reportado, mas não entrava nos motivos                                                                            | Juízo por requisição (`test/load/judgement.ts`): correta, concorrente ou incorreta. Uma incorreta reprova o degrau, com limite zero                    | `f4e3dfe`          | 24 casos de regra e de motivo em `test/unit/load/judgement.test.ts`. Degraus aprovados históricos continuam aprovados (`historical-verdicts.test.ts`) |
+| Verificação de duplicidade com escopo errado                           | `GROUP BY external_transaction_id` sozinho. A identidade real é por provedor, e dois provedores com o mesmo id davam falso positivo            | Auditoria por `(provider_id, external_transaction_id)`, `(provider_id, idempotency_key)` e transações com mais de um lançamento (`test/load/audit.ts`) | `5f80bfb`          | 7 casos contra PostgreSQL em `test/integration/load/duplicate-audit.test.ts`, incluindo o caso que o escopo antigo reprovava                          |
+| Outbox lag com unidade trocada e fora do relatório                     | `outbox_lag_seconds` gravado com os campos `meanMs` e `maxMs`, e o relatório não renderizava as fases                                          | A unidade vem do nome da métrica. A seção "Latency, lag and drain" separa latência HTTP, atraso do gerador, drenagem e outbox lag                      | `5cf454c`          | `test/unit/load/phases.test.ts` (9 casos). Relatório regenerado a partir dos três registros; nenhum registro foi alterado                             |
+| Documentação dizia que PT-BR era exigência do enunciado                | Redação da própria auditoria                                                                                                                   | O idioma é escolha desta rodada. O enunciado não exige idioma                                                                                          | `472f436`          | Linha 9 da matriz de riscos e `README.en.md`                                                                                                          |
+| Matriz com limites antigos (25, 100 e 200)                             | LOAD-01 não acompanhou a campanha medida em `b34c198`                                                                                          | Matriz com 100, 200 e 400 req/s, com o histórico de 25/100/200 referenciado                                                                            | `472f436`          | Commit de origem dos registros confirmado: `b34c198`                                                                                                  |
+| Vitrine com contagens sem origem verificável                           | `gate-results.json` apontava para um commit antigo                                                                                             | As contagens vêm da execução de CI do commit `af998ff`, com o link da execução                                                                         | ver o commit final | `static-showcase.test.ts`: o link da execução é checado e o repositório precisa ser o deste projeto                                                   |
 
-### Implementado, com validação parcial
+### Validado pela CI no commit de código `af998ff`
 
-- **Build da imagem do repositório:** falha nesta sandbox, por `SELF_SIGNED_CERT_IN_CHAIN` no `bun install`.
-  A imagem foi construída de uma cópia do Dockerfile que só acrescenta a CA da sandbox. O Dockerfile do repositório
-  não foi construído diretamente.
-- **`edge:check`:** usa `--build`, que a sandbox não executa. Foram executados `edge:up` equivalente (com a imagem
-  verificada) e `test:edge`.
-- **Publicação da vitrine:** não publicada. Ver abaixo.
+Execução `41251559996` (https://github.com/dedeusgui/backend-challenge/actions/runs/41251559996):
 
-### Preparado para deploy, não publicado
+- job `checks`: sucesso, com o gate completo rodando no runner do GitHub. Contagens: 362 unitários, 4 de
+  infraestrutura, 151 de integração, 23 de concorrência e 100 e2e, todos com zero falhas.
+- job `image`: sucesso. O Dockerfile do repositório foi construído pelo GitHub, o que a sandbox não consegue.
 
-- **GitHub Pages:** `.github/workflows/pages.yml` faz o build e o deploy. Exige a fonte "GitHub Actions" em
-  Settings > Pages do repositório. Até isso, nenhuma URL existe, e nenhuma é declarada (SHW-03, BLOCKED).
+Essas contagens estão em `docs/site/gate-results.json`, e a vitrine as mostra com o link desta execução.
+
+### Benchmark: o que cada número é
+
+- **Latência HTTP**: o tempo que o cliente espera pela resposta, p50, p95 e p99 do degrau acordado. Medida a
+  partir do horário agendado de envio.
+- **Atraso do gerador**: quão tarde o gerador enviou cada requisição. O p99 é comparado com o limite de 50 ms.
+- **Outbox lag**: tempo entre o commit de um evento e o envio dele à fila, medido pelo worker por evento, sobre
+  todo o run. Tem contagem, média e máximo. Não há percentil, porque o worker não mantém histograma. Está em
+  segundos.
+- **Drenagem da Outbox**: tempo, após o fim de um degrau, até nenhum evento ficar sem publicar. Em segundos.
+- **Taxas acordadas dos registros commitados**: 100, 200 e 400 req/s em 1, 2 e 4 CPUs. Os registros são de
+  `b34c198`. O julgamento atual foi reaplicado a eles, e os degraus aprovados continuam aprovados.
+
+### Smoke de carga no HEAD da correção
+
+Um smoke de 1 CPU, em `5cf454c`, com degraus de 10 e 25 req/s e 5 s cada. Os dois passaram, com 175 requisições
+enviadas e nenhuma perdida, nenhuma incorreta e nenhuma duplicidade. O registro está em
+`docs/load/smoke/5cf454c/cpus-1.json`, e fica separado dos resultados commitados. Não é uma campanha: não
+substitui a campanha de `b34c198`.
+
+### Pendências reais
+
+- **Campanha completa no código atual.** Não reexecutada. O código de medição mudou depois de `b34c198`. O que
+  foi validado é a regra (testes), a reaplicação aos registros antigos e o smoke, não uma campanha nova.
+- **Soak de 15–30 min, teste de backlog, comparação com as referências públicas e revisão adversarial
+  independente.** Não feitos nesta rodada, pelo mesmo motivo da seção anterior.
+- **Console de engenharia, laboratório de carga, Prometheus e Grafana.** Não construídos. Ver "Não
+  implementado, com motivo" abaixo.
+- **Build da imagem a partir do repositório, nesta sandbox.** Não é possível aqui. A CI o faz.
 
 ### Não implementado, com motivo
 
-| Item                                                                  | Motivo                                                                                                                                               |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Console de engenharia e laboratório de carga                          | Dependem de telemetria verdadeira em operação; a superfície do worker acabou de ser criada. Construí-los agora mostraria pouco.                      |
-| Prometheus e Grafana                                                  | Sem coleta por instância validada em execução, um painel mostraria apenas snapshots.                                                                 |
-| `fast-check`                                                          | A biblioteca não traria prova além dos testes existentes.                                                                                            |
-| Reexecução dos benchmarks (1, 2 e 4 CPUs, soak de 15–30 min, backlog) | Não executada nesta rodada. O ambiente tem 4 vCPUs e Docker, então é a próxima etapa recomendada. Os números publicados são de execuções anteriores. |
-| Atualização de `docs/REFERENCE_REVIEW.md`                             | Os repositórios de referência estão fora do escopo desta sessão, e não foram lidos.                                                                  |
-| Revisão adversarial independente (etapa 10)                           | Não feita. Esta auditoria foi feita pelo próprio autor do código.                                                                                    |
-| Alternativa de publicação por rodadas no outbox                       | Avaliada por contagem de requisições e não adotada. Ver a seção de mensageria.                                                                       |
-| Troca de `403` por `404` na transação alheia                          | Depende de decisão do dono do contrato. A mudança está descrita em ARCHITECTURE §12.                                                                 |
-
-### Commits desta rodada
-
-Ver a lista completa na vitrine (`docs/site/`) e no histórico do branch. Em ordem:
-`a86b5b2` (infra), `7c9b39a` (auth), `12bb1c4` (mensageria), `ebb3e84` (métricas do worker),
-`a03d8de` (runtime não-root e healthchecks), `faf597c` (OpenAPI), `0bc7612` (documentação PT-BR),
-`b5b1c6a` (vitrine), `bc8a5f9` (registro das suítes novas).
-
-### Gate final
-
-`bun run check:all`, sobre a árvore deste commit: 326 unitários, 4 de infraestrutura, 144 de integração,
-23 de concorrência e 100 e2e, todos passando, contra PostgreSQL 17 e LocalStack 4.14 reais. A linha de base
-antes de qualquer alteração era 288, 143, 22 e 66.
+| Item                                            | Motivo                                                                                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Console de engenharia e laboratório de carga    | Dependem de telemetria verdadeira em operação. A superfície do worker foi criada nesta rodada, e um console agora mostraria pouco. |
+| Prometheus e Grafana                            | Sem coleta por instância validada em execução, um painel mostraria apenas snapshots.                                               |
+| `fast-check`                                    | A biblioteca não traria prova além dos testes existentes.                                                                          |
+| Troca de `403` por `404` na transação alheia    | Depende de decisão do dono do contrato. A mudança está descrita em ARCHITECTURE §12.                                               |
+| Alternativa de publicação por rodadas no outbox | Avaliada por contagem de requisições e não adotada. Ver a seção de mensageria.                                                     |
+| Atualização de `docs/REFERENCE_REVIEW.md`       | Os repositórios de referência ficam fora do escopo desta sessão.                                                                   |

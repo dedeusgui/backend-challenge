@@ -1,6 +1,6 @@
 # Load test results
 
-Rendered on 2026-10-31T23:08:47.656Z from the run records below, which were measured on 1 CPU at 2026-10-31T20:28:33.313Z; 2 CPUs at 2026-10-31T20:32:16.808Z; 4 CPUs at 2026-10-31T20:36:18.013Z. One run per CPU count, each in
+Rendered on 2026-10-31T23:15:49.285Z from the run records below, which were measured on 1 CPU at 2026-10-31T20:28:33.313Z; 2 CPUs at 2026-10-31T20:32:16.808Z; 4 CPUs at 2026-10-31T20:36:18.013Z. One run per CPU count, each in
 `docs/load/results/cpus-<N>.json`. The method is in `DECISIONS.md`, group N. The constraints and the
 workload are in `test/load/thresholds.ts`.
 
@@ -187,19 +187,19 @@ Status mix over every step of the run.
 | 202    |     1 |
 | 404    |     1 |
 
-| Item                                                 | Value                                                    |
-| ---------------------------------------------------- | -------------------------------------------------------- |
-| Platform                                             | linux 6.18.44-fc-v185 (x64)                              |
-| CPU                                                  | Intel(R) Xeon(R) Processor @ 2.10GHz                     |
-| Logical CPUs on the host                             | 4                                                        |
-| CPUs given to the stack                              | 0                                                        |
-| CPUs given to the generator                          | 1-3                                                      |
-| Observed affinity (from /proc)                       | api-1 0, api-2 0, api-3 0, worker-1 1-3, worker-2 1-3    |
-| Container cpusets                                    | postgres 0, localstack 0                                 |
-| Memory                                               | 15.7 GiB                                                 |
-| Bun                                                  | 1.4.4                                                    |
-| Processes                                            | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14 |
-| Lock races lost and retried across all API processes | 0                                                        |
+| Item                                                                                    | Value                                                    |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Platform                                                                                | linux 6.18.44-fc-v185 (x64)                              |
+| CPU                                                                                     | Intel(R) Xeon(R) Processor @ 2.10GHz                     |
+| Logical CPUs on the host                                                                | 4                                                        |
+| CPUs given to the stack                                                                 | 0                                                        |
+| CPUs given to the generator                                                             | 1-3                                                      |
+| Observed affinity (from /proc)                                                          | api-1 0, api-2 0, api-3 0, worker-1 1-3, worker-2 1-3    |
+| Container cpusets                                                                       | postgres 0, localstack 0                                 |
+| Memory                                                                                  | 15.7 GiB                                                 |
+| Bun                                                                                     | 1.4.4                                                    |
+| Processes                                                                               | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14 |
+| Concurrency conflicts: wallet-lock races lost and retried, all API processes, whole run | 0                                                        |
 
 ### 2 stack CPUs
 
@@ -322,19 +322,19 @@ Status mix over every step of the run.
 | 201    | 16554 |
 | 202    |    19 |
 
-| Item                                                 | Value                                                       |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| Platform                                             | linux 6.18.44-fc-v185 (x64)                                 |
-| CPU                                                  | Intel(R) Xeon(R) Processor @ 2.10GHz                        |
-| Logical CPUs on the host                             | 4                                                           |
-| CPUs given to the stack                              | 0-1                                                         |
-| CPUs given to the generator                          | 2-3                                                         |
-| Observed affinity (from /proc)                       | api-1 0-1, api-2 0-1, api-3 0-1, worker-1 0-1, worker-2 0-1 |
-| Container cpusets                                    | postgres 0-1, localstack 0-1                                |
-| Memory                                               | 15.7 GiB                                                    |
-| Bun                                                  | 1.4.4                                                       |
-| Processes                                            | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14    |
-| Lock races lost and retried across all API processes | 0                                                           |
+| Item                                                                                    | Value                                                       |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Platform                                                                                | linux 6.18.44-fc-v185 (x64)                                 |
+| CPU                                                                                     | Intel(R) Xeon(R) Processor @ 2.10GHz                        |
+| Logical CPUs on the host                                                                | 4                                                           |
+| CPUs given to the stack                                                                 | 0-1                                                         |
+| CPUs given to the generator                                                             | 2-3                                                         |
+| Observed affinity (from /proc)                                                          | api-1 0-1, api-2 0-1, api-3 0-1, worker-1 0-1, worker-2 0-1 |
+| Container cpusets                                                                       | postgres 0-1, localstack 0-1                                |
+| Memory                                                                                  | 15.7 GiB                                                    |
+| Bun                                                                                     | 1.4.4                                                       |
+| Processes                                                                               | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14    |
+| Concurrency conflicts: wallet-lock races lost and retried, all API processes, whole run | 0                                                           |
 
 ### 4 stack CPUs
 
@@ -459,19 +459,19 @@ Status mix over every step of the run.
 | 200    |  5774 |
 | 201    | 22926 |
 
-| Item                                                 | Value                                                       |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| Platform                                             | linux 6.18.44-fc-v185 (x64)                                 |
-| CPU                                                  | Intel(R) Xeon(R) Processor @ 2.10GHz                        |
-| Logical CPUs on the host                             | 4                                                           |
-| CPUs given to the stack                              | 0-3                                                         |
-| CPUs given to the generator                          | shared with the stack                                       |
-| Observed affinity (from /proc)                       | api-1 0-3, api-2 0-3, api-3 0-3, worker-1 0-3, worker-2 0-3 |
-| Container cpusets                                    | postgres 0-3, localstack 0-3                                |
-| Memory                                               | 15.7 GiB                                                    |
-| Bun                                                  | 1.4.4                                                       |
-| Processes                                            | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14    |
-| Lock races lost and retried across all API processes | 0                                                           |
+| Item                                                                                    | Value                                                       |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Platform                                                                                | linux 6.18.44-fc-v185 (x64)                                 |
+| CPU                                                                                     | Intel(R) Xeon(R) Processor @ 2.10GHz                        |
+| Logical CPUs on the host                                                                | 4                                                           |
+| CPUs given to the stack                                                                 | 0-3                                                         |
+| CPUs given to the generator                                                             | shared with the stack                                       |
+| Observed affinity (from /proc)                                                          | api-1 0-3, api-2 0-3, api-3 0-3, worker-1 0-3, worker-2 0-3 |
+| Container cpusets                                                                       | postgres 0-3, localstack 0-3                                |
+| Memory                                                                                  | 15.7 GiB                                                    |
+| Bun                                                                                     | 1.4.4                                                       |
+| Processes                                                                               | 3 API, 2 workers, one PostgreSQL 17, one LocalStack 4.14    |
+| Concurrency conflicts: wallet-lock races lost and retried, all API processes, whole run | 0                                                           |
 
 ## Definitions
 

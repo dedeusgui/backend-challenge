@@ -396,7 +396,7 @@ ${[...mix].map(([status, count]) => `| ${status} | ${count} |`).join('\n')}
 | Memory | ${run.environment.memoryGiB.toFixed(1)} GiB |
 | Bun | ${run.environment.bun} |
 | Processes | ${run.environment.topology} |
-| Lock races lost and retried across all API processes | ${run.concurrencyConflicts} |
+| Concurrency conflicts: wallet-lock races lost and retried, all API processes, whole run | ${run.concurrencyConflicts} |
 `;
 }
 

@@ -49,6 +49,8 @@ export async function buildSite(options: BuildSiteOptions): Promise<BuildSiteRes
     BRANCH: escapeHtml(branch),
     BUILT_AT: options.builtAt.toISOString(),
     GATE_COMMIT: gate.commit,
+    GATE_COMMIT_SHORT: gate.commit.slice(0, 7),
+    GATE_RUN_URL: escapeHtml(gate.ciRun),
     COUNT_UNIT: String(gate.unit),
     COUNT_INFRA: String(gate.infra),
     COUNT_INTEGRATION: String(gate.integration),
@@ -96,6 +98,7 @@ export function countMatrixRows(markdown: string): number {
 
 interface GateResults {
   commit: string;
+  ciRun: string;
   unit: number;
   infra: number;
   integration: number;
@@ -107,6 +110,13 @@ export function parseGateResults(value: unknown): GateResults {
   if (!isRecord(value) || typeof value.commit !== 'string') {
     throw new Error('docs/site/gate-results.json has no commit');
   }
+  // The counts are copied from one CI run of that commit, and the page links to it. A run of another repository is refused.
+  if (
+    typeof value.ciRun !== 'string' ||
+    !/^https:\/\/github\.com\/dedeusgui\/backend-challenge\/actions\/runs\/\d+$/.test(value.ciRun)
+  ) {
+    throw new Error('docs/site/gate-results.json has no CI run of this repository');
+  }
   const count = (key: string): number => {
     const found = value[key];
     if (typeof found !== 'number' || !Number.isSafeInteger(found) || found < 0) {
@@ -116,6 +126,7 @@ export function parseGateResults(value: unknown): GateResults {
   };
   return {
     commit: value.commit,
+    ciRun: value.ciRun,
     unit: count('unit'),
     infra: count('infra'),
     integration: count('integration'),

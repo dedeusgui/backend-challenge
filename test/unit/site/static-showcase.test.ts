@@ -93,8 +93,10 @@ describe('the static showcase', () => {
   });
 
   test('links to files and trees point at this exact commit; links to a listed commit name a full hash', () => {
-    const links = attributes('href').filter((href) =>
-      href.includes('github.com/dedeusgui/backend-challenge'),
+    // The link to a CI run is another shape of URL, and is checked on its own below.
+    const links = attributes('href').filter(
+      (href) =>
+        href.includes('github.com/dedeusgui/backend-challenge') && !href.includes('/actions/runs/'),
     );
     expect(links.length).toBeGreaterThan(10);
     for (const link of links) {
@@ -115,6 +117,17 @@ describe('the static showcase', () => {
     for (const href of attributes('href')) {
       expect(href).not.toMatch(/localhost|127\.0\.0\.1|grafana|prometheus|\/metrics|5432|4566/i);
     }
+  });
+
+  test('the test counts link to the CI run they were copied from, of the commit they name', async () => {
+    const gate = JSON.parse(
+      await readFile(join(ROOT, 'docs/site/gate-results.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(html).toContain(`href="${String(gate.ciRun)}"`);
+    expect(html).toContain(`<code>${String(gate.commit).slice(0, 7)}</code>`);
+    expect(String(gate.ciRun)).toMatch(
+      /^https:\/\/github\.com\/dedeusgui\/backend-challenge\/actions\/runs\/\d+$/,
+    );
   });
 
   test('the numbers match the files they come from', async () => {

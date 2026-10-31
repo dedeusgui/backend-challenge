@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  countersOfBody,
+  summariesOfBody,
   cpuMicrosPerRequest,
   formatCpuList,
+  mergeSummaries,
   netPercent,
   parseCpuList,
   parseCpuListOrNone,
@@ -12,6 +15,7 @@ import {
   percentile,
   predictedCeiling,
   stripTerminalCodes,
+  summariesFromOutput,
   utilisation,
 } from '../../../test/load/metrics';
 
@@ -123,5 +127,61 @@ describe('CPU per request', () => {
   test('the predicted ceiling is the rate at which the stack would use every CPU it has', () => {
     // 2 CPUs and 1200 microseconds per request allow 2e6 / 1200 requests per second.
     expect(predictedCeiling({ stackCpus: 2, cpuMicros: 1200 })).toBeCloseTo(1666.67, 1);
+  });
+});
+
+describe('mergeSummaries', () => {
+  test('adds the counts and the sums of several processes, and keeps the largest maximum', () => {
+    const merged = mergeSummaries([
+      { transaction_work_ms: { count: 2, sum: 10, max: 7 } },
+      { transaction_work_ms: { count: 3, sum: 30, max: 12 } },
+    ]);
+
+    expect(merged).toEqual({ transaction_work_ms: { count: 5, meanMs: 8, maxMs: 12 } });
+  });
+
+  test('keeps a name that only one process reported', () => {
+    const merged = mergeSummaries([
+      { auth_ms: { count: 1, sum: 2, max: 2 } },
+      { settlement_ms: { count: 4, sum: 8, max: 3 } },
+    ]);
+
+    expect(Object.keys(merged).sort()).toEqual(['auth_ms', 'settlement_ms']);
+    expect(merged['settlement_ms']).toEqual({ count: 4, meanMs: 2, maxMs: 3 });
+  });
+});
+
+describe('summariesFromOutput', () => {
+  test('reads the summaries of the last metrics line a worker printed on its graceful stop', () => {
+    const output = [
+      '{"time":"t","level":"info","operation":"command.settle","status":"APPLIED"}',
+      '{"time":"t","type":"metrics","counters":{},"summaries":{"outbox_publish_ms":{"count":2,"sum":5,"max":4}}}',
+      '',
+    ].join('\n');
+
+    expect(summariesFromOutput(output)).toEqual({
+      outbox_publish_ms: { count: 2, sum: 5, max: 4 },
+    });
+  });
+
+  test('is undefined when the worker printed no metrics line, or a malformed one', () => {
+    expect(
+      summariesFromOutput('{"type":"metrics","summaries":{"x":{"count":"2"}}}'),
+    ).toBeUndefined();
+    expect(summariesFromOutput('plain text only\n')).toBeUndefined();
+  });
+});
+
+describe('the metrics endpoint answer', () => {
+  test('its counters and summaries are read, and a missing counter set is an error, not zero', () => {
+    const body = {
+      counters: { 'transactions_total{status="PROCESSED"}': 3 },
+      summaries: { auth_ms: { count: 3, sum: 6, max: 4 } },
+    };
+
+    expect(countersOfBody(body)).toEqual({ 'transactions_total{status="PROCESSED"}': 3 });
+    expect(summariesOfBody(body)).toEqual({ auth_ms: { count: 3, sum: 6, max: 4 } });
+    expect(() => countersOfBody({ summaries: {} })).toThrow('without counters');
+    expect(summariesOfBody({ counters: {} })).toBeUndefined();
   });
 });

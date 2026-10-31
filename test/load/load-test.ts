@@ -35,8 +35,10 @@ import {
   type PinningPlan,
 } from './host';
 import {
-  LINUX_CLOCK_TICKS,
+  countersOfBody,
   formatCpuList,
+  LINUX_CLOCK_TICKS,
+  mergeSummaries,
   parseCpuList,
   parseCpuListOrNone,
   parseDockerStats,
@@ -45,6 +47,8 @@ import {
   parseProcStatTicks,
   percentile,
   stripTerminalCodes,
+  summariesFromOutput,
+  summariesOfBody,
 } from './metrics';
 import {
   RUN_FORMAT,
@@ -500,14 +504,21 @@ async function measureRun(
     managed.process.kill('SIGTERM');
     await managed.process.exited;
   }
-  const apiCounters = await Promise.all(
+  const apiBodies: unknown[] = await Promise.all(
     apis.map(async (api) => {
       const response = await fetch(`${api}/metrics`, {
         headers: { authorization: `Bearer ${operatorKey}` },
       });
-      return ((await response.json()) as { counters: Record<string, number> }).counters;
+      return response.json();
     }),
   );
+  const apiCounters = apiBodies.map((body) => countersOfBody(body));
+  const phases = mergeSummaries([
+    ...apiBodies.map((body) => summariesOfBody(body) ?? {}),
+    ...cluster.processes
+      .filter((candidate) => candidate.name.startsWith('worker-'))
+      .map((candidate) => summariesFromOutput(candidate.recentOutput()) ?? {}),
+  ]);
 
   const passing = steps.filter((step) => step.reasons.length === 0);
   const run: RunRecord = {
@@ -566,6 +577,7 @@ async function measureRun(
       0,
     ),
     totalSent: steps.reduce((sum, step) => sum + step.sent, 0),
+    phases,
   };
 
   const written = await writeRun(RESULTS_DIR, run);

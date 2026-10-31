@@ -1,3 +1,4 @@
+import type { PhaseSummary } from './metrics';
 /**
  * The record of one load run, one file per CPU count: docs/load/results/cpus-<N>.json. The driver
  * writes it, the report reads it. Plain JSON only: no Map, no NaN. A missing value is null.
@@ -69,6 +70,11 @@ export interface RunRecord {
   generatorCpuList: string | null;
   pinned: boolean;
   hostLogicalCpus: number;
+  /**
+   * Where the stack spent its time, summed over the API processes and the workers, from their summaries
+   * at the end of the run. Absent in runs made before the phases were measured.
+   */
+  phases?: Record<string, PhaseSummary>;
   /** The CPU list each process was allowed to run on, read from /proc at the start of the ramp. */
   observedAffinity: Record<string, string>;
   /** The cpuset each container was given during the run. */

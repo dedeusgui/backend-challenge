@@ -139,3 +139,106 @@ export function utilisation(input: { netStackPercent: number; stackCpus: number 
 export function predictedCeiling(input: { stackCpus: number; cpuMicros: number }): number {
   return (input.stackCpus * 1e6) / input.cpuMicros;
 }
+
+/** One summary as a process reports it: a count, a sum and a maximum, in one unit. */
+export interface SummarySnapshot {
+  count: number;
+  sum: number;
+  max: number;
+}
+
+/** A summary over every process of a run: the mean is taken over all their observations together. */
+export interface PhaseSummary {
+  count: number;
+  meanMs: number;
+  maxMs: number;
+}
+
+/** Adds the summaries of several processes. Counts and sums add up, and the maximum is the largest. */
+export function mergeSummaries(
+  snapshots: readonly Readonly<Record<string, SummarySnapshot>>[],
+): Record<string, PhaseSummary> {
+  const merged = new Map<string, { count: number; sum: number; max: number }>();
+  for (const snapshot of snapshots) {
+    for (const [name, summary] of Object.entries(snapshot)) {
+      const current = merged.get(name) ?? { count: 0, sum: 0, max: Number.NEGATIVE_INFINITY };
+      merged.set(name, {
+        count: current.count + summary.count,
+        sum: current.sum + summary.sum,
+        max: Math.max(current.max, summary.max),
+      });
+    }
+  }
+  return Object.fromEntries(
+    [...merged].map(([name, value]) => [
+      name,
+      { count: value.count, meanMs: value.sum / value.count, maxMs: value.max },
+    ]),
+  );
+}
+
+export function isSummaryRecord(value: unknown): value is Record<string, SummarySnapshot> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  return Object.values(value).every(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      'count' in entry &&
+      typeof entry.count === 'number' &&
+      'sum' in entry &&
+      typeof entry.sum === 'number' &&
+      'max' in entry &&
+      typeof entry.max === 'number',
+  );
+}
+
+/**
+ * The summaries from the last `type: metrics` line a worker printed when it stopped. A worker prints
+ * that line on a graceful stop. Undefined when no such line is in the output.
+ */
+export function summariesFromOutput(output: string): Record<string, SummarySnapshot> | undefined {
+  for (const line of output.split('\n').reverse()) {
+    if (!line.includes('"type":"metrics"')) {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const summaries = summariesOfBody(parsed);
+    if (summaries !== undefined) {
+      return summaries;
+    }
+  }
+  return undefined;
+}
+
+/** The summaries in a metrics endpoint answer, or undefined when the answer has none. */
+export function summariesOfBody(body: unknown): Record<string, SummarySnapshot> | undefined {
+  if (typeof body === 'object' && body !== null && 'summaries' in body) {
+    return isSummaryRecord(body.summaries) ? body.summaries : undefined;
+  }
+  return undefined;
+}
+
+function isCounterRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every((entry) => typeof entry === 'number')
+  );
+}
+
+/** The counters in a metrics endpoint answer. An answer without them is a failed run, not zero. */
+export function countersOfBody(body: unknown): Record<string, number> {
+  if (typeof body === 'object' && body !== null && 'counters' in body) {
+    if (isCounterRecord(body.counters)) {
+      return body.counters;
+    }
+  }
+  throw new Error('the metrics endpoint answered without counters');
+}

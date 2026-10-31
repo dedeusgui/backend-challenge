@@ -1,6 +1,10 @@
 # Local stack: PostgreSQL, LocalStack (SQS), a one-shot migration, the HTTP API and the worker.
 # Start order is enforced: the database and queues are healthy, then the schema is migrated,
 # then the API and the worker start. Credentials below are local development values only.
+#
+# Every published port binds PUBLISH_HOST, which defaults to 127.0.0.1, so the database, the queue
+# emulator and the API are reachable from this machine only. Set PUBLISH_HOST to expose them on
+# another interface, and do that only on a network you control. The worker publishes no port.
 
 x-app-environment: &app-environment
   DATABASE_URL: postgresql://wagering:wagering@postgres:5432/wagering
@@ -20,7 +24,7 @@ services:
       POSTGRES_PASSWORD: wagering
       POSTGRES_DB: wagering
     ports:
-      - '5432:5432'
+      - '${PUBLISH_HOST:-127.0.0.1}:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +39,7 @@ services:
       SERVICES: sqs
       AWS_DEFAULT_REGION: us-east-1
     ports:
-      - '4566:4566'
+      - '${PUBLISH_HOST:-127.0.0.1}:4566:4566'
     volumes:
       - ./docker/localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh:ro
     healthcheck:
@@ -59,7 +63,7 @@ services:
       <<: *app-environment
       PORT: '3000'
     ports:
-      - '3000:3000'
+      - '${PUBLISH_HOST:-127.0.0.1}:3000:3000'
     # A crashed process is restarted. `docker stop` still stops it for good.
     restart: unless-stopped
     depends_on:

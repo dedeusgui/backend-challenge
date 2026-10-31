@@ -1,4 +1,4 @@
-import { CreateQueueCommand, GetQueueUrlCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { CreateQueueCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { randomUUID } from 'node:crypto';
 
 export const SQS_ENDPOINT = process.env.SQS_ENDPOINT ?? 'http://localhost:4566';
@@ -42,7 +42,11 @@ export async function createTestQueues(
   };
 }
 
-export async function queueUrlByName(client: SQSClient, name: string): Promise<string> {
-  const found = await client.send(new GetQueueUrlCommand({ QueueName: name }));
-  return found.QueueUrl ?? '';
+/**
+ * The URL of a provisioned queue, built from the endpoint as `resolveQueues` does in production.
+ * An emulator's own URL may name a host this process cannot use, and the SDK then fails on the
+ * next call. The caller's next request proves that the queue exists.
+ */
+export function queueUrlByName(name: string): string {
+  return `${SQS_ENDPOINT}/000000000000/${name}`;
 }

@@ -13,8 +13,8 @@ import { queueUrlByName, testSqsClient } from '../support/sqs-test-queues';
 describe('broker redrive of the provisioned command queue', () => {
   test('the command queue redrives to the dead-letter queue after ten deliveries', async () => {
     const client = testSqsClient();
-    const commandUrl = await queueUrlByName(client, 'wager-transactions.fifo');
-    const deadLetterUrl = await queueUrlByName(client, 'wager-transactions-dlq.fifo');
+    const commandUrl = queueUrlByName('wager-transactions.fifo');
+    const deadLetterUrl = queueUrlByName('wager-transactions-dlq.fifo');
     const attributes = await client.send(
       new GetQueueAttributesCommand({ QueueUrl: commandUrl, AttributeNames: ['RedrivePolicy'] }),
     );

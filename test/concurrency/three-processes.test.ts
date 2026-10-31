@@ -5,6 +5,7 @@ import { testSqsClient } from '../integration/support/sqs-test-queues';
 import { ProcessCluster } from './support/process-cluster';
 import { CreateApiClient } from '../../src/modules/auth/application/create-api-client.use-case';
 import { MikroOrmApiClientRepository } from '../../src/modules/auth/infrastructure/mikro-orm-api-client.repository';
+import { required } from '../support/required';
 
 /**
  * Distributed proof. Three independent API processes and background workers share
@@ -46,7 +47,7 @@ async function scalar(sql: string, params: unknown[] = []): Promise<string> {
   const rows = (await cluster.database.orm.em.getConnection().execute(sql, params)) as Array<
     Record<string, string>
   >;
-  return Object.values(rows[0] ?? {})[0] ?? '';
+  return required(Object.values(required(rows[0], 'a result row'))[0], 'a result column');
 }
 
 async function balanceOf(walletId: string): Promise<string> {

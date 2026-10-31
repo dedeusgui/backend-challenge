@@ -17,6 +17,7 @@ import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import { required } from '../../support/required';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
 
@@ -128,7 +129,7 @@ async function balanceOf(walletId: string): Promise<string> {
     .execute(`SELECT balance::text AS b FROM wallets WHERE id = ?`, [walletId])) as Array<{
     b: string;
   }>;
-  return rows[0]?.b ?? '';
+  return required(rows[0]?.b, 'a balance row');
 }
 
 /**

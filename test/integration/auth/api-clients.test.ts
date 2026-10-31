@@ -4,6 +4,7 @@ import { hashApiKey } from '../../../src/modules/auth/domain/api-key';
 import { CreateApiClient } from '../../../src/modules/auth/application/create-api-client.use-case';
 import { MikroOrmApiClientRepository } from '../../../src/modules/auth/infrastructure/mikro-orm-api-client.repository';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
+import { required } from '../../support/required';
 
 let database: TestDatabase;
 let repository: MikroOrmApiClientRepository;
@@ -122,18 +123,25 @@ describe('the auth command', () => {
     expect(clientId).toBeDefined();
     expect(apiKey).toMatch(/^wgr_/);
 
-    expect(await repository.findActiveByKeyHash(hashApiKey(apiKey ?? ''))).toMatchObject({
+    expect(
+      await repository.findActiveByKeyHash(hashApiKey(required(apiKey, 'the API key'))),
+    ).toMatchObject({
       role: 'PROVIDER',
       providerId: 'provider-cli',
     });
 
-    const revoked = Bun.spawn(['bun', 'run', 'src/auth.ts', 'revoke', '--client', clientId ?? ''], {
-      env,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      cwd: `${import.meta.dir}/../../..`,
-    });
+    const revoked = Bun.spawn(
+      ['bun', 'run', 'src/auth.ts', 'revoke', '--client', required(clientId, 'the client id')],
+      {
+        env,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        cwd: `${import.meta.dir}/../../..`,
+      },
+    );
     expect(await revoked.exited).toBe(0);
-    expect(await repository.findActiveByKeyHash(hashApiKey(apiKey ?? ''))).toBeUndefined();
+    expect(
+      await repository.findActiveByKeyHash(hashApiKey(required(apiKey, 'the API key'))),
+    ).toBeUndefined();
   }, 60_000);
 });

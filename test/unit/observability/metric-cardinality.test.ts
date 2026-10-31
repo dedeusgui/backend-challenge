@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { required } from '../../support/required';
 
 /**
  * Metric labels must stay at a few fixed values. A label that carries an identifier (a transaction, a
@@ -25,7 +26,7 @@ export function labelNamesIn(text: string): string[] {
   const names: string[] = [];
   for (const call of text.matchAll(/\.(?:increment|observe)\(([^;]*?)\)\s*;/gs)) {
     for (const label of call[1]?.matchAll(/\{\s*([A-Za-z_]\w*)\s*:/g) ?? []) {
-      names.push(label[1] ?? '');
+      names.push(required(label[1], 'a label name'));
     }
   }
   return names;

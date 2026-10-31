@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase, type TestDatabase } from '../integration/support/test-database';
 import { startTestApp, type TestApp } from './support/test-app';
+import { required } from '../support/required';
 
 /**
  * Who may call what. Health is public. Wallets and metrics are for operators. A provider key
@@ -47,7 +48,7 @@ async function countOf(sql: string, params: unknown[]): Promise<string> {
   const rows = (await database.orm.em.getConnection().execute(sql, params)) as Array<{
     count: string;
   }>;
-  return rows[0]?.count ?? '';
+  return required(rows[0]?.count, 'a count row');
 }
 
 describe('API key authentication', () => {

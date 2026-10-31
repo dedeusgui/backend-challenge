@@ -18,6 +18,7 @@ import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import { required } from '../../support/required';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
 
@@ -182,7 +183,7 @@ describe('OutboxPublisher', () => {
     expect(crashed).toHaveLength(1);
     const transport = transportFor();
 
-    const crashedId = crashed[0]?.id ?? '';
+    const crashedId = required(crashed[0]?.id, 'the crashed event');
     await publisherFor(transport, () => NOW).publishOnce();
     expect(transport.sendsByEvent.has(crashedId)).toBe(false);
 
@@ -215,7 +216,7 @@ describe('OutboxPublisher', () => {
     expect(metrics.snapshot().counters['outbox_lost_lease_total']).toBe(before + 1);
     const sentTwice = [...transport.sendsByEvent.entries()].filter(([, sends]) => sends === 2);
     expect(sentTwice).toHaveLength(1);
-    const doubledId = sentTwice[0]?.[0] ?? '';
+    const doubledId = required(sentTwice[0]?.[0], 'the event sent twice');
     const rows = await database.orm.em.getConnection().execute(
       `SELECT published_at IS NOT NULL AS published, lease_token IS NULL AS unleased
          FROM outbox_messages WHERE id = ?`,
@@ -489,8 +490,8 @@ describe('OutboxPublisher: order across publishers', () => {
       ),
     );
     expect(walletEvents).toHaveLength(2);
-    const earlierCommit = walletEvents[0] ?? '';
-    const laterCommit = walletEvents[1] ?? '';
+    const earlierCommit = required(walletEvents[0], 'the earlier event of the wallet');
+    const laterCommit = required(walletEvents[1], 'the later event of the wallet');
     // Only the wallet's events are claimed in this test. The transaction events wait out of the window.
     await connection.execute(
       `UPDATE outbox_messages SET next_attempt_at = next_attempt_at + interval '1 day'

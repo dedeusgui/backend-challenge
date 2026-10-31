@@ -16,6 +16,7 @@ import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import { required } from '../../support/required';
 
 /**
  * At-least-once delivery means one operation can arrive many times: the same message redelivered, the
@@ -168,7 +169,7 @@ async function balanceOf(walletId: string): Promise<string> {
     .execute(`SELECT balance::text AS b FROM wallets WHERE id = ?`, [walletId])) as Array<{
     b: string;
   }>;
-  return rows[0]?.b ?? '';
+  return required(rows[0]?.b, 'a balance row');
 }
 
 function drainDeadLetters(): Promise<number> {

@@ -6,6 +6,7 @@ import {
   testSqsClient,
   type TestQueues,
 } from '../../integration/support/sqs-test-queues';
+import { required } from '../../support/required';
 
 const ROOT = `${import.meta.dir}/../../..`;
 
@@ -45,8 +46,8 @@ export class ProcessCluster {
   /** Environment shared by every process of this cluster. */
   private environment(extra: Record<string, string>): Record<string, string> {
     return {
-      PATH: process.env.PATH ?? '',
-      HOME: process.env.HOME ?? '',
+      PATH: required(process.env.PATH, 'PATH in the environment'),
+      HOME: required(process.env.HOME, 'HOME in the environment'),
       DATABASE_URL: this.database.url,
       AWS_REGION: 'us-east-1',
       SQS_ENDPOINT,

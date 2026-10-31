@@ -6,6 +6,7 @@ import { Money } from '../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { testSqsClient } from '../integration/support/sqs-test-queues';
 import { ProcessCluster, type ManagedProcess } from './support/process-cluster';
+import { required } from '../support/required';
 
 /**
  * Process-level failure. The worker is a real Bun process, killed or stopped by the operating
@@ -43,7 +44,7 @@ async function scalar(sql: string, params: unknown[] = []): Promise<string> {
   const rows = (await cluster.database.orm.em.getConnection().execute(sql, params)) as Array<
     Record<string, string>
   >;
-  return Object.values(rows[0] ?? {})[0] ?? '';
+  return required(Object.values(required(rows[0], 'a result row'))[0], 'a result column');
 }
 
 async function openWalletWith(amount: string): Promise<{ walletId: string; playerId: string }> {

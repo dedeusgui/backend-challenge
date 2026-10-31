@@ -8,6 +8,7 @@ import { Money } from '../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { testSqsClient } from '../integration/support/sqs-test-queues';
 import { ProcessCluster, type ManagedProcess } from './support/process-cluster';
+import { required } from '../support/required';
 
 /**
  * Contention between independent processes, each with its own connections and its own
@@ -85,7 +86,7 @@ function probesOf(cluster: ProcessCluster) {
   return {
     scalar: async (sql: string, params: unknown[] = []): Promise<string> => {
       const rows = (await em().execute(sql, params)) as Array<Record<string, string>>;
-      return Object.values(rows[0] ?? {})[0] ?? '';
+      return required(Object.values(required(rows[0], 'a result row'))[0], 'a result column');
     },
     sendCommand: (wallet: Wallet, operation: Operation) =>
       new SqsQueue(testSqsClient(), cluster.queues.commandQueueUrl).send(
@@ -294,7 +295,7 @@ describe('distributed contention: three API processes and two workers', () => {
     const bet = `settle-${randomUUID()}`;
     expect(
       (
-        await submit(apis[0] ?? '', wallet, {
+        await submit(required(apis[0], 'an API process'), wallet, {
           kind: 'BET',
           externalTransactionId: bet,
           amount: '25.00',
@@ -303,19 +304,19 @@ describe('distributed contention: three API processes and two workers', () => {
     ).toBe(201);
 
     const responses = await Promise.all([
-      submit(apis[0] ?? '', wallet, {
+      submit(required(apis[0], 'an API process'), wallet, {
         kind: 'WIN',
         externalTransactionId: `win-${randomUUID()}`,
         amount: '40.00',
         reference: bet,
       }),
-      submit(apis[1] ?? '', wallet, {
+      submit(required(apis[1], 'an API process'), wallet, {
         kind: 'REFUND',
         externalTransactionId: `refund-${randomUUID()}`,
         amount: '25.00',
         reference: bet,
       }),
-      submit(apis[2] ?? '', wallet, {
+      submit(required(apis[2], 'an API process'), wallet, {
         kind: 'LOSS',
         externalTransactionId: `loss-${randomUUID()}`,
         amount: '0.00',

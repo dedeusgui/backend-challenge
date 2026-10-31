@@ -9,6 +9,7 @@ import {
   type ProcessWagerOutcome,
 } from '../../src/modules/wagering/application/process-wager-transaction.use-case';
 import { createTestDatabase, type TestDatabase } from '../integration/support/test-database';
+import { required } from '../support/required';
 
 /**
  * Real concurrency: every call below opens its own PostgreSQL connection and
@@ -78,7 +79,7 @@ async function balanceOf(walletId: string): Promise<string> {
     .execute(`SELECT balance::text AS balance FROM wallets WHERE id = ?`, [walletId])) as Array<{
     balance: string;
   }>;
-  return rows[0]?.balance ?? '';
+  return required(rows[0]?.balance, 'a balance row');
 }
 
 /** Sum of CREDIT minus DEBIT in the ledger. The final invariant compares it with the materialized balance. */
@@ -88,7 +89,7 @@ async function ledgerBalanceOf(walletId: string): Promise<string> {
      FROM wallet_ledger_entries WHERE wallet_id = ?`,
     [walletId],
   )) as Array<{ total: string }>;
-  return rows[0]?.total ?? '';
+  return required(rows[0]?.total, 'a total row');
 }
 
 async function debitCount(walletId: string): Promise<number> {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { required } from '../../support/required';
 
 /**
  * Architectural boundaries, checked by reading the source. The rules are the ones in CLAUDE.md and
@@ -23,10 +24,10 @@ function sourceFiles(dir: string): string[] {
 export function importsIn(text: string): string[] {
   const specifiers: string[] = [];
   for (const match of text.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) {
-    specifiers.push(match[1] ?? '');
+    specifiers.push(required(match[1], 'a module specifier'));
   }
   for (const match of text.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm)) {
-    specifiers.push(match[1] ?? '');
+    specifiers.push(required(match[1], 'a module specifier'));
   }
   return specifiers;
 }

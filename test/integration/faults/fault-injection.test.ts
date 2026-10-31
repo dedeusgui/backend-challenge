@@ -25,6 +25,7 @@ import { createTestDatabase, type TestDatabase } from '../support/test-database'
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 import { ConcurrencyConflictError } from '../../../src/shared/application/application-errors';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
+import { required } from '../../support/required';
 
 /**
  * Fault injection at the critical points. The wrappers below sit around real components
@@ -136,7 +137,7 @@ async function scalar(sql: string, params: unknown[] = []): Promise<string> {
   const rows = (await database.orm.em.getConnection().execute(sql, params)) as Array<
     Record<string, string>
   >;
-  return Object.values(rows[0] ?? {})[0] ?? '';
+  return required(Object.values(required(rows[0], 'a result row'))[0], 'a result column');
 }
 
 async function wallet(amount: string): Promise<{ walletId: string; playerId: string }> {
@@ -244,7 +245,7 @@ describe('fault injection', () => {
     await expect(firstAttempt.publishOnce()).rejects.toThrow(
       'injected crash after broker accepted',
     );
-    const crashedEvent = [...sends.keys()][0] ?? '';
+    const crashedEvent = required([...sends.keys()][0], 'the crashed event');
     expect(sends.get(crashedEvent)).toBe(1);
     expect(
       await scalar(

@@ -10,6 +10,7 @@ import {
 import { ProcessPendingReferences } from '../../../src/modules/wagering/application/process-pending-references.use-case';
 import { MAX_REFERENCE_ATTEMPTS } from '../../../src/modules/wagering/domain/reference-retry-policy';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
+import { required } from '../../support/required';
 
 const T0 = new Date('2026-07-29T15:00:00.000Z');
 const HOUR_MS = 3_600_000;
@@ -84,7 +85,7 @@ async function balanceOf(walletId: string): Promise<string> {
     .execute(`SELECT balance::text AS b FROM wallets WHERE id = ?`, [walletId])) as Array<{
     b: string;
   }>;
-  return rows[0]?.b ?? '';
+  return required(rows[0]?.b, 'a balance row');
 }
 
 async function countCredits(walletId: string): Promise<number> {
@@ -243,7 +244,9 @@ describe('pending references', () => {
     now = new Date(T0.getTime() + 60_000);
     expect(await worker().runOnce()).toBe(1);
     expect((await row(refundId)).attempts).toBe('1');
-    expect(new Date((await row(refundId)).next_at ?? '').getTime()).toBeGreaterThan(now.getTime());
+    expect(
+      new Date(String(required((await row(refundId)).next_at, 'the next attempt time'))).getTime(),
+    ).toBeGreaterThan(now.getTime());
   });
 
   test('after the attempt limit the transaction is REJECTED with REFERENCE_NOT_FOUND and announced, with no balance effect', async () => {

@@ -1,28 +1,32 @@
 # Distributed Wagering Processor
 
-Implementation of the [Jungle Gaming backend challenge](docs/CHALLENGE.md). It applies wager
-operations (BET, WIN, LOSS, REFUND, ROLLBACK) from game providers over HTTP and SQS, keeps
-balances consistent under concurrency, duplicates and crashes, and reconciles each wallet against
-its ledger.
+Serviço financeiro que processa operações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) enviadas por
+provedores de jogos, por HTTP e por fila SQS. Mantém o saldo de cada carteira igual ao seu ledger, mesmo com
+concorrência, mensagens duplicadas, referências fora de ordem, falhas e reinícios.
 
-## Reading order
+Este repositório é a solução do [desafio técnico da Jungle Gaming](docs/CHALLENGE.md), cópia fiel do enunciado.
+Versão em inglês deste guia: [README.en.md](README.en.md).
 
-1. **This README**: how to run and test the service.
-2. **[ARCHITECTURE.md](ARCHITECTURE.md)**: the flow, the main decisions (the table at its start
-   gives each one with its reason and its evidence), and the limitations in section 14.
-3. **Reproducible evidence**: [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) links each
-   requirement to the test that proves it. [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) says what each
-   suite runs and what it does not replace.
-4. **Appendices, for deeper reading**: the [ADR index](docs/adr/README.md) and its records;
-   [DECISIONS.md](DECISIONS.md), every decision with its evidence; the reviews in
-   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md) and [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md);
-   [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.md); the load reports in
-   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md);
-   the [implementation log](docs/IMPLEMENTATION_PLAN.md); and the [specification](docs/CHALLENGE.md), kept verbatim.
+- **Stack:** Bun 1.4.4, TypeScript estrito, NestJS 12, MikroORM 7 (pinado em 7.x), PostgreSQL 17,
+  AWS SQS via LocalStack 4.14, Docker Compose.
+- **Não é:** um sistema de login, um IdP externo nem um painel. A autenticação é por chave de API (ver
+  [ADR 0007](docs/adr/0007-api-key-authentication.md)).
 
-## Run
+## Por onde começar (avaliador)
 
-Requirements: Bun **1.4.4**, the version pinned in CI and in the Dockerfile, and Docker with Compose.
+1. **Rode a stack** (seção seguinte) e faça a demonstração financeira: `bun run demo:finance`.
+2. **Leia o guia do avaliador:** [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), com o caminho de leitura de
+   aproximadamente 30 minutos, o que cada teste prova e o que não prova.
+3. **Confira as garantias contra o código:** [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) liga cada
+   requisito ao teste que o prova. Uma linha só é `PASSING` depois que o teste roda e passa.
+4. **Veja a arquitetura e as decisões:** [ARCHITECTURE.md](ARCHITECTURE.md), começando pela tabela de decisões.
+   O [glossário do domínio](docs/DOMAIN_GLOSSARY.md) define os termos.
+5. **Contrato HTTP:** [docs/openapi.json](docs/openapi.json). Ele é verificado contra as rotas e contra as respostas
+   reais da API.
+
+## Como rodar
+
+Requisitos: Docker com Compose e, para desenvolver ou testar, Bun **1.4.4**.
 
 ```bash
 docker compose up --build
@@ -30,171 +34,170 @@ curl http://localhost:3000/health/ready
 # {"status":"ok","checks":{"database":"up","sqs":"up"}}
 ```
 
-Compose starts PostgreSQL and LocalStack, which provisions the queues `wager-transactions.fifo`,
-`wager-transactions-dlq.fifo` and `wager-events.fifo`. It runs the migrations once, then starts the API
-on port 3000 and the worker. The API starts only after the migration has succeeded.
+O Compose sobe PostgreSQL e LocalStack, cria as filas `wager-transactions.fifo`, `wager-transactions-dlq.fifo` e
+`wager-events.fifo`, aplica as migrações uma vez, e só então sobe a API (porta 3000) e o worker.
 
-For local development, without the API and worker containers:
+Todas as portas publicadas ligam em `127.0.0.1`: o banco, o LocalStack e a API ficam acessíveis apenas desta
+máquina. Para expor em outra interface, defina `PUBLISH_HOST`, e faça isso só numa rede que você controla. O worker
+não publica porta; sua superfície interna de saúde e métricas (porta 3001) fica só na rede do Compose.
+
+Para criar uma chave de operador e fazer uma consulta:
+
+```bash
+docker compose exec api bun run auth:create -- --name operations --role OPERATOR
+# key: wgr_...   (mostrada uma vez; só o hash é guardado)
+curl -H "authorization: Bearer wgr_..." http://localhost:3000/metrics
+```
+
+A demonstração financeira roda no host e cria as próprias chaves. Ela usa o banco de desenvolvimento publicado em
+`127.0.0.1` e não precisa de `.env`:
+
+```bash
+bun install --frozen-lockfile
+bun run demo:finance
+```
+
+### Desenvolvimento sem os contêineres da aplicação
 
 ```bash
 cp .env.example .env
 bun install --frozen-lockfile
-bun run infra:up              # PostgreSQL and LocalStack, with health checks
-bun run db:migrate            # apply migrations
-bun run dev                   # API with restart on change
-bun run src/worker.ts         # worker, in another terminal
+bun run infra:up        # PostgreSQL e LocalStack, com healthcheck
+bun run db:migrate
+bun run dev             # API, com reinício ao salvar
+bun run src/worker.ts   # worker, em outro terminal
 ```
 
-## Protected mode (optional)
+## Modo protegido (opcional)
 
-The default mode above has no rate limit. The protected mode puts an Nginx edge in front of the API. It limits
-each client address, and it refuses the rest with 429. The API publishes no port of its own in this mode, so the
-edge is the only way in. The public port is the same, 3000.
+Uma borda Nginx fica na frente da API e limita as requisições por endereço de cliente. Nesse modo, a API e o
+PostgreSQL não publicam porta, e a borda é a única entrada, na mesma porta 3000.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
-bun run test:edge                 # the protected-mode suite, against the running stack
+bun run test:edge        # 12 casos contra a stack em execução
 docker compose -f docker-compose.yml -f docker-compose.protected.yml down
 ```
 
-The limits are set with `EDGE_WRITE_RATE` (20r/s), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50r/s),
-`EDGE_READ_BURST` (100) and `EDGE_MAX_CONNECTIONS` (50). A refused request is 429 with `Retry-After`, and its body
-is JSON. Health checks are not limited. `bun run edge:check` starts the stack, runs the suite and stops it.
-`bun run bench:edge <label>` measures the cost of the edge against the API. `ARCHITECTURE.md` section 15 gives the
-design, what it does not protect, and the measured cost.
+Os limites são `EDGE_WRITE_RATE` (20 por segundo), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50 por segundo),
+`EDGE_READ_BURST` (100) e `EDGE_MAX_CONNECTIONS` (50). Uma recusa é `429` com `Retry-After` e corpo JSON. Health não
+é limitado. O que essa proteção **não** é, e o custo medido, estão em [ARCHITECTURE.md §15](ARCHITECTURE.md).
 
-## Test
+## Garantias
 
-```bash
-bun install --frozen-lockfile
-bun run infra:up              # the integration, concurrency and e2e suites need PostgreSQL and LocalStack
-bun run check:all             # the final gate: typecheck, lint, format, and every suite
-```
+| Garantia                                          | Como é imposta                                                    | Onde está provada                                                                |
+| ------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Dinheiro nunca é `number`                         | `Money` sobre `decimal.js`, colunas `NUMERIC(20,2)`               | `test/unit/shared/domain/money.test.ts`                                          |
+| Saldo nunca negativo, nem por corrida             | trava de linha por carteira, versão como guarda, `CHECK` no banco | `test/concurrency/hot-wallet.test.ts`                                            |
+| Saldo = soma do ledger                            | ledger imutável (trigger), reconciliação em leitura               | `test/integration/schema`, `test/e2e/queries-http.test.ts`                       |
+| Um efeito, qualquer que seja o número de entregas | chave de idempotência por provedor, inbox, `UNIQUE` no banco      | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
+| Evento só depois do commit                        | outbox na mesma transação; publicador com lease                   | `test/integration/faults`, `test/integration/messaging/outbox-publisher.test.ts` |
+| Três processos, sem efeito duplicado              | processos reais, um banco, uma fila                               | `test/concurrency/three-processes.test.ts`                                       |
+| Recuperação após morte no meio do caminho         | worker morto antes e depois do commit, com reentrega              | `test/concurrency/process-crash-and-shutdown.test.ts`                            |
 
-| Command                    | Purpose                                                                    |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure             |
-| `bun run test:unit`        | domain and pure-logic tests                                                |
-| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults          |
-| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped      |
-| `bun run test:e2e`         | the HTTP application, with API keys                                        |
-| `bun run check:all`        | everything above. This is the gate, and CI runs it                         |
-| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)                 |
-| `bun run test:edge`        | protected mode: the edge's limits and isolation, against the running stack |
-| `bun run edge:check`       | starts the protected stack, runs `test:edge`, and stops the stack          |
-| `bun run demo:finance`     | demonstration 1: the financial flow, against the running API               |
-| `bun run db:migrate`       | apply pending migrations and exit                                          |
-| `bun run auth:create`      | create an API client and print its key once                                |
-| `bun run auth:revoke`      | revoke an API client by id                                                 |
+A lista completa, com a interpretação de cada regra ambígua do enunciado, está em
+[ARCHITECTURE.md §13](ARCHITECTURE.md) e [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md).
 
-No suite replaces PostgreSQL or the queue with a mock. Each concurrency test asserts that exactly one
-operation has the effect and that the others are replays, conflicts or rejections.
-`docs/TEST_STRATEGY.md` maps each specification requirement to its suite.
+## Testes
 
-The load test pins the stack to a number of CPUs and ramps the request rate in steps. Its method and
-results are in `docs/LOAD_TEST_RESULTS.md`. The numbers describe the machine that ran them.
+| Comando                    | Para que serve                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `bun run check:fast`       | tipos, lint, formato e testes unitários, sem infraestrutura                                             |
+| `bun run check:all`        | o gate completo: tudo acima, mais infraestrutura, integração, concorrência e e2e. É o que o CI roda     |
+| `bun run test:integration` | PostgreSQL e LocalStack reais: esquema, persistência, mensageria, falhas                                |
+| `bun run test:concurrency` | conexões paralelas, três processos da API, worker morto ou parado                                       |
+| `bun run test:e2e`         | a aplicação HTTP, com chaves de API                                                                     |
+| `bun run test:infra`       | a configuração do Compose, lida pelo próprio `docker compose config`                                    |
+| `bun run test:edge`        | modo protegido, contra a stack em execução                                                              |
+| `bun run test:load`        | teste de carga opcional, por número de CPUs; ver [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) |
 
-## Demonstrations
-
-Three scenarios show the guarantees. Each one prints its result, and each needs only the commands below.
-
-1. **Financial processing.** Start the stack (`docker compose up --build`), then run
-   `bun run demo:finance`. It opens a wallet with 100.00, runs a BET, a WIN, a BET and its REFUND, and a ROLLBACK
-   of the WIN, and it checks every balance, the refusal of a second ROLLBACK, the replay of a BET, the ledger sum
-   and the reconciliation.
-2. **Concurrency.** `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`. Fifty
-   identical requests run in parallel over three API processes and one database. One debit is applied, and the
-   other requests are replays of the same transaction.
-3. **Recovery.** `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`. A
-   worker process exits with code 137 after its command has committed and before the message is acknowledged. A
-   restarted worker takes the message back. The queue is drained, the balance is 75.00, the ledger sums to
-   75.00, and it holds exactly one debit for the command.
+Nenhum teste de integração, concorrência ou e2e substitui PostgreSQL ou a fila por mock. Cada teste de concorrência
+verifica que exatamente uma operação tem o efeito, e que as outras são replays, conflitos ou rejeições.
 
 ## Endpoints
 
-Amounts are always `{ "amount": "25.00", "currency": "BRL" }`. Every route needs an API key,
-sent as `Authorization: Bearer <key>`, except `/health/live` and `/health/ready`. An operator
-key opens and reads wallets. A provider key submits and reads the operations of its own provider
-id only. Keys are created with the `auth` command, which prints each one once:
+Todas as rotas exigem `Authorization: Bearer <chave>`, exceto `/health/live` e `/health/ready`. Valores monetários são
+sempre `{ "amount": "25.00", "currency": "BRL" }`.
 
-```bash
-docker compose exec api bun run auth:create -- --name operations --role OPERATOR
-docker compose exec api bun run auth:create -- --name provider-a --role PROVIDER --provider provider-a
-```
+| Método e caminho                                                          | Para que serve                                                    | Quem                             |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------- |
+| `POST /wallets`                                                           | abre carteira, com saldo inicial opcional (201; 409 se já existe) | operador                         |
+| `GET /wallets/:walletId`                                                  | saldo, versão e moeda                                             | operador                         |
+| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | lançamentos em ordem, com `nextCursor` opaco                      | operador                         |
+| `POST /wallets/:walletId/reconciliation`                                  | recalcula o saldo pelo ledger e informa divergência               | operador                         |
+| `POST /wagering/transactions`                                             | submete uma operação, com `Idempotency-Key` (201, 200, 202, 422)  | provedor (o próprio) ou operador |
+| `GET /wagering/transactions/:transactionId`                               | uma transação pelo id interno                                     | provedor (o próprio) ou operador |
+| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | a mesma, pelo id do provedor                                      | provedor (o próprio) ou operador |
+| `GET /health/live`, `GET /health/ready`                                   | processo vivo; PostgreSQL e fila respondem                        | público                          |
+| `GET /metrics`                                                            | contadores e resumos deste processo                               | operador                         |
 
-| Method and path                                                           | Purpose                                                                   |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `POST /wallets`                                                           | create a wallet, with an optional opening balance (201; 409 if it exists) |
-| `GET /wallets/:walletId`                                                  | balance, version and currency                                             |
-| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | ledger pages in sequence order, with an opaque `nextCursor`               |
-| `POST /wagering/transactions`                                             | submit an operation, with `Idempotency-Key` (201, 200, 202 or 422)        |
-| `GET /wagering/transactions/:transactionId`                               | one transaction                                                           |
-| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | the same, by the provider's own id                                        |
-| `POST /wallets/:walletId/reconciliation`                                  | recompute the balance from the ledger and report any divergence           |
-| `GET /health/live`, `GET /health/ready`                                   | the process is up; PostgreSQL and the command queue answer                |
-| `GET /metrics`                                                            | counters and summaries of this process                                    |
+Os códigos de falha são estáveis e estão em [ARCHITECTURE.md §3](ARCHITECTURE.md). A tabela de status HTTP está em
+[ARCHITECTURE.md §10](ARCHITECTURE.md), e o contrato completo está em [docs/openapi.json](docs/openapi.json).
 
-A rejected operation returns 422 with a `failureCode`. `ARCHITECTURE.md` section 3 lists the codes,
-and section 10 gives the status of every error.
+## Fila
 
-```bash
-# Submit a BET. The Idempotency-Key header is required, and it is the source of truth.
-curl -X POST localhost:3000/wagering/transactions \
-  -H 'content-type: application/json' -H 'Idempotency-Key: provider-a:transaction-123' \
-  -H "authorization: Bearer $PROVIDER_A_KEY" \
-  -d '{"providerId":"provider-a","externalTransactionId":"transaction-123","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<wallet id>","roundId":"round-987","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
-```
+O worker consome `WagerTransactionRequested` de `wager-transactions.fifo`, no formato do enunciado, e chama o mesmo
+caso de uso da HTTP. A mensagem só é confirmada depois do commit. Falhas permanentes vão para
+`wager-transactions-dlq.fifo`. O worker publica `WagerTransactionProcessed`, `WagerTransactionRejected`,
+`WalletBalanceChanged` e `WagerTransactionPendingReference` em `wager-events.fifo`.
 
-## Queue
+Um consumidor externo ordena as alterações de saldo de uma carteira por `walletVersion`, não pela ordem de chegada.
+O contrato dessa garantia está em [ARCHITECTURE.md §8](ARCHITECTURE.md).
 
-The worker consumes `WagerTransactionRequested` messages from `wager-transactions.fifo`, in the body
-shape of the specification (section 10), and calls the same use case as HTTP. A message is
-acknowledged only after its transaction commits. Permanent failures go to
-`wager-transactions-dlq.fifo`. The worker publishes `WagerTransactionProcessed`,
-`WagerTransactionRejected`, `WalletBalanceChanged` and `WagerTransactionPendingReference` to
-`wager-events.fifo`.
+## Limitações principais
 
-## Main limitations
+A lista completa está em [ARCHITECTURE.md §14](ARCHITECTURE.md). As mais importantes:
 
-The full list is in `ARCHITECTURE.md` section 14. The most important:
+- **Chaves de API, não um provedor de identidade.** As chaves valem até serem revogadas, sem rotação nem login. A API
+  fala HTTP simples; um deploy precisa colocar TLS na frente. Ver [ADR 0007](docs/adr/0007-api-key-authentication.md).
+- **Limite de taxa só no modo protegido, e por endereço.** Não protege contra ataque distribuído.
+- **Infraestrutura local.** LocalStack substitui o SQS. Nenhum deploy na AWS foi feito.
+- **A imagem não foi construída dentro do repositório nesta sandbox.** O proxy TLS da sandbox impede o `bun install`
+  no build. A imagem foi construída a partir de uma cópia do Dockerfile que só acrescenta a CA da sandbox, e a stack
+  foi executada a partir dela. Ver [ARCHITECTURE.md §14](ARCHITECTURE.md).
+- **Interpretações do enunciado que dependem de confirmação do dono** estão em
+  [ARCHITECTURE.md §13](ARCHITECTURE.md). A mais consequente: um `WIN` sem referência não bloqueia o `REFUND` da
+  sua `BET`.
 
-- **API keys, not an identity provider.** Keys last until revoked, with no rotation or login. The API
-  serves plain HTTP, so a deployment must put it behind TLS. See [ADR 0007](docs/adr/0007-api-key-authentication.md).
-- **Rate limiting is per client address, and only in protected mode.** It is not protection against a
-  distributed attack, and the default mode has none. See `ARCHITECTURE.md` section 15.
-- **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
-- **The Dockerfile image build** could not run in the authoring sandbox, whose TLS proxy blocks package
-  downloads. The stack was verified from clean volumes with an image built from the same source and the
-  sandbox CA.
-- **Interpretations that need the owner's confirmation** are listed in `ARCHITECTURE.md` section 13 and
-  `docs/INVARIANT_REVIEW.md`. The most consequential is that an unnamed WIN does not block a REFUND of its BET.
-
-## Repository layout
+## Estrutura do repositório
 
 ```text
 src/
-  main.ts                 API entrypoint (HTTP)
-  worker.ts               worker entrypoint (SQS consumer, outbox publisher, reference resolver)
-  migrate.ts              one-shot schema migration
-  app.module.ts           composition root shared by production and tests
-  config/                 environment parsing, fail-fast
-  health/ metrics/        probes and the metrics endpoint
+  main.ts                 entrada HTTP da API
+  worker.ts               entrada do worker: consumidor SQS, publicador do outbox, referências pendentes
+  migrate.ts              migração única do esquema
+  app.module.ts           composição, compartilhada por produção e testes
+  config/                 leitura de variáveis, com falha rápida
+  health/ metrics/        probes e endpoint de métricas
+  worker/                 laços do worker e a superfície HTTP interna
   modules/
-    wallet/               Wallet, ledger, opening, queries, reconciliation
-    wagering/             WagerTransaction, settlement, references, HTTP
-    messaging/            inbox, outbox, SQS adapters, command consumer, publisher
-    auth/                 API keys, roles and provider scope
-  shared/                 Money, errors, unit of work port, events, validation, observability
-  shared/infrastructure/database/migrations/   versioned, reversible migrations
+    wallet/               Wallet, ledger, abertura, consultas, reconciliação
+    wagering/             WagerTransaction, liquidação, referências, HTTP
+    messaging/            inbox, outbox, adaptadores SQS, consumidor, publicador
+    auth/                 chaves de API, papéis e escopo de provedor
+  shared/                 Money, erros, porta de unidade de trabalho, eventos, validação, observabilidade
 test/
-  unit/                   domain and pure logic
-  integration/            schema, persistence, use cases, messaging, faults
-  concurrency/            parallel connections and real processes
-  e2e/                    HTTP
-  load/                   optional load test: workload, pinning, measurement, report
-docker/localstack/        queue provisioning
-docker/edge/              the protected mode's Nginx template and forwarding headers
-docker-compose.protected.yml  the protected mode, as an override of docker-compose.yml
-test/edge/                protected-mode suite, and the edge overhead measurement
-test/demo/                demonstration 1, the financial flow
+  unit/                   domínio, lógica pura, contrato OpenAPI, configuração
+  integration/            esquema, persistência, casos de uso, mensageria, falhas
+  concurrency/            conexões paralelas e processos reais
+  e2e/                    HTTP, autorização adversarial, contrato OpenAPI contra respostas reais
+  edge/                   modo protegido
+  infra/                  configuração do Compose
+  load/                   teste de carga opcional
+  demo/                   demonstração financeira
+docs/                     guias, matriz, ADRs, contrato OpenAPI, relatórios de carga
 ```
+
+## Documentos
+
+- [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md): guia de avaliação, em português.
+- [ARCHITECTURE.md](ARCHITECTURE.md): arquitetura técnica atual, decisões, limitações.
+- [DECISIONS.md](DECISIONS.md): cada decisão com seus casos e evidências.
+- [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md): requisito a teste.
+- [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): auditoria desta rodada, com o que foi validado e o que ficou de fora.
+- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): o que cada suíte prova e o que não substitui.
+- [docs/openapi.json](docs/openapi.json): contrato HTTP.
+- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) e [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.
+- [docs/DOMAIN_GLOSSARY.md](docs/DOMAIN_GLOSSARY.md): glossário do domínio.
+- [docs/adr/README.md](docs/adr/README.md): índice das decisões registradas.
+- [docs/CHALLENGE.md](docs/CHALLENGE.md): o enunciado, sem alterações.

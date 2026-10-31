@@ -28,7 +28,7 @@ bun run infra:up
 bun run check:all
 ```
 
-`check:all` roda tipos, lint, formato, 316 testes unitários, o teste de infraestrutura, a integração, a concorrência e
+`check:all` roda tipos, lint, formato, os testes unitários, o teste de infraestrutura, a integração, a concorrência e
 o e2e, contra PostgreSQL 17 e LocalStack reais. Os números de cada suíte mudam conforme você adiciona testes; o gate
 exige que todos passem.
 

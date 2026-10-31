@@ -71,14 +71,28 @@ Run `bun run infra:up` before the suites that need PostgreSQL or LocalStack.
 
 Amounts are always `{ "amount": "25.00", "currency": "BRL" }`.
 
+Every route needs an API key, sent as `Authorization: Bearer <key>`, except `/health/live` and
+`/health/ready`. An operator key opens and reads wallets and reads metrics. A provider key
+submits and reads the operations of its own provider id only. Create a key with the `auth`
+command, which prints it once:
+
 ```bash
-# Open a wallet, with an optional opening balance
+docker compose exec api bun run auth:create -- --name operations --role OPERATOR
+docker compose exec api bun run auth:create -- --name provider-a --role PROVIDER --provider provider-a
+```
+
+See `ARCHITECTURE.md` section 12 and `docs/adr/0007-api-key-authentication.md`.
+
+```bash
+# Open a wallet, with an optional opening balance (operator key)
 curl -X POST localhost:3000/wallets -H 'content-type: application/json' \
+  -H "authorization: Bearer $OPERATOR_KEY" \
   -d '{"playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","initialBalance":{"amount":"100.00","currency":"BRL"}}'
 
-# Submit a BET. The Idempotency-Key header is required and is the source of truth.
+# Submit a BET. The Idempotency-Key header is required and is the source of truth (provider-a key)
 curl -X POST localhost:3000/wagering/transactions \
   -H 'content-type: application/json' -H 'Idempotency-Key: provider-a:transaction-123' \
+  -H "authorization: Bearer $PROVIDER_A_KEY" \
   -d '{"providerId":"provider-a","externalTransactionId":"transaction-123","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<wallet id>","roundId":"round-987","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
 ```
 

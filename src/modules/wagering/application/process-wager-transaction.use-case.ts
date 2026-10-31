@@ -74,7 +74,10 @@ export class ProcessWagerTransaction {
         const outcome = await this.context.unitOfWork.run((repositories) =>
           this.process(repositories, command, payloadHash),
         );
-        this.metrics.increment('transactions_total', { status: outcome.transaction.status });
+        // A replay is not a new transaction, so it is counted by idempotent_replays_total only.
+        if (!outcome.idempotentReplay) {
+          this.metrics.increment('transactions_total', { status: outcome.transaction.status });
+        }
         this.metrics.observe('processing_latency_ms', performance.now() - started);
         return outcome;
       } catch (error) {

@@ -1,3 +1,17 @@
+# Local stack: PostgreSQL, LocalStack (SQS), a one-shot migration, the HTTP API and the worker.
+# Start order is enforced: the database and queues are healthy, then the schema is migrated,
+# then the API and the worker start. Credentials below are local development values only.
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql://wagering:wagering@postgres:5432/wagering
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  SQS_ENDPOINT: http://localstack:4566
+  SQS_COMMAND_QUEUE: wager-transactions.fifo
+  SQS_COMMAND_DLQ: wager-transactions-dlq.fifo
+  SQS_EVENTS_QUEUE: wager-events.fifo
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -24,26 +38,44 @@ services:
       - '4566:4566'
     volumes:
       - ./docker/localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh:ro
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://localhost:4566/_localstack/health']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: .
+    command: ['bun', 'run', 'db:migrate']
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
 
   api:
     build: .
     environment:
+      <<: *app-environment
       PORT: '3000'
-      DATABASE_URL: postgresql://wagering:wagering@postgres:5432/wagering
-      AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      SQS_ENDPOINT: http://localstack:4566
-      SQS_COMMAND_QUEUE: wager-transactions.fifo
-      SQS_COMMAND_DLQ: wager-transactions-dlq.fifo
-      SQS_EVENTS_QUEUE: wager-events.fifo
     ports:
       - '3000:3000'
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       localstack:
-        condition: service_started
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ['bun', 'run', 'src/worker.ts']
+    environment: *app-environment
+    stop_grace_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      localstack:
+        condition: service_healthy
 
 volumes:
   postgres_data:

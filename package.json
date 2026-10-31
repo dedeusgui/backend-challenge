@@ -17,7 +17,8 @@
     "test:integration": "bun test test/integration",
     "check:all": "bun run check:fast && bun run test:integration && bun run test:concurrency && bun run test:e2e",
     "test:concurrency": "bun test test/concurrency",
-    "test:e2e": "bun test test/e2e"
+    "test:e2e": "bun test test/e2e",
+    "db:migrate": "bun run src/migrate.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

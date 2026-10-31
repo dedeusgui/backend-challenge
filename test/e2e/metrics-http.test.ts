@@ -48,7 +48,8 @@ describe('GET /metrics', () => {
       counters: Record<string, number>;
     };
 
-    expect(metrics.counters['transactions_total{status="PROCESSED"}']).toBeGreaterThanOrEqual(1);
-    expect(metrics.counters['idempotent_replays_total']).toBeGreaterThanOrEqual(1);
+    // One new transaction and one replay of it: the replay must not be counted as a transaction.
+    expect(metrics.counters['transactions_total{status="PROCESSED"}']).toBe(1);
+    expect(metrics.counters['idempotent_replays_total']).toBe(1);
   });
 });

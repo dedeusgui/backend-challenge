@@ -154,6 +154,14 @@ No mutant of this round survived. The partial unique indexes also refuse the sec
 bypass of the domain check cannot store a second effect. The database gives a unique violation, not the
 business answer (`REFERENCE_ALREADY_REVERSED`), so the business answer is tested in the domain suites.
 
+Mutants of the money input contract (`fix(money)`), against `src/shared/domain/money.ts`. Each one changes
+the validator, runs the suites, and is restored byte for byte (checked with `cmp`) before the next:
+
+| Mutant | Change                                          | Result                                                                                                                             |
+| ------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| N1     | one fractional digit accepted again (`\d{1,2}`) | **Killed.** `money.test.ts`, "rejects an amount with one fractional digit", and the E2E cases for `25.1` (opening balance and BET) |
+| N2     | leading zeros accepted (`\d{1,18}`)             | **Killed.** `money.test.ts`, "rejects an amount with a leading zero in the integer part"                                           |
+
 ## Load
 
 `bun run test:load` measures the stack under a product mix, pinned to a number of CPUs. The stack

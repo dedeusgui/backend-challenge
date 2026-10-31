@@ -2,7 +2,10 @@ import { Decimal } from 'decimal.js';
 import { DomainError } from './domain-error';
 
 export interface MoneyProps {
-  /** Decimal string with at most two fractional digits, e.g. "25.00". */
+  /**
+   * Decimal string with exactly two fractional digits and no leading zero in the integer part,
+   * e.g. "25.00". Any other spelling of a value is refused, so one value has one representation.
+   */
   amount: string;
   /** ISO-4217 alphabetic code, e.g. "BRL". */
   currency: string;
@@ -14,8 +17,11 @@ export interface MoneyProps {
  */
 const MoneyDecimal = Decimal.clone({ precision: 40 });
 
-/** Mirrors the persisted NUMERIC(20,2) column: at most 18 integer digits and 2 fractional ones. */
-const AMOUNT_PATTERN = /^\d{1,18}(\.\d{1,2})?$/;
+/**
+ * The input contract (challenge 6.1): exactly two fractional digits, and at most 18 integer digits,
+ * the bounds of the persisted NUMERIC(20,2) column. "25", "25.1" and "007.10" are refused.
+ */
+const AMOUNT_PATTERN = /^(0|[1-9]\d{0,17})\.\d{2}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
 /** Immutable monetary amount. Arithmetic is exact; there is no floating-point path. */

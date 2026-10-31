@@ -68,7 +68,7 @@ rules therefore exist in one implementation.
 ## 2. Domain model
 
 **Money** (`src/shared/domain/money.ts`). An immutable value over `decimal.js`. Inputs
-are decimal strings with at most 18 integer and 2 fractional digits. Currency must be
+are decimal strings with exactly 2 fractional digits, no leading zero, and at most 18 integer digits. Currency must be
 three uppercase letters. Cross-currency arithmetic throws `CURRENCY_MISMATCH`.
 `equals` across currencies returns false. Decision: [ADR 0002](docs/adr/0002-money-representation.md).
 
@@ -483,8 +483,9 @@ These are choices the specification leaves open. Each one is tested.
 - A credit that would leave the balance above 999999999999999999.99, the largest value `NUMERIC(20,2)`
   stores, is `REJECTED` with `BALANCE_LIMIT_EXCEEDED` (422). It is a business outcome of the wallet's
   state, persisted and auditable. The specification does not cover it.
-- An amount is normalized to two decimals, so `"25"` is `"25.00"`, as [ADR 0002](docs/adr/0002-money-representation.md)
-  decides. A malformed amount is 400 `INVALID_MONEY`, and a JSON number is 400 `INVALID_REQUEST`.
+- An amount needs exactly two fractional digits. `"25"` and `"25.1"` are 400 `INVALID_MONEY`, and a
+  JSON number is 400 `INVALID_REQUEST`. This withdraws the earlier normalization of `"25"` to `"25.00"`
+  ([ADR 0002](docs/adr/0002-money-representation.md), amended).
 - A WIN or LOSS on a BET that was already refunded or rolled back is rejected with
   `REFERENCE_ALREADY_REVERSED`.
 

@@ -277,6 +277,17 @@ describe('WagerCommandConsumer', () => {
     expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
   });
 
+  test('an amount without exactly two decimals is dead-lettered as permanently invalid, and moves nothing', async () => {
+    const wallet = await fundedWallet();
+    await send(requestedMessage(wallet, { amount: '25' }));
+
+    await consumerWith().pollOnce();
+
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+    expect(await debitsOf(wallet.walletId)).toBe(0);
+    expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
+  });
+
   test('a reused messageId with a different payload is dead-lettered as permanently invalid', async () => {
     const wallet = await fundedWallet();
     const messageId = `msg-${randomUUID()}`;

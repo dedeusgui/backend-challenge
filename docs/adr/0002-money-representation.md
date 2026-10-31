@@ -1,6 +1,6 @@
 # ADR 0002: Money as decimal string, decimal.js arithmetic, NUMERIC(20,2) storage
 
-**Status:** accepted
+**Status:** accepted, amended (the input scale, see below)
 
 ## Context
 
@@ -13,8 +13,10 @@ The contract is a decimal string with two fractional digits and an ISO currency
   context (`src/shared/domain/money.ts`). The default context (20 digits) rounds a
   sum of two `NUMERIC(20,2)` operands. A test pins this: `999999999999999999.99 +
 0.02` must be `1000000000000000000.01`.
-- Input accepts at most 18 integer and 2 fractional digits, the same bounds as the
-  column. Anything else is rejected, never rounded.
+- Input needs exactly 2 fractional digits and no leading zero, and at most 18 integer digits, the
+  same bounds as the column. Anything else is rejected, never rounded or normalized.
+  An earlier version normalized `"25"` to `"25.00"`. That was withdrawn, because the contract
+  fixes the scale and one value must have one representation.
 - Storage is `numeric(20,2)` in PostgreSQL, read back as strings and parsed through
   `Money.from`.
 

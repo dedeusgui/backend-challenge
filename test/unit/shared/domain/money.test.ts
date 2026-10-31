@@ -21,14 +21,12 @@ describe('Money.from', () => {
     expect(brl('25.00').toJSON()).toEqual({ amount: '25.00', currency: 'BRL' });
   });
 
-  test.each([
-    ['25', '25.00'],
-    ['25.5', '25.50'],
-    ['0', '0.00'],
-    ['007.10', '7.10'],
-  ])('normalizes "%s" to a fixed two-decimal scale "%s"', (input, expected) => {
-    expect(brl(input).toJSON().amount).toBe(expected);
-  });
+  test.each(['0.00', '0.01', '1.00', '25.10', '999999999999999999.99'])(
+    'accepts "%s": a decimal string with exactly two fractional digits',
+    (amount) => {
+      expect(brl(amount).toJSON()).toEqual({ amount, currency: 'BRL' });
+    },
+  );
 
   test.each([
     ['empty string', ''],
@@ -46,6 +44,11 @@ describe('Money.from', () => {
     ['missing integer part', '.50'],
     ['trailing dot', '1.'],
     ['letters', 'abc'],
+    ['no fractional digits', '25'],
+    ['one fractional digit', '25.1'],
+    ['three fractional digits, all zero', '25.000'],
+    ['a leading zero in the integer part', '007.10'],
+    ['negative zero', '-0.00'],
   ])('rejects an amount with %s', (_label, amount) => {
     expect(domainErrorCodeOf(() => brl(amount))).toBe('INVALID_MONEY');
   });
@@ -86,6 +89,26 @@ describe('Money arithmetic', () => {
     expect(brl('999999999999999999.99').add(brl('0.02')).toString()).toBe('1000000000000000000.01');
   });
 
+  test('keeps the centavo at the top of the NUMERIC(20,2) range', () => {
+    expect(brl('999999999999999999.98').add(brl('0.01')).toString()).toBe('999999999999999999.99');
+    expect(brl('999999999999999999.99').subtract(brl('0.99')).toString()).toBe(
+      '999999999999999999.00',
+    );
+  });
+
+  test('every result serializes with exactly two fractional digits', () => {
+    const results = [
+      brl('0.10').add(brl('0.20')),
+      brl('1.00').subtract(brl('0.90')),
+      brl('5.00').negate(),
+      Money.zero('BRL'),
+      brl('12.30'),
+    ];
+    for (const result of results) {
+      expect(result.toString()).toMatch(/^-?\d+\.\d{2}$/);
+    }
+  });
+
   test('subtracts decimal amounts exactly', () => {
     expect(brl('100.00').subtract(brl('80.00')).toString()).toBe('20.00');
   });
@@ -109,7 +132,7 @@ describe('Money arithmetic', () => {
 
 describe('Money comparisons', () => {
   test('equals compares value and currency', () => {
-    expect(brl('10.00').equals(brl('10'))).toBe(true);
+    expect(brl('10.00').equals(brl('10.00'))).toBe(true);
     expect(brl('10.00').equals(brl('10.01'))).toBe(false);
   });
 

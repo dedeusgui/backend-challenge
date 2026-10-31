@@ -214,6 +214,45 @@ describe('a malformed monetary amount is 400', () => {
   });
 });
 
+describe('a monetary amount has exactly two decimals', () => {
+  test.each(['25', '25.1'])('an opening balance of "%s" is 400 INVALID_MONEY', async (amount) => {
+    const result = await send('POST', '/wallets', operatorKey, {
+      playerId: randomUUID(),
+      initialBalance: { amount, currency: 'BRL' },
+    });
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_MONEY');
+  });
+
+  test.each(['25', '25.1'])(
+    'a BET of "%s" is 400 INVALID_MONEY, and no balance, ledger row or transaction is written',
+    async (amount) => {
+      const wallet = await openWallet('100.00');
+      const externalTransactionId = `tx-${randomUUID()}`;
+      const result = await send(
+        'POST',
+        '/wagering/transactions',
+        providerKey,
+        submission(wallet, { externalTransactionId, money: { amount, currency: 'BRL' } }),
+        { 'idempotency-key': `provider-a:${externalTransactionId}` },
+      );
+      expect(result.status).toBe(400);
+      expect(errorCodeOf(result)).toBe('INVALID_MONEY');
+
+      const after = await send('GET', `/wallets/${wallet.walletId}`, operatorKey);
+      expect(after.body.balance).toEqual({ amount: '100.00', currency: 'BRL' });
+      const ledger = await send('GET', `/wallets/${wallet.walletId}/ledger`, operatorKey);
+      expect((ledger.body.entries as unknown[]).length).toBe(1);
+      const lookup = await send(
+        'GET',
+        `/providers/provider-a/wagering/transactions/${externalTransactionId}`,
+        providerKey,
+      );
+      expect(lookup.status).toBe(404);
+    },
+  );
+});
+
 describe('the correlation id is bounded and well formed', () => {
   // The identifier is checked before the wallet is looked up, so a random wallet id is enough.
   const submitWithCorrelation = (correlationId: string) =>

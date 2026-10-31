@@ -196,3 +196,22 @@ describe('wallet persistence', () => {
     });
   });
 });
+
+describe('a stored amount is read back as a Money with two decimals', () => {
+  test('PostgreSQL returns a NUMERIC(20,2) value with two fractional digits, whatever it was given', async () => {
+    // The read path relies on this: a driver never returns "25" for a NUMERIC(20,2) column.
+    const rows = (await database.orm.em
+      .getConnection()
+      .execute(`SELECT '25'::numeric(20,2)::text AS amount`)) as Array<{ amount: string }>;
+    expect(rows[0]?.amount).toBe('25.00');
+  });
+
+  test('a wallet stored with 25.00 is read back as the same Money', async () => {
+    const walletId = await openWallet('25.00');
+
+    const wallet = await unitOfWork.run((repositories) => repositories.wallets.findById(walletId));
+
+    expect(wallet?.balance.toString()).toBe('25.00');
+    expect(wallet?.balance.equals(brl('25.00'))).toBe(true);
+  });
+});

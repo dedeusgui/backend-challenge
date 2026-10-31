@@ -184,6 +184,38 @@ describe('OutboxPublisher', () => {
     expect(transport.sendsByEvent.get(crashedId)).toBe(1);
   });
 
+  test('a publisher stalled past its lease loses the event to a successor, and its late mark is refused', async () => {
+    await committedEvents();
+    const transport = transportFor();
+    let now = NOW;
+    const successor = publisherFor(transport, () => now);
+    let successorPublished = -1;
+    const stalled: OutboxTransport = {
+      publish: async (message) => {
+        // Slow, not crashed: the lease expires while this send is in flight, and a successor takes over.
+        now = new Date(NOW.getTime() + 31_000);
+        successorPublished = await successor.publishOnce();
+        await transport.publish(message);
+      },
+    };
+    const before = metrics.snapshot().counters['outbox_lost_lease_total'] ?? 0;
+
+    const stalledPublished = await publisherFor(stalled, () => NOW, 1).publishOnce();
+
+    expect(successorPublished).toBeGreaterThan(0);
+    expect(stalledPublished).toBe(0);
+    expect(metrics.snapshot().counters['outbox_lost_lease_total']).toBe(before + 1);
+    const sentTwice = [...transport.sendsByEvent.entries()].filter(([, sends]) => sends === 2);
+    expect(sentTwice).toHaveLength(1);
+    const doubledId = sentTwice[0]?.[0] ?? '';
+    const rows = await database.orm.em.getConnection().execute(
+      `SELECT published_at IS NOT NULL AS published, lease_token IS NULL AS unleased
+         FROM outbox_messages WHERE id = ?`,
+      [doubledId],
+    );
+    expect(rows).toEqual([{ published: true, unleased: true }]);
+  });
+
   test('a publisher that lost its lease cannot mark the event published', async () => {
     await committedEvents();
     const store = new MikroOrmOutboxStore(database.orm);

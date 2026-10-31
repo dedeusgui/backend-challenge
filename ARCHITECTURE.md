@@ -260,6 +260,14 @@ a valid command is not dead-lettered by a short failure. The policy is provision
 `docker/localstack/init-sqs.sh`, and `test/integration/messaging/broker-redrive.test.ts` checks
 the broker-side move on the provisioned queue.
 
+Recovery after a crash in the dead-letter path is tested, not assumed. A crash after the dead-letter
+send and before the acknowledgement leaves the message in the command queue. It is dead-lettered again
+on redelivery, so the dead-letter queue holds one copy per delivery: at least once, never fewer. No
+effect is applied, because a dead-lettered command never reaches the use case's write path. A dead-letter
+send that the broker refuses is not acknowledged, so the message is retried on redelivery. The tests are
+`integration: crash after the dead-letter send` and `integration: dead-letter send refused` in
+`test/integration/messaging/wager-command-consumer.test.ts`.
+
 ## 8. Transactional outbox
 
 Events are written in the same transaction as the financial change. Nothing is sent to
@@ -286,6 +294,12 @@ sequenceDiagram
     end
   end
 ```
+
+A publisher can stall past its lease. Its send is in flight while the lease expires, so the next
+publisher claims the event, sends it and marks it. The stalled send then repeats the event with the same
+id, which consumers deduplicate. Its mark is refused under the lost lease and counted in
+`outbox_lost_lease_total`, and the event is marked published once. The test is `integration: stalled
+publisher loses the lease`, in `test/integration/messaging/outbox-publisher.test.ts`.
 
 Events: `WagerTransactionProcessed` (including LOSS), `WagerTransactionRejected`,
 `WagerTransactionPendingReference`, `WalletBalanceChanged` (only when the balance changes,
@@ -443,6 +457,8 @@ config` validates the file. No test starts a container and kills it.
   `walletVersion`.
 - **Reconciliation runs on demand.** There is no scheduled job.
 - **No dead-letter replay tooling.**
+- **Dead-letter duplicates after a crash.** A crash between a dead-letter send and its acknowledgement
+  leaves one copy per delivery. A dead-letter consumer must deduplicate by the message body.
 - **Load was measured on one four-vCPU cloud VM, with the stack pinned to 1, 2 and 4 CPUs.** The agreed
   rates were 25, 100 and 200 requests per second, and the first failing rates 50, 125 and 300
   (`docs/LOAD_TEST_RESULTS.md`). The predicted ceiling, from the CPU per request, matched on one and two

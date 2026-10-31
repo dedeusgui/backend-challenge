@@ -12,6 +12,7 @@ import {
   type ConsumerFaults,
 } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import type { MessageQueue } from '../../../src/modules/messaging/application/message-queue.port';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
@@ -48,12 +49,14 @@ function consumerWith(
     faults?: ConsumerFaults;
     process?: Pick<ProcessWagerTransaction, 'execute'>;
     logger?: (entry: OperationLog) => void;
+    queue?: MessageQueue;
+    deadLetters?: MessageQueue;
   } = {},
 ) {
   return new WagerCommandConsumer({
     consumerName: 'wager-transactions',
-    queue: new SqsQueue(sqs, queues.commandQueueUrl),
-    deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
+    queue: options.queue ?? new SqsQueue(sqs, queues.commandQueueUrl),
+    deadLetters: options.deadLetters ?? new SqsQueue(sqs, queues.deadLetterQueueUrl),
     process: options.process ?? processWager,
     visibilityTimeoutSeconds: 1,
     faults: options.faults ?? NO_FAULTS,
@@ -97,6 +100,16 @@ function requestedMessage(
 /** Messages share one FIFO group by default. A test that must not wait behind an in-flight message uses its own group. */
 async function send(body: string, group = 'group'): Promise<void> {
   await new SqsQueue(sqs, queues.commandQueueUrl).send(body, group, randomUUID());
+}
+
+async function transactionsFor(externalTransactionId: string): Promise<number> {
+  const rows = (await database.orm.em
+    .getConnection()
+    .execute(
+      `SELECT count(*)::text AS n FROM wager_transactions WHERE external_transaction_id = ?`,
+      [externalTransactionId],
+    )) as Array<{ n: string }>;
+  return Number(rows[0]?.n ?? '0');
 }
 
 async function debitsOf(walletId: string): Promise<number> {
@@ -185,6 +198,74 @@ describe('WagerCommandConsumer', () => {
     expect(await balanceOf(wallet.walletId)).toBe('75.00');
     expect(await debitsOf(wallet.walletId)).toBe(1);
     expect(await drain(queues.commandQueueUrl)).toBe(0);
+  });
+
+  test('a crash after the dead-letter send and before the acknowledgement is recovered: dead-lettered again, no effect', async () => {
+    const unknown = { walletId: randomUUID(), playerId: `player-${randomUUID()}` };
+    const externalTransactionId = `transaction-${randomUUID()}`;
+    await send(requestedMessage(unknown, { externalTransactionId }));
+    const commands = new SqsQueue(sqs, queues.commandQueueUrl);
+    let crashed = false;
+    const crashingAcknowledge: MessageQueue = {
+      send: (body, group, deduplicationId) => commands.send(body, group, deduplicationId),
+      receive: (options) => commands.receive(options),
+      changeVisibility: (receiptHandle, seconds) =>
+        commands.changeVisibility(receiptHandle, seconds),
+      acknowledge: async (receiptHandle) => {
+        if (!crashed) {
+          crashed = true;
+          throw new Error('simulated process crash after the dead-letter send');
+        }
+        await commands.acknowledge(receiptHandle);
+      },
+    };
+
+    await expect(consumerWith({ queue: crashingAcknowledge }).pollOnce()).rejects.toThrow(
+      'simulated process crash',
+    );
+
+    let redelivered = 0;
+    for (let attempt = 0; attempt < 10 && redelivered === 0; attempt += 1) {
+      redelivered = await consumerWith({ queue: crashingAcknowledge }).pollOnce();
+    }
+
+    expect(redelivered).toBe(1);
+    expect(await drain(queues.commandQueueUrl)).toBe(0);
+    // Each delivery that reached the dead-letter queue left a copy: at least once, never a lost message.
+    expect(await drain(queues.deadLetterQueueUrl)).toBe(2);
+    expect(await transactionsFor(externalTransactionId)).toBe(0);
+  });
+
+  test('a dead-letter send that the broker refuses is retried on redelivery, so the message is not lost', async () => {
+    const unknown = { walletId: randomUUID(), playerId: `player-${randomUUID()}` };
+    await send(requestedMessage(unknown));
+    const deadLetters = new SqsQueue(sqs, queues.deadLetterQueueUrl);
+    let refused = false;
+    const flakyDeadLetters: MessageQueue = {
+      send: async (body, group, deduplicationId) => {
+        if (!refused) {
+          refused = true;
+          throw new Error('simulated broker refusal');
+        }
+        await deadLetters.send(body, group, deduplicationId);
+      },
+      receive: (options) => deadLetters.receive(options),
+      changeVisibility: (receiptHandle, seconds) =>
+        deadLetters.changeVisibility(receiptHandle, seconds),
+      acknowledge: (receiptHandle) => deadLetters.acknowledge(receiptHandle),
+    };
+
+    await expect(consumerWith({ deadLetters: flakyDeadLetters }).pollOnce()).rejects.toThrow(
+      'simulated broker refusal',
+    );
+    let removed = 0;
+    for (let attempt = 0; attempt < 10 && removed === 0; attempt += 1) {
+      removed = await consumerWith({ deadLetters: flakyDeadLetters }).pollOnce();
+    }
+
+    expect(removed).toBe(1);
+    expect(await drain(queues.commandQueueUrl)).toBe(0);
+    expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
   });
 
   test('a malformed message is dead-lettered and removed from the command queue', async () => {

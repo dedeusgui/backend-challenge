@@ -1,5 +1,8 @@
 import { RequestValidationError } from '../../../shared/validation/request-validation';
 
+/** The ledger sequence is a PostgreSQL bigint identity, so a larger cursor cannot name an entry. */
+const MAX_LEDGER_SEQUENCE = 9_223_372_036_854_775_807n;
+
 /**
  * An opaque cursor: callers pass it back without reading it. It wraps the ledger
  * sequence number, and a value that does not decode is rejected rather than guessed.
@@ -24,7 +27,7 @@ export function decodeLedgerCursor(cursor: string): string {
   ) {
     throw invalid();
   }
-  if (!/^[1-9][0-9]*$/.test(decoded.seq)) {
+  if (!/^[1-9][0-9]*$/.test(decoded.seq) || BigInt(decoded.seq) > MAX_LEDGER_SEQUENCE) {
     throw invalid();
   }
   return decoded.seq;

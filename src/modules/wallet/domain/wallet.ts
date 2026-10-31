@@ -3,6 +3,9 @@ import { LedgerDirection } from '../../../shared/domain/ledger-direction';
 import { Money } from '../../../shared/domain/money';
 import { WalletLedgerEntry } from './wallet-ledger-entry';
 
+/** The largest balance the database stores: NUMERIC(20,2), with 18 integer digits and 2 fractional ones. */
+const MAXIMUM_BALANCE_AMOUNT = '999999999999999999.99';
+
 export interface WalletState {
   id: string;
   playerId: string;
@@ -117,6 +120,13 @@ export class Wallet {
   canDebit(money: Money): boolean {
     this.assertSameCurrency(money);
     return !this.currentBalance.isLessThan(money);
+  }
+
+  /** False when the credit would leave the balance above the largest value the database stores. Throws only on a currency mismatch. */
+  canCredit(money: Money): boolean {
+    this.assertSameCurrency(money);
+    const maximum = Money.from({ amount: MAXIMUM_BALANCE_AMOUNT, currency: this.currency });
+    return !maximum.isLessThan(this.currentBalance.add(money));
   }
 
   debit(movement: WalletMovement): WalletLedgerEntry {

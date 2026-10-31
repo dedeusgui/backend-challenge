@@ -1,0 +1,215 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { createTestDatabase, type TestDatabase } from '../integration/support/test-database';
+import { startTestApp, type TestApp } from './support/test-app';
+
+/**
+ * The input contract: a malformed identifier, amount or cursor is a 400 that names the field.
+ * Before this suite, several of these reached PostgreSQL and came back as 500 INTERNAL_ERROR.
+ */
+
+let database: TestDatabase;
+let app: TestApp;
+let operatorKey = '';
+let providerKey = '';
+
+beforeAll(async () => {
+  database = await createTestDatabase();
+  app = await startTestApp(database.url);
+  operatorKey = (await app.createApiClient({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  providerKey = (
+    await app.createApiClient({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
+  ).apiKey;
+});
+
+afterAll(async () => {
+  await app.close();
+  await database.drop();
+});
+
+interface HttpResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function send(
+  method: string,
+  path: string,
+  key: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<HttpResult> {
+  const response = await fetch(`${app.baseUrl}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  return {
+    status: response.status,
+    body: text === '' ? {} : (JSON.parse(text) as Record<string, unknown>),
+  };
+}
+
+function errorCodeOf(result: HttpResult): unknown {
+  const error = result.body.error;
+  return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+}
+
+async function openWallet(amount: string): Promise<{ walletId: string; playerId: string }> {
+  const playerId = randomUUID();
+  const created = await send('POST', '/wallets', operatorKey, {
+    playerId,
+    initialBalance: { amount, currency: 'BRL' },
+  });
+  expect(created.status).toBe(201);
+  return { walletId: String(created.body.id), playerId };
+}
+
+function submission(
+  wallet: { walletId: string; playerId: string },
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    providerId: 'provider-a',
+    externalTransactionId: `tx-${randomUUID()}`,
+    playerId: wallet.playerId,
+    walletId: wallet.walletId,
+    roundId: 'round-987',
+    gameId: 'fortune-chimp',
+    kind: 'BET',
+    money: { amount: '1.00', currency: 'BRL' },
+    ...overrides,
+  };
+}
+
+function keyFor(body: Record<string, unknown>): Record<string, string> {
+  return { 'idempotency-key': `provider-a:${String(body.externalTransactionId)}` };
+}
+
+describe('an identifier that is not a UUID is 400 INVALID_REQUEST', () => {
+  test('a malformed walletId in a submission is refused before the database', async () => {
+    const body = submission({ walletId: 'not-a-uuid', playerId: randomUUID() });
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, keyFor(body));
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+
+  test.each([
+    ['get a wallet', 'GET', '/wallets/not-a-uuid', 'operator'],
+    ['read the ledger', 'GET', '/wallets/not-a-uuid/ledger', 'operator'],
+    ['reconcile', 'POST', '/wallets/not-a-uuid/reconciliation', 'operator'],
+    ['get a transaction', 'GET', '/wagering/transactions/not-a-uuid', 'provider'],
+  ] as const)('%s with a malformed id is 400', async (_label, method, path, role) => {
+    const result = await send(method, path, role === 'operator' ? operatorKey : providerKey);
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+});
+
+describe('a control character in an identifier is 400 INVALID_REQUEST', () => {
+  test('a NUL character in externalTransactionId is refused, not stored', async () => {
+    const wallet = await openWallet('100.00');
+    const body = submission(wallet, { externalTransactionId: 'bet\u0000one' });
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, {
+      'idempotency-key': `provider-a:${randomUUID()}`,
+    });
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+
+  test('a NUL character in playerId when opening a wallet is refused', async () => {
+    const result = await send('POST', '/wallets', operatorKey, {
+      playerId: 'player\u0000one',
+      initialBalance: { amount: '1.00', currency: 'BRL' },
+    });
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+
+  test('a NUL character in a provider lookup path is 400, not a server error', async () => {
+    const result = await send(
+      'GET',
+      '/providers/provider-a/wagering/transactions/bet%00one',
+      providerKey,
+    );
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+});
+
+describe('the ledger cursor', () => {
+  test('a cursor whose sequence exceeds the bigint range is 400 INVALID_CURSOR', async () => {
+    const wallet = await openWallet('100.00');
+    const cursor = Buffer.from(JSON.stringify({ seq: '9'.repeat(30) })).toString('base64url');
+
+    const result = await send(
+      'GET',
+      `/wallets/${wallet.walletId}/ledger?cursor=${cursor}`,
+      operatorKey,
+    );
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_CURSOR');
+  });
+});
+
+describe('a credit that would exceed the largest storable balance', () => {
+  test('is REJECTED with BALANCE_LIMIT_EXCEEDED (422), and the balance does not change', async () => {
+    const wallet = await openWallet('999999999999999999.99');
+    const body = submission(wallet, {
+      kind: 'WIN',
+      money: { amount: '0.01', currency: 'BRL' },
+    });
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, keyFor(body));
+
+    expect(result.status).toBe(422);
+    expect(result.body).toMatchObject({
+      status: 'REJECTED',
+      failureCode: 'BALANCE_LIMIT_EXCEEDED',
+      balance: { amount: '999999999999999999.99', currency: 'BRL' },
+    });
+    const after = await send('GET', `/wallets/${wallet.walletId}`, operatorKey);
+    expect(after.body).toMatchObject({ balance: { amount: '999999999999999999.99' } });
+  });
+});
+
+describe('a malformed monetary amount is 400', () => {
+  test.each([
+    ['scientific notation', '1e3'],
+    ['NaN', 'NaN'],
+    ['Infinity', 'Infinity'],
+    ['a negative amount', '-1.00'],
+    ['three decimals', '1.234'],
+    ['an empty string', ''],
+    ['a comma separator', '1,00'],
+    ['a leading plus sign', '+1.00'],
+    ['letters', 'abc'],
+  ])('%s is INVALID_MONEY', async (_label, amount) => {
+    const wallet = await openWallet('100.00');
+    const body = submission(wallet, { money: { amount, currency: 'BRL' } });
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, keyFor(body));
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_MONEY');
+  });
+
+  test('an amount that is a JSON number is INVALID_REQUEST, because money never travels as a number', async () => {
+    const wallet = await openWallet('100.00');
+    const body = submission(wallet, { money: { amount: 25, currency: 'BRL' } });
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, keyFor(body));
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+  });
+});

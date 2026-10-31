@@ -9,6 +9,7 @@ import {
   type ProcessWagerOutcome,
 } from '../application/process-wager-transaction.use-case';
 import { parseProcessWagerRequest } from './process-wager.request';
+import { expectUuid } from '../../../shared/validation/request-validation';
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
 import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
@@ -40,7 +41,7 @@ export class WageringController {
     @CurrentPrincipal() principal: Principal,
     @Param('transactionId') transactionId: string,
   ) {
-    const transaction = await this.queries.getById(transactionId);
+    const transaction = await this.queries.getById(expectUuid(transactionId, 'transactionId'));
     requireProviderScope(principal, transaction.providerId);
     return presentTransaction(transaction);
   }

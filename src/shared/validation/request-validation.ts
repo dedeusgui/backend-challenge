@@ -26,18 +26,55 @@ export function expectOnlyKeys(body: Record<string, unknown>, allowed: readonly 
   }
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** An identifier the database stores as a UUID. A malformed one is refused here, not by PostgreSQL. */
+export function expectUuid(value: string, label: string): string {
+  if (!UUID_PATTERN.test(value)) {
+    throw new RequestValidationError(`${label} must be a UUID`);
+  }
+  return value;
+}
+
+/** Text that a text column can store: non-empty, bounded, and free of control characters, NUL included. */
+export function expectText(value: string, label: string, maxLength = 255): string {
+  if (value.trim() === '' || value.length > maxLength) {
+    throw new RequestValidationError(
+      `${label} must be a non-empty string of at most ${maxLength} characters`,
+    );
+  }
+  if (hasControlCharacter(value)) {
+    throw new RequestValidationError(`${label} must not contain control characters`);
+  }
+  return value;
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function requiredString(
   body: Record<string, unknown>,
   field: string,
   maxLength = 255,
 ): string {
   const value = body[field];
-  if (typeof value !== 'string' || value.trim() === '' || value.length > maxLength) {
+  if (typeof value !== 'string') {
     throw new RequestValidationError(
       `${field} must be a non-empty string of at most ${maxLength} characters`,
     );
   }
-  return value;
+  return expectText(value, field, maxLength);
+}
+
+export function requiredUuid(body: Record<string, unknown>, field: string): string {
+  return expectUuid(requiredString(body, field), field);
 }
 
 export function optionalString(
@@ -49,12 +86,12 @@ export function optionalString(
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== 'string' || value.trim() === '' || value.length > maxLength) {
+  if (typeof value !== 'string') {
     throw new RequestValidationError(
       `${field} must be a non-empty string of at most ${maxLength} characters`,
     );
   }
-  return value;
+  return expectText(value, field, maxLength);
 }
 
 /** Parses `{ "amount": "25.00", "currency": "BRL" }`. Malformed amounts surface as INVALID_MONEY from Money. */

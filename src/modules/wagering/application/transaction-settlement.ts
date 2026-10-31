@@ -102,6 +102,11 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, code, options);
     }
 
+    if (direction === 'CREDIT' && !wallet.canCredit(transaction.money)) {
+      // A balance the database cannot store is a business outcome of the wallet's state, not a storage failure.
+      return this.reject(repositories, transaction, wallet, 'BALANCE_LIMIT_EXCEEDED', options);
+    }
+
     const expectedVersion = wallet.version;
     const movement = {
       entryId: this.context.newId(),

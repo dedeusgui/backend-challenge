@@ -10,6 +10,7 @@ import {
   optionalString,
   requiredMoney,
   requiredString,
+  requiredUuid,
   RequestValidationError,
 } from '../../../shared/validation/request-validation';
 
@@ -59,7 +60,7 @@ export function parseProcessWagerRequest(
       providerId: requiredString(fields, 'providerId'),
       externalTransactionId: requiredString(fields, 'externalTransactionId'),
       playerId: requiredString(fields, 'playerId'),
-      walletId: requiredString(fields, 'walletId'),
+      walletId: requiredUuid(fields, 'walletId'),
       roundId: requiredString(fields, 'roundId'),
       gameId: requiredString(fields, 'gameId'),
       kind: parseKind(fields.kind),

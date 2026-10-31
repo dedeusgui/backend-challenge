@@ -44,6 +44,22 @@ function openWallet(initial: string) {
   });
 }
 
+describe('Wallet.canCredit: the largest storable balance', () => {
+  test('refuses a credit that would pass the largest balance the database stores', () => {
+    const { wallet } = openWallet('999999999999999999.98');
+
+    expect(wallet.canCredit(brl('0.01'))).toBe(true);
+    expect(wallet.canCredit(brl('0.02'))).toBe(false);
+  });
+
+  test('a credit in another currency is a currency mismatch', () => {
+    const { wallet } = openWallet('10.00');
+    const usd = Money.from({ amount: '1.00', currency: 'USD' });
+
+    expect(domainErrorCodeOf(() => wallet.canCredit(usd))).toBe('CURRENCY_MISMATCH');
+  });
+});
+
 describe('Wallet.open', () => {
   test('a zero initial balance opens at version 1 without a ledger entry', () => {
     const { wallet, openingEntry } = openWallet('0.00');

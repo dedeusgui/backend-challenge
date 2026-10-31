@@ -5,6 +5,7 @@ import { OpenWallet } from '../application/open-wallet.use-case';
 import { WalletQueries, DEFAULT_LEDGER_PAGE, MAX_LEDGER_PAGE } from '../application/wallet-queries';
 import { parseOpenWalletRequest } from './open-wallet.request';
 import { presentLedgerPage, presentReconciliation, presentWallet } from './wallet.presenters';
+import { expectUuid } from '../../../shared/validation/request-validation';
 
 export interface WalletResponse {
   id: string;
@@ -38,7 +39,7 @@ export class WalletController {
 
   @Get(':walletId')
   async get(@Param('walletId') walletId: string) {
-    return presentWallet(await this.queries.getWallet(walletId));
+    return presentWallet(await this.queries.getWallet(expectUuid(walletId, 'walletId')));
   }
 
   @Get(':walletId/ledger')
@@ -47,7 +48,7 @@ export class WalletController {
     @Query('cursor') cursor: string | undefined,
     @Query('limit') limit: string | undefined,
   ) {
-    const page = await this.queries.listLedger(walletId, {
+    const page = await this.queries.listLedger(expectUuid(walletId, 'walletId'), {
       cursor,
       limit: parseLedgerLimit(limit, DEFAULT_LEDGER_PAGE, MAX_LEDGER_PAGE),
     });
@@ -58,6 +59,6 @@ export class WalletController {
   @Post(':walletId/reconciliation')
   @HttpCode(200)
   async reconcile(@Param('walletId') walletId: string) {
-    return presentReconciliation(await this.queries.reconcile(walletId));
+    return presentReconciliation(await this.queries.reconcile(expectUuid(walletId, 'walletId')));
   }
 }

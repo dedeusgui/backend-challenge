@@ -3,6 +3,7 @@ import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
 import type { Principal } from '../../auth/domain/principal';
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
+import { expectText } from '../../../shared/validation/request-validation';
 
 /** Lookup by the provider's own identifier, which is how providers refer to their transactions. */
 @Controller('providers')
@@ -17,7 +18,10 @@ export class ProvidersController {
   ) {
     requireProviderScope(principal, providerId);
     return presentTransaction(
-      await this.queries.getByExternalId(providerId, externalTransactionId),
+      await this.queries.getByExternalId(
+        expectText(providerId, 'providerId'),
+        expectText(externalTransactionId, 'externalTransactionId'),
+      ),
     );
   }
 }

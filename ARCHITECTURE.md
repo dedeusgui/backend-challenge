@@ -101,20 +101,21 @@ permanent-failure path, and nothing claims otherwise.
 
 Stable, machine-readable, and persisted with the rejected transaction:
 
-| Code                         | Meaning                                                    | Provider action                                 |
-| ---------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
-| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                             | do not resend unchanged                         |
-| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative            | investigate; not a payload error                |
-| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                         | correct the payload                             |
-| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                       | correct the payload                             |
-| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit               | check the reference, then resend under a new id |
-| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                       | nothing to reverse                              |
-| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency        | correct the payload                             |
-| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed         | correct the payload                             |
-| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference         | correct the payload                             |
-| `REFERENCE_ALREADY_REVERSED` | the referenced transaction was already reversed            | nothing to do                                   |
-| `REFERENCE_ALREADY_SETTLED`  | the BET already has a WIN or LOSS, or a REFUND follows one | nothing to do                                   |
-| `PROCESSING_FAILED`          | reserved for the permanent-failure path                    | none in this build                              |
+| Code                         | Meaning                                                                 | Provider action                                    |
+| ---------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                                          | do not resend unchanged                            |
+| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative                         | investigate; not a payload error                   |
+| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                                      | correct the payload                                |
+| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                                    | correct the payload                                |
+| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit                            | check the reference, then resend under a new id    |
+| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                                    | nothing to reverse                                 |
+| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency                     | correct the payload                                |
+| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed                      | correct the payload                                |
+| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference                      | correct the payload                                |
+| `REFERENCE_ALREADY_REVERSED` | the referenced transaction was already reversed                         | nothing to do                                      |
+| `REFERENCE_ALREADY_SETTLED`  | the BET already has a WIN or LOSS, or a REFUND follows one              | nothing to do                                      |
+| `BALANCE_LIMIT_EXCEEDED`     | a credit that would leave the balance above the largest storable amount | do not resend unchanged; the wallet cannot hold it |
+| `PROCESSING_FAILED`          | reserved for the permanent-failure path                                 | none in this build                                 |
 
 Transport outcomes are not persisted. They are the HTTP table below.
 
@@ -315,7 +316,9 @@ Decision: [ADR 0005](docs/adr/0005-reference-hold-and-bounded-retries.md).
 | `GET /health/ready`                               | 200 when PostgreSQL and the command queue answer             | 503 names the failing check                                                                                                                                                                               |
 | `GET /metrics`                                    | 200, this process's counters                                 | none                                                                                                                                                                                                      |
 
-Unknown routes are 404 `NOT_FOUND`. Malformed bodies are 400 `INVALID_REQUEST`. Unknown
+Unknown routes are 404 `NOT_FOUND`. Malformed bodies are 400 `INVALID_REQUEST`. A `walletId` or `transactionId` that is not a UUID, and
+a control character in any text field, are 400 `INVALID_REQUEST` on every route, so they never reach
+PostgreSQL. A ledger cursor whose sequence is beyond the `bigint` range is 400 `INVALID_CURSOR`. Unknown
 errors are 500 `INTERNAL_ERROR` with no internal detail. A business rejection is not a
 client error, so it is 422, and a provider can tell "do not resend" from "fix the payload".
 
@@ -404,6 +407,14 @@ These are choices the specification leaves open. Each one is tested.
   credits are never duplicated, so the stricter reading is adopted. Enforced in code and by the
   partial unique index `wager_one_processed_reversal_per_reference`. The specification owner
   should confirm this reading.
+- `playerId` is the provider's identifier. It is text, not a UUID, although the specification's examples
+  use UUIDs. A value that is not a UUID is accepted, and it cannot cause a server error. Control
+  characters are refused.
+- A credit that would leave the balance above 999999999999999999.99, the largest value `NUMERIC(20,2)`
+  stores, is `REJECTED` with `BALANCE_LIMIT_EXCEEDED` (422). It is a business outcome of the wallet's
+  state, persisted and auditable. The specification does not cover it.
+- An amount is normalized to two decimals, so `"25"` is `"25.00"`, as [ADR 0002](docs/adr/0002-money-representation.md)
+  decides. A malformed amount is 400 `INVALID_MONEY`, and a JSON number is 400 `INVALID_REQUEST`.
 - A WIN or LOSS on a BET that was already refunded or rolled back is rejected with
   `REFERENCE_ALREADY_REVERSED`.
 

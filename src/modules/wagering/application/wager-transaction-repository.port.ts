@@ -17,4 +17,6 @@ export interface WagerTransactionRepository {
   ): Promise<WagerTransaction | undefined>;
   /** True when a PROCESSED REFUND or ROLLBACK already reverses the referenced transaction. */
   hasProcessedReversal(referenceTransactionId: string): Promise<boolean>;
+  /** True when a PROCESSED WIN or LOSS already settles the referenced BET. */
+  hasProcessedResult(referenceTransactionId: string): Promise<boolean>;
 }

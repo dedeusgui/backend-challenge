@@ -202,6 +202,11 @@ export class WagerTransaction {
     return KIND_RULES[this.kind].reference?.required === true;
   }
 
+  /** True when the referenced transaction must have no result yet, so that a BET settles once. */
+  requiresUnsettledReference(): boolean {
+    return KIND_RULES[this.kind].reference?.mustBeUnsettled === true;
+  }
+
   isReversal(): boolean {
     return this.kind === 'REFUND' || this.kind === 'ROLLBACK';
   }

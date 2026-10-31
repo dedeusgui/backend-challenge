@@ -66,14 +66,14 @@ non-negative balances, and arithmetic that balances. It has no transition method
 **WagerTransaction** (`src/modules/wagering/domain/wager-transaction.ts`). The kinds
 and their rules are one table (`wager-transaction-kind.ts`):
 
-| Kind       | Balance effect            | Ledger  | Reference                                            |
-| ---------- | ------------------------- | ------- | ---------------------------------------------------- |
-| `OPENING`  | credit (internal only)    | CREDIT  | none                                                 |
-| `BET`      | debit                     | DEBIT   | none                                                 |
-| `WIN`      | credit                    | CREDIT  | optional `BET`, not amount-bound                     |
-| `LOSS`     | none                      | none    | none                                                 |
-| `REFUND`   | credit                    | CREDIT  | required `BET`, amount must match                    |
-| `ROLLBACK` | opposite of the reference | inverse | required `BET`, `WIN` or `REFUND`, amount must match |
+| Kind       | Balance effect            | Ledger  | Reference                                                       |
+| ---------- | ------------------------- | ------- | --------------------------------------------------------------- |
+| `OPENING`  | credit (internal only)    | CREDIT  | none                                                            |
+| `BET`      | debit                     | DEBIT   | none                                                            |
+| `WIN`      | credit                    | CREDIT  | required `BET`, not amount-bound                                |
+| `LOSS`     | none                      | none    | required `BET`                                                  |
+| `REFUND`   | credit                    | CREDIT  | required `BET` with no result, amount must match                |
+| `ROLLBACK` | opposite of the reference | inverse | required `BET`, `WIN` or `REFUND`, any state, amount must match |
 
 Balance-affecting kinds must move a positive amount. `LOSS` may be zero.
 
@@ -101,19 +101,20 @@ permanent-failure path, and nothing claims otherwise.
 
 Stable, machine-readable, and persisted with the rejected transaction:
 
-| Code                         | Meaning                                             | Provider action                                 |
-| ---------------------------- | --------------------------------------------------- | ----------------------------------------------- |
-| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                      | do not resend unchanged                         |
-| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative     | investigate; not a payload error                |
-| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                  | correct the payload                             |
-| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                | correct the payload                             |
-| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit        | check the reference, then resend under a new id |
-| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                | nothing to reverse                              |
-| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency | correct the payload                             |
-| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed  | correct the payload                             |
-| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference  | correct the payload                             |
-| `REFERENCE_ALREADY_REVERSED` | a second reversal of the same kind                  | nothing to do                                   |
-| `PROCESSING_FAILED`          | reserved for the permanent-failure path             | none in this build                              |
+| Code                         | Meaning                                                    | Provider action                                 |
+| ---------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                             | do not resend unchanged                         |
+| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative            | investigate; not a payload error                |
+| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                         | correct the payload                             |
+| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                       | correct the payload                             |
+| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit               | check the reference, then resend under a new id |
+| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                       | nothing to reverse                              |
+| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency        | correct the payload                             |
+| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed         | correct the payload                             |
+| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference         | correct the payload                             |
+| `REFERENCE_ALREADY_REVERSED` | the referenced transaction was already reversed            | nothing to do                                   |
+| `REFERENCE_ALREADY_SETTLED`  | the BET already has a WIN or LOSS, or a REFUND follows one | nothing to do                                   |
+| `PROCESSING_FAILED`          | reserved for the permanent-failure path                    | none in this build                              |
 
 Transport outcomes are not persisted. They are the HTTP table below.
 
@@ -134,13 +135,14 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   refuse mutation.
 - `wager_transactions`: `UNIQUE (provider_id, external_transaction_id)`;
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
-  `ROLLBACK` must carry a reference; a `BET`, `OPENING` or `LOSS` must not. Status
+  `ROLLBACK`, `WIN` or `LOSS` must carry a reference; a `BET` or `OPENING` must not. Status
   shape: PROCESSED needs `processed_at` and a resulting balance; REJECTED and FAILED
   need a failure code; a held row needs its next lookup time. Composite foreign key
   `(reference_transaction_id, provider_id, wallet_id)`, so a reference must share the
   provider and the wallet. Partial unique index on `(reference_transaction_id)` where
   PROCESSED and the kind is REFUND or ROLLBACK, so each reference is reversed once, whatever
-  the kind of reversal. A WIN may carry the reference of the BET it settles.
+  the kind of reversal. A BET has at most one PROCESSED result, a WIN or a LOSS, enforced by
+  `wager_one_processed_result_per_reference`.
 - `inbox_messages`: primary key `(consumer_name, message_id)`.
 - `outbox_messages`: primary key is the stable event id.
 
@@ -341,8 +343,18 @@ These are choices the specification leaves open. Each one is tested.
 - Idempotency is per provider. A same external id under another key replays when the
   payload matches, and conflicts when it does not.
 - Zero amounts are refused for balance-affecting kinds. `LOSS` may be zero.
-- A `WIN` may name its `BET` as reference. The reference is validated, but the win's
-  amount is not bound to the bet's.
+- A `WIN` and a `LOSS` must name the `BET` they settle. Without that link a result cannot be
+  tied to its BET, so a second result or a REFUND after a result could not be refused. This
+  narrows the specification, where a WIN "pode referenciar" its BET. The win's amount is not
+  bound to the bet's. The owner should confirm this reading.
+- A `BET` has at most one result. A second WIN or LOSS on it is `REFERENCE_ALREADY_SETTLED`.
+  Before this rule a BET could be credited by two WINs.
+- A `REFUND` applies only to a `BET` with no result. After a WIN or a LOSS it is
+  `REFERENCE_ALREADY_SETTLED`. This is the owner's decision.
+- A `ROLLBACK` applies in every state of the transaction it reverses, with or without a
+  result. After a WIN, rolling back the BET returns its stake and the WIN credit stays, so the
+  round is cancelled only when the WIN is rolled back too. This is the owner's decision. Its
+  economic effect should be confirmed.
 - A missing wallet is `404` and writes nothing over HTTP. From the queue it is permanent,
   so the message goes to the dead-letter queue.
 - A currency or player mismatch is a persisted rejection, not an HTTP error, so the
@@ -355,9 +367,8 @@ These are choices the specification leaves open. Each one is tested.
   credits are never duplicated, so the stricter reading is adopted. Enforced in code and by the
   partial unique index `wager_one_processed_reversal_per_reference`. The specification owner
   should confirm this reading.
-- A WIN on a BET that was already refunded or rolled back is rejected with
-  `REFERENCE_ALREADY_REVERSED`. A WIN may carry its BET's reference (optional, not amount-bound).
-  The reference-shape CHECK allows it.
+- A WIN or LOSS on a BET that was already refunded or rolled back is rejected with
+  `REFERENCE_ALREADY_REVERSED`.
 
 ## 14. Limitations
 
@@ -381,9 +392,6 @@ What is not claimed, and why:
 - **No dead-letter replay tooling.**
 - **No load test.** The concurrency suites prove correctness under concurrency, not throughput.
 - **`FAILED` has no producer** in this build (section 2).
-- **Open interpretation: a REFUND or ROLLBACK of a BET after a WIN on that BET is accepted.**
-  The specification is silent. Accepting it lets a round pay its win and return its stake. It
-  is recorded here so that the owner of the specification can decide.
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is
   a pure function, and it could move to its own file if the class grows.

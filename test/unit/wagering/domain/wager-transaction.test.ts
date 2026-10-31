@@ -71,6 +71,8 @@ describe('WagerTransaction.create', () => {
   });
 
   test.each([
+    ['WIN', undefined],
+    ['LOSS', undefined],
     ['REFUND', undefined],
     ['ROLLBACK', undefined],
   ] as const)('%s requires referenceExternalTransactionId', (kind, reference) => {
@@ -81,7 +83,7 @@ describe('WagerTransaction.create', () => {
     ).toBe('INVALID_TRANSACTION');
   });
 
-  test.each(['BET', 'LOSS', 'OPENING'] as const)('%s must not carry a reference', (kind) => {
+  test.each(['BET', 'OPENING'] as const)('%s must not carry a reference', (kind) => {
     expect(
       domainErrorCodeOf(() =>
         WagerTransaction.create(props({ kind, referenceExternalTransactionId: 'bet-1' })),
@@ -89,18 +91,18 @@ describe('WagerTransaction.create', () => {
     ).toBe('INVALID_TRANSACTION');
   });
 
-  test('a WIN may reference the BET it settles', () => {
-    const win = WagerTransaction.create(
-      props({ kind: 'WIN', referenceExternalTransactionId: 'bet-1' }),
+  test.each(['WIN', 'LOSS'] as const)('%s names the BET it settles', (kind) => {
+    const result = WagerTransaction.create(
+      props({ kind, referenceExternalTransactionId: 'bet-1' }),
     );
-    expect(win.referenceExternalTransactionId).toBe('bet-1');
+    expect(result.referenceExternalTransactionId).toBe('bet-1');
   });
 
   test.each(['BET', 'WIN', 'REFUND', 'ROLLBACK', 'OPENING'] as const)(
     '%s with a zero amount is rejected as an invalid transaction',
     (kind) => {
       const referenceExternalTransactionId =
-        kind === 'REFUND' || kind === 'ROLLBACK' ? 'bet-1' : undefined;
+        kind === 'BET' || kind === 'OPENING' ? undefined : 'bet-1';
       expect(
         domainErrorCodeOf(() =>
           WagerTransaction.create(
@@ -112,14 +114,20 @@ describe('WagerTransaction.create', () => {
   );
 
   test('LOSS accepts a zero amount because it does not move the balance', () => {
-    const loss = WagerTransaction.create(props({ kind: 'LOSS', money: brl('0.00') }));
+    const loss = WagerTransaction.create(
+      props({ kind: 'LOSS', money: brl('0.00'), referenceExternalTransactionId: 'bet-1' }),
+    );
     expect(loss.affectsBalance()).toBe(false);
   });
 
   test('a negative amount is rejected even for LOSS', () => {
     const negative = brl('0.00').subtract(brl('1.00'));
     expect(
-      domainErrorCodeOf(() => WagerTransaction.create(props({ kind: 'LOSS', money: negative }))),
+      domainErrorCodeOf(() =>
+        WagerTransaction.create(
+          props({ kind: 'LOSS', money: negative, referenceExternalTransactionId: 'bet-1' }),
+        ),
+      ),
     ).toBe('INVALID_TRANSACTION');
   });
 });
@@ -128,8 +136,8 @@ describe('WagerTransaction kind rules', () => {
   test.each([
     ['OPENING', true, false, 'CREDIT'],
     ['BET', true, false, 'DEBIT'],
-    ['WIN', true, false, 'CREDIT'],
-    ['LOSS', false, false, undefined],
+    ['WIN', true, true, 'CREDIT'],
+    ['LOSS', false, true, undefined],
     ['REFUND', true, true, 'CREDIT'],
   ] as const)(
     '%s: affectsBalance=%s requiresReference=%s direction=%s',
@@ -164,7 +172,9 @@ describe('WagerTransaction kind rules', () => {
   });
 
   test('a transaction with no ledger effect has no ledger direction', () => {
-    const loss = WagerTransaction.create(props({ kind: 'LOSS' }));
+    const loss = WagerTransaction.create(
+      props({ kind: 'LOSS', referenceExternalTransactionId: 'bet-1' }),
+    );
     expect(domainErrorCodeOf(() => loss.ledgerDirectionFor(undefined))).toBe('INVALID_TRANSACTION');
   });
 
@@ -420,6 +430,21 @@ describe('WagerTransaction reference evaluation', () => {
     expect(refund.evaluateReference(processedBet())).toEqual({
       outcome: 'REJECT',
       code: 'REFERENCE_AMOUNT_MISMATCH',
+    });
+  });
+
+  test('a LOSS may only reference a BET', () => {
+    const loss = WagerTransaction.create(
+      props({ kind: 'LOSS', referenceExternalTransactionId: 'win-1', money: brl('0.00') }),
+    );
+    const processedWin = WagerTransaction.rehydrate({
+      ...stateOf(processedBet()),
+      kind: 'WIN',
+    });
+
+    expect(loss.evaluateReference(processedWin)).toEqual({
+      outcome: 'REJECT',
+      code: 'REFERENCE_KIND_NOT_ALLOWED',
     });
   });
 

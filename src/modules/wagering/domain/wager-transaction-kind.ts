@@ -17,6 +17,11 @@ export interface ReferenceRule {
   readonly required: boolean;
   /** Reversals restore the exact referenced amount; a WIN settles an independent amount. */
   readonly amountMustMatch: boolean;
+  /**
+   * The referenced BET must have no result yet (no PROCESSED WIN or LOSS). A BET settles once,
+   * and a REFUND is only for a BET that has no result. ROLLBACK does not check results.
+   */
+  readonly mustBeUnsettled: boolean;
 }
 
 export interface KindRules {
@@ -44,25 +49,31 @@ export const KIND_RULES: Readonly<Record<WagerTransactionKind, KindRules>> = {
   WIN: {
     affectsBalance: true,
     ledgerDirection: 'CREDIT',
-    reference: { kinds: ['BET'], required: false, amountMustMatch: false },
+    reference: { kinds: ['BET'], required: true, amountMustMatch: false, mustBeUnsettled: true },
     externallySubmittable: true,
   },
   LOSS: {
     affectsBalance: false,
     ledgerDirection: undefined,
-    reference: undefined,
+    reference: { kinds: ['BET'], required: true, amountMustMatch: false, mustBeUnsettled: true },
     externallySubmittable: true,
   },
   REFUND: {
     affectsBalance: true,
     ledgerDirection: 'CREDIT',
-    reference: { kinds: ['BET'], required: true, amountMustMatch: true },
+    reference: { kinds: ['BET'], required: true, amountMustMatch: true, mustBeUnsettled: true },
     externallySubmittable: true,
   },
+  /** A ROLLBACK applies in every state of the referenced transaction, with or without a result. */
   ROLLBACK: {
     affectsBalance: true,
     ledgerDirection: 'INVERSE_OF_REFERENCE',
-    reference: { kinds: ['BET', 'WIN', 'REFUND'], required: true, amountMustMatch: true },
+    reference: {
+      kinds: ['BET', 'WIN', 'REFUND'],
+      required: true,
+      amountMustMatch: true,
+      mustBeUnsettled: false,
+    },
     externallySubmittable: true,
   },
 };

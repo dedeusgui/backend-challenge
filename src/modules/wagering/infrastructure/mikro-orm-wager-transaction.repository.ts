@@ -75,6 +75,15 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     return count > 0;
   }
 
+  async hasProcessedResult(referenceTransactionId: string): Promise<boolean> {
+    const count = await this.em.count(WagerTransactionRecord, {
+      referenceTransactionId,
+      kind: { $in: ['WIN', 'LOSS'] },
+      status: 'PROCESSED',
+    });
+    return count > 0;
+  }
+
   private async findOneBy(where: WagerLookup): Promise<WagerTransaction | undefined> {
     const record = await this.em.findOne(WagerTransactionRecord, where, { refresh: true });
     return record ? WagerTransaction.rehydrate(toState(record)) : undefined;

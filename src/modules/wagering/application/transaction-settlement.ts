@@ -71,6 +71,16 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
     }
 
+    // A BET settles once. A second result, or a REFUND after a result, is refused. ROLLBACK is
+    // not checked here: it applies in every state of the transaction it reverses.
+    if (
+      reference !== undefined &&
+      transaction.requiresUnsettledReference() &&
+      (await repositories.wagers.hasProcessedResult(reference.id))
+    ) {
+      return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_SETTLED', options);
+    }
+
     if (!transaction.affectsBalance()) {
       return this.finishWithoutBalanceChange(repositories, transaction, reference, wallet, options);
     }

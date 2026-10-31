@@ -497,6 +497,62 @@ describe('inbox and outbox constraints', () => {
   });
 });
 
+describe('wager_transactions: results name their BET, and a BET has one result', () => {
+  test('a WIN or a LOSS without the reference of its BET is refused by the database', async () => {
+    const walletId = await insertWallet();
+
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'WIN',
+          amount: '40.00',
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          resultingBalance: '140.00',
+        }),
+      ),
+    ).toBe('23514');
+    expect(
+      await sqlStateOf(() =>
+        insertWager({
+          walletId,
+          kind: 'LOSS',
+          amount: '0.00',
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          resultingBalance: '100.00',
+        }),
+      ),
+    ).toBe('23514');
+  });
+
+  test('allows only one PROCESSED result per BET', async () => {
+    const walletId = await insertWallet();
+    const bet = await insertWager({
+      walletId,
+      status: 'PROCESSED',
+      processedAt: new Date(),
+      resultingBalance: '75.00',
+    });
+    const result = (kind: 'WIN' | 'LOSS') =>
+      insertWager({
+        walletId,
+        kind,
+        amount: kind === 'WIN' ? '40.00' : '0.00',
+        referenceExternalTransactionId: 'bet-result',
+        referenceTransactionId: bet,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        resultingBalance: '115.00',
+      });
+
+    await result('WIN');
+    expect(await sqlStateOf(() => result('LOSS'))).toBe('23505');
+    expect(await sqlStateOf(() => result('WIN'))).toBe('23505');
+  });
+});
+
 describe('wager_transactions: reference shape and one reversal per reference', () => {
   test('allows a WIN to carry the reference of the BET it settles', async () => {
     const walletId = await insertWallet();

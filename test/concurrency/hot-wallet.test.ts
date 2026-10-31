@@ -158,13 +158,22 @@ describe('distinct wallets in parallel', () => {
 
 describe('mixed operations on one hot wallet', () => {
   test('the materialized balance always equals the ledger sum, and never goes negative', async () => {
-    const wallet = await openedWallet('50.00');
+    const wallet = await openedWallet('100.00');
+    // Thirteen BETs are placed first, so every WIN below names a BET that exists.
+    const bets: string[] = [];
+    for (let index = 0; index < 13; index += 1) {
+      const bet = commandFor(wallet, 'BET', '7.00');
+      await processWager.execute(bet);
+      bets.push(bet.externalTransactionId);
+    }
     const operations: Array<Promise<ProcessWagerOutcome>> = [];
     for (let index = 0; index < 40; index += 1) {
+      // Fourteen WINs for thirteen BETs: the last one settles a BET that already has a result.
+      const win = commandFor(wallet, 'WIN', '4.00', {
+        referenceExternalTransactionId: bets[Math.floor(index / 3) % bets.length],
+      });
       operations.push(
-        processWager.execute(
-          index % 3 === 0 ? commandFor(wallet, 'WIN', '4.00') : commandFor(wallet, 'BET', '7.00'),
-        ),
+        processWager.execute(index % 3 === 0 ? win : commandFor(wallet, 'BET', '7.00')),
       );
     }
 
@@ -175,6 +184,9 @@ describe('mixed operations on one hot wallet', () => {
     expect(await ledgerBalanceOf(wallet.walletId)).toBe(balance);
     expect(
       outcomes.some((outcome) => outcome.transaction.failureCode === 'INSUFFICIENT_BALANCE'),
+    ).toBe(true);
+    expect(
+      outcomes.some((outcome) => outcome.transaction.failureCode === 'REFERENCE_ALREADY_SETTLED'),
     ).toBe(true);
   });
 });

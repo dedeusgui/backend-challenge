@@ -50,6 +50,15 @@ async function fundedWallet(initialBalance: string): Promise<FundedWallet> {
   return { walletId, playerId };
 }
 
+/** Places a BET and returns its provider id, so that a WIN or LOSS can name the BET it settles. */
+async function placedBet(wallet: FundedWallet, amount: string): Promise<string> {
+  const externalTransactionId = `bet-${randomUUID()}`;
+  await processWager.execute(
+    command(wallet, { kind: 'BET', money: brl(amount), externalTransactionId }),
+  );
+  return externalTransactionId;
+}
+
 function command(
   wallet: FundedWallet,
   overrides: Partial<ProcessWagerCommand> & Pick<ProcessWagerCommand, 'kind' | 'money'>,
@@ -121,15 +130,16 @@ describe('ProcessWagerTransaction: applying operations', () => {
 
   test('a LOSS is processed without moving the balance, the ledger or WalletBalanceChanged', async () => {
     const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
     const ledgerBefore = await ledgerOf(wallet.walletId);
     const walletEventsBefore = await eventTypesOf(wallet.walletId);
 
     const outcome = await processWager.execute(
-      command(wallet, { kind: 'LOSS', money: brl('25.00') }),
+      command(wallet, { kind: 'LOSS', money: brl('25.00'), referenceExternalTransactionId: bet }),
     );
 
     expect(outcome.transaction.status).toBe('PROCESSED');
-    expect(outcome.balance.toString()).toBe('100.00');
+    expect(outcome.balance.toString()).toBe('75.00');
     expect(await ledgerOf(wallet.walletId)).toEqual(ledgerBefore);
     expect(await eventTypesOf(outcome.transaction.id)).toEqual(['WagerTransactionProcessed']);
     expect(await eventTypesOf(wallet.walletId)).toEqual(walletEventsBefore);
@@ -137,13 +147,14 @@ describe('ProcessWagerTransaction: applying operations', () => {
 
   test('a WIN credits the wallet', async () => {
     const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
 
     const outcome = await processWager.execute(
-      command(wallet, { kind: 'WIN', money: brl('40.00') }),
+      command(wallet, { kind: 'WIN', money: brl('40.00'), referenceExternalTransactionId: bet }),
     );
 
     expect(outcome.transaction.status).toBe('PROCESSED');
-    expect(outcome.balance.toString()).toBe('140.00');
+    expect(outcome.balance.toString()).toBe('115.00');
     expect((await ledgerOf(wallet.walletId)).at(-1)).toEqual({
       direction: 'CREDIT',
       amount: '40.00',
@@ -172,7 +183,13 @@ describe('ProcessWagerTransaction: idempotency', () => {
     const wallet = await fundedWallet('100.00');
     const bet = command(wallet, { kind: 'BET', money: brl('25.00') });
     const first = await processWager.execute(bet);
-    await processWager.execute(command(wallet, { kind: 'WIN', money: brl('50.00') }));
+    await processWager.execute(
+      command(wallet, {
+        kind: 'WIN',
+        money: brl('50.00'),
+        referenceExternalTransactionId: bet.externalTransactionId,
+      }),
+    );
 
     const replay = await processWager.execute(bet);
 
@@ -297,9 +314,15 @@ describe('ProcessWagerTransaction: references', () => {
   });
 
   test('a ROLLBACK of a WIN the balance has already spent is REVERSAL_WOULD_OVERDRAW, not insufficient balance', async () => {
-    const wallet = await fundedWallet('0.00');
+    const wallet = await fundedWallet('50.00');
+    const bet = await placedBet(wallet, '50.00');
     await processWager.execute(
-      command(wallet, { kind: 'WIN', money: brl('50.00'), externalTransactionId: 'win-1' }),
+      command(wallet, {
+        kind: 'WIN',
+        money: brl('50.00'),
+        externalTransactionId: 'win-1',
+        referenceExternalTransactionId: bet,
+      }),
     );
     await processWager.execute(command(wallet, { kind: 'BET', money: brl('50.00') }));
 
@@ -487,5 +510,140 @@ describe('ProcessWagerTransaction: one reversal per bet, and no settlement after
     expect(win.transaction.status).toBe('REJECTED');
     expect(win.transaction.failureCode).toBe('REFERENCE_ALREADY_REVERSED');
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+});
+
+describe('ProcessWagerTransaction: one result per BET, and REFUND only for a BET without one', () => {
+  test('a BET pays once: a second WIN on it is refused, and the balance is credited once', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const second = await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(second.transaction.status).toBe('REJECTED');
+    expect(second.transaction.failureCode).toBe('REFERENCE_ALREADY_SETTLED');
+    expect(await balanceOf(wallet.walletId)).toBe('125.00');
+  });
+
+  test('a LOSS cannot be recorded on a BET that already has a WIN, and a WIN cannot follow a LOSS', async () => {
+    const wallet = await fundedWallet('100.00');
+    const won = await placedBet(wallet, '25.00');
+    const lost = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: won }),
+    );
+    await processWager.execute(
+      command(wallet, { kind: 'LOSS', money: brl('25.00'), referenceExternalTransactionId: lost }),
+    );
+
+    const loss = await processWager.execute(
+      command(wallet, { kind: 'LOSS', money: brl('25.00'), referenceExternalTransactionId: won }),
+    );
+    const win = await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: lost }),
+    );
+
+    expect(loss.transaction.failureCode).toBe('REFERENCE_ALREADY_SETTLED');
+    expect(win.transaction.failureCode).toBe('REFERENCE_ALREADY_SETTLED');
+    // 100 - 25 - 25 + 50: the first WIN is the only credit, and the refused WIN and LOSS move nothing.
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a REFUND is refused once the BET has a WIN, and the WIN stays credited', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const refund = await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(refund.transaction.status).toBe('REJECTED');
+    expect(refund.transaction.failureCode).toBe('REFERENCE_ALREADY_SETTLED');
+    expect(await balanceOf(wallet.walletId)).toBe('125.00');
+  });
+
+  test('a REFUND is refused once the BET has a LOSS', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'LOSS', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const refund = await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(refund.transaction.failureCode).toBe('REFERENCE_ALREADY_SETTLED');
+    expect(await balanceOf(wallet.walletId)).toBe('75.00');
+  });
+
+  test('a REFUND of a BET without a result is applied', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+
+    const refund = await processWager.execute(
+      command(wallet, { kind: 'REFUND', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    expect(refund.transaction.status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a ROLLBACK applies after the BET has a WIN: the stake comes back and the WIN credit stays', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'WIN', money: brl('50.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const rollback = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('25.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+
+    expect(rollback.transaction.status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('150.00');
+  });
+
+  test('a ROLLBACK applies after the BET has a LOSS', async () => {
+    const wallet = await fundedWallet('100.00');
+    const bet = await placedBet(wallet, '25.00');
+    await processWager.execute(
+      command(wallet, { kind: 'LOSS', money: brl('25.00'), referenceExternalTransactionId: bet }),
+    );
+
+    const rollback = await processWager.execute(
+      command(wallet, {
+        kind: 'ROLLBACK',
+        money: brl('25.00'),
+        referenceExternalTransactionId: bet,
+      }),
+    );
+
+    expect(rollback.transaction.status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a WIN or LOSS without the reference of its BET is an invalid transaction', async () => {
+    const wallet = await fundedWallet('100.00');
+
+    for (const kind of ['WIN', 'LOSS'] as const) {
+      const error = await processWager
+        .execute(command(wallet, { kind, money: brl('25.00') }))
+        .catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DomainError);
+      expect(error instanceof DomainError ? error.code : undefined).toBe('INVALID_TRANSACTION');
+    }
   });
 });

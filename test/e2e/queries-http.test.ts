@@ -102,8 +102,9 @@ describe('wallet queries', () => {
 
   test('the ledger is listed in order and paginated with an opaque cursor', async () => {
     const wallet = await fundedWallet('100.00');
-    await submit(wallet, 'BET', '10.00', `l-${randomUUID()}`);
-    await submit(wallet, 'WIN', '4.00', `l-${randomUUID()}`);
+    const bet = `l-${randomUUID()}`;
+    await submit(wallet, 'BET', '10.00', bet);
+    await submit(wallet, 'WIN', '4.00', `l-${randomUUID()}`, bet);
 
     const first = await call('GET', `/wallets/${wallet.walletId}/ledger?limit=2`);
     const cursor = first.body.nextCursor as string;

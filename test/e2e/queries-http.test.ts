@@ -5,10 +5,16 @@ import { startTestApp, type TestApp } from './support/test-app';
 
 let database: TestDatabase;
 let app: TestApp;
+let operatorKey = '';
+let providerKey = '';
 
 beforeAll(async () => {
   database = await createTestDatabase();
   app = await startTestApp(database.url);
+  operatorKey = (await app.createApiClient({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  providerKey = (
+    await app.createApiClient({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
+  ).apiKey;
 });
 
 afterAll(async () => {
@@ -34,7 +40,7 @@ async function call(
 ): Promise<HttpResult> {
   const response = await fetch(`${app.baseUrl}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', ...authFor(path), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
@@ -76,6 +82,13 @@ async function submit(
     },
     { 'idempotency-key': `provider-a:${externalTransactionId}` },
   );
+}
+
+/** Wallets and metrics are for the operator. Wagering and provider lookups are for provider-a. */
+function authFor(path: string): Record<string, string> {
+  const key =
+    path.startsWith('/wagering') || path.startsWith('/providers') ? providerKey : operatorKey;
+  return { authorization: `Bearer ${key}` };
 }
 
 describe('wallet queries', () => {
@@ -226,7 +239,9 @@ describe('reconciliation', () => {
       difference: { amount: '1.00', currency: 'BRL' },
     });
     expect(after.body.balance).toEqual({ amount: '101.00', currency: 'BRL' });
-    const metrics = (await (await fetch(`${app.baseUrl}/metrics`)).json()) as {
+    const metrics = (await (
+      await fetch(`${app.baseUrl}/metrics`, { headers: authFor('/metrics') })
+    ).json()) as {
       counters: Record<string, number>;
     };
     expect(metrics.counters['reconciliation_divergences_total']).toBeGreaterThanOrEqual(1);

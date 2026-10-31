@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type TestDatabase, createTestDatabase } from '../support/test-database';
 
 const APPLICATION_TABLES = [
+  'api_clients',
   'inbox_messages',
   'outbox_messages',
   'wager_transactions',

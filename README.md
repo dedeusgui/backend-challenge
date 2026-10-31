@@ -53,6 +53,8 @@ bun run src/worker.ts         # worker, in another terminal
 | Command                    | Purpose                                                 |
 | -------------------------- | ------------------------------------------------------- |
 | `bun run db:migrate`       | apply pending migrations and exit                       |
+| `bun run auth:create`      | create an API client and print its key once             |
+| `bun run auth:revoke`      | revoke an API client by id                              |
 | `bun run typecheck`        | strict TypeScript check                                 |
 | `bun run lint`             | oxlint                                                  |
 | `bun run format:check`     | Prettier                                                |
@@ -129,8 +131,9 @@ real PostgreSQL and real LocalStack, without mocks.
 
 These are listed in full in `ARCHITECTURE.md` section 14. The most important:
 
-- **No authentication.** Any caller can name any provider. The API must stay on a trusted
-  network. `docs/adr/0006-authentication-deferred.md` describes the extension point.
+- **API keys, not an identity provider.** Keys last until revoked, and there is no rotation or
+  login. The API serves plain HTTP, so it must sit behind TLS. The design is in
+  `docs/adr/0007-api-key-authentication.md`.
 - **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
 - **Broker-side dead-lettering** (after ten deliveries) is configured in Compose and checked on the
   provisioned queue by `test/integration/messaging/broker-redrive.test.ts`.

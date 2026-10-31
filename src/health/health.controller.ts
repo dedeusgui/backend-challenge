@@ -1,11 +1,13 @@
 import { Controller, Get, Inject, Res } from '@nestjs/common';
 import { HEALTH_SERVICE, type ReadinessProbe, type ReadinessReport } from './health.service';
+import { Public } from '../modules/auth/http/access';
 
 /** The subset of the Express response this controller needs. */
 interface StatusSetter {
   status(code: number): unknown;
 }
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(@Inject(HEALTH_SERVICE) private readonly health: ReadinessProbe) {}

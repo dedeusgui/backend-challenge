@@ -1,5 +1,5 @@
 import { type DynamicModule, Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { randomUUID } from 'node:crypto';
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { SQSClient } from '@aws-sdk/client-sqs';
@@ -26,8 +26,12 @@ import { WageringController } from './modules/wagering/http/wagering.controller'
 import { ProvidersController } from './modules/wagering/http/providers.controller';
 import { WalletQueries } from './modules/wallet/application/wallet-queries';
 import { WagerQueries } from './modules/wagering/application/wager-queries';
+import { AuthenticateApiKey } from './modules/auth/application/authenticate-api-key.use-case';
+import { MikroOrmApiClientRepository } from './modules/auth/infrastructure/mikro-orm-api-client.repository';
+import { ApiKeyGuard } from './modules/auth/http/api-key.guard';
 
 const APPLICATION_CONTEXT = Symbol('APPLICATION_CONTEXT');
+const API_CLIENTS = Symbol('API_CLIENTS');
 
 /**
  * Composition root. The HTTP process and the tests build the application through
@@ -92,6 +96,17 @@ export class AppModule {
           inject: [APPLICATION_CONTEXT],
           useFactory: (context: ApplicationContext) => new WagerQueries(context),
         },
+        {
+          provide: API_CLIENTS,
+          inject: [ORM],
+          useFactory: (orm: MikroORM) => new MikroOrmApiClientRepository(orm),
+        },
+        {
+          provide: AuthenticateApiKey,
+          inject: [API_CLIENTS],
+          useFactory: (clients: MikroOrmApiClientRepository) => new AuthenticateApiKey(clients),
+        },
+        { provide: APP_GUARD, useClass: ApiKeyGuard },
         { provide: APP_FILTER, useClass: HttpErrorFilter },
       ],
     };

@@ -1,4 +1,6 @@
 import { Controller, Get, Param } from '@nestjs/common';
+import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
+import type { Principal } from '../../auth/domain/principal';
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
 
@@ -9,9 +11,11 @@ export class ProvidersController {
 
   @Get(':providerId/wagering/transactions/:externalTransactionId')
   async getByExternalId(
+    @CurrentPrincipal() principal: Principal,
     @Param('providerId') providerId: string,
     @Param('externalTransactionId') externalTransactionId: string,
   ) {
+    requireProviderScope(principal, providerId);
     return presentTransaction(
       await this.queries.getByExternalId(providerId, externalTransactionId),
     );

@@ -73,6 +73,6 @@ summarises the slices and what each one proved.
 
 ## Not in this build
 
-- Authentication (ADR 0006): deferred and documented, with the extension point in place.
+- Authentication is not an IdP integration (ADR 0007): API keys with two roles, a hashed key table, provider scope and a CLI to create and revoke keys.
 - Load test. Not run. The concurrency suites prove correctness, not throughput.
 - Dead-letter replay tooling and a scheduled reconciliation job.

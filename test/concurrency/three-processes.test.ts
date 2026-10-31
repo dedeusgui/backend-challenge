@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { SqsQueue } from '../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { testSqsClient } from '../integration/support/sqs-test-queues';
 import { ProcessCluster } from './support/process-cluster';
+import { CreateApiClient } from '../../src/modules/auth/application/create-api-client.use-case';
+import { MikroOrmApiClientRepository } from '../../src/modules/auth/infrastructure/mikro-orm-api-client.repository';
 
 /**
  * Distributed proof. Three independent API processes and background workers share
@@ -12,6 +14,14 @@ import { ProcessCluster } from './support/process-cluster';
 
 let cluster: ProcessCluster;
 let apis: string[];
+let operatorKey = '';
+let providerKey = '';
+
+/** Wallets are for the operator. Wagering calls are for provider-a, the provider these tests use. */
+function authFor(path: string): Record<string, string> {
+  const key = path.startsWith('/wagering') ? providerKey : operatorKey;
+  return { authorization: `Bearer ${key}` };
+}
 
 interface JsonResponse {
   status: number;
@@ -26,7 +36,7 @@ async function postJson(
 ): Promise<JsonResponse> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', ...authFor(path), ...headers },
     body: JSON.stringify(body),
   });
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
@@ -86,6 +96,15 @@ function bet(
 
 beforeAll(async () => {
   cluster = await ProcessCluster.create();
+  const clients = new CreateApiClient({
+    repository: new MikroOrmApiClientRepository(cluster.database.orm),
+    clock: () => new Date(),
+    newId: randomUUID,
+  });
+  operatorKey = (await clients.execute({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  providerKey = (
+    await clients.execute({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
+  ).apiKey;
   apis = [];
   for (const name of ['api-1', 'api-2', 'api-3']) {
     apis.push(await cluster.startApi(name));

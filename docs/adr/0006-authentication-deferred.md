@@ -1,6 +1,6 @@
 # ADR 0006: Authentication deferred, with an explicit extension point
 
-**Status:** accepted
+**Status:** superseded by [ADR 0007](0007-api-key-authentication.md)
 
 ## Context
 

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { OperatorOnly } from '../../auth/http/access';
 import { parseLedgerLimit } from './ledger-query.request';
 import { OpenWallet } from '../application/open-wallet.use-case';
 import { WalletQueries, DEFAULT_LEDGER_PAGE, MAX_LEDGER_PAGE } from '../application/wallet-queries';
@@ -12,6 +13,7 @@ export interface WalletResponse {
   version: number;
 }
 
+@OperatorOnly()
 @Controller('wallets')
 export class WalletController {
   constructor(

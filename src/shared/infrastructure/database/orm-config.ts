@@ -4,6 +4,7 @@ import { WalletRecord } from '../../../modules/wallet/infrastructure/wallet.reco
 import { WagerTransactionRecord } from '../../../modules/wagering/infrastructure/wager-transaction.record';
 import { InboxMessageRecord } from '../../../modules/messaging/infrastructure/inbox.record';
 import { OutboxMessageRecord } from '../../../modules/messaging/infrastructure/outbox.record';
+import { ApiClientRecord } from '../../../modules/auth/infrastructure/api-client.record';
 
 /**
  * MikroORM configuration shared by the HTTP process, workers and tests. Schema
@@ -19,6 +20,7 @@ export function ormOptions(clientUrl: string): Options {
       WagerTransactionRecord,
       InboxMessageRecord,
       OutboxMessageRecord,
+      ApiClientRecord,
     ],
     migrations: {
       path: `${import.meta.dir}/migrations`,

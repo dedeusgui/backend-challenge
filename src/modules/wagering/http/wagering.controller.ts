@@ -11,6 +11,8 @@ import {
 import { parseProcessWagerRequest } from './process-wager.request';
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
+import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
+import type { Principal } from '../../auth/domain/principal';
 
 /** The subset of the Express response this controller needs. Keeps the controller independent of Express types. */
 interface StatusSetter {
@@ -34,18 +36,25 @@ export class WageringController {
   ) {}
 
   @Get(':transactionId')
-  async getById(@Param('transactionId') transactionId: string) {
-    return presentTransaction(await this.queries.getById(transactionId));
+  async getById(
+    @CurrentPrincipal() principal: Principal,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const transaction = await this.queries.getById(transactionId);
+    requireProviderScope(principal, transaction.providerId);
+    return presentTransaction(transaction);
   }
 
   @Post()
   async submit(
+    @CurrentPrincipal() principal: Principal,
     @Body() body: unknown,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Headers('x-correlation-id') correlationId: string | undefined,
     @Res({ passthrough: true }) response: StatusSetter,
   ): Promise<WagerTransactionResponse> {
     const { command } = parseProcessWagerRequest(body, idempotencyKey);
+    requireProviderScope(principal, command.providerId);
     const resolvedCorrelationId = correlationId ?? randomUUID();
     const started = performance.now();
     const outcome = await this.processWager.execute({

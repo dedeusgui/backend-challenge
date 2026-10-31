@@ -331,10 +331,24 @@ Counters are per process (`MetricsRegistry`): `transactions_total{status}`,
 
 ## 12. Authentication
 
-Deferred, as the challenge permits. [ADR 0006](docs/adr/0006-authentication-deferred.md)
-records the decision, the extension point (`ProviderIdentityPort`), and the largest
-risk: in this build a caller can name any provider. The API must not be exposed outside a
-trusted network.
+API keys with two roles. [ADR 0007](docs/adr/0007-api-key-authentication.md) records the
+decision and its alternatives. Each client sends `Authorization: Bearer <key>`:
+
+- A **PROVIDER** key acts for one provider id. It submits and reads that provider's operations.
+  Another provider's id is `403 FORBIDDEN`, before anything is written. A transaction id that
+  belongs to another provider is also `403`.
+- An **OPERATOR** key opens, reads and reconciles wallets, reads metrics, and acts for any
+  provider.
+- `GET /health/live` and `GET /health/ready` are public. Every other route needs a valid key.
+- A missing, unknown or revoked key is `401 UNAUTHENTICATED` with `WWW-Authenticate: Bearer`.
+
+The table `api_clients` stores the SHA-256 hash of each key, never the key. Keys are created
+and revoked with `bun run auth:create` and `bun run auth:revoke`. The key is printed once.
+The guard is `src/modules/auth/http/api-key.guard.ts`. The rules are in
+`src/modules/auth/domain/principal.ts`.
+
+Queue messages are not authenticated, because they arrive on an internal channel (challenge
+§2). Their provider and wallet fields are still checked in the domain.
 
 ## 13. Interpretations
 
@@ -374,7 +388,8 @@ These are choices the specification leaves open. Each one is tested.
 
 What is not claimed, and why:
 
-- **No authentication.** See section 12.
+- **No login and no key rotation.** Keys last until they are revoked. The challenge's suggested identity provider (Keycloak or Zitadel) is not integrated. See section 12 and ADR 0007.
+- **Plain HTTP.** Keys travel in every request, so a real deployment must put the API behind TLS.
 - **Local infrastructure only.** PostgreSQL 17 and LocalStack 4.14, not AWS. The repository's
   Dockerfile image build could not run in the authoring sandbox, because its TLS proxy
   blocks package downloads. The stack was verified from clean volumes with an image built

@@ -5,10 +5,16 @@ import { startTestApp, type TestApp } from './support/test-app';
 
 let database: TestDatabase;
 let app: TestApp;
+let operatorKey = '';
+let providerKey = '';
 
 beforeAll(async () => {
   database = await createTestDatabase();
   app = await startTestApp(database.url);
+  operatorKey = (await app.createApiClient({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  providerKey = (
+    await app.createApiClient({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
+  ).apiKey;
 });
 
 afterAll(async () => {
@@ -29,7 +35,7 @@ async function request(
 ): Promise<HttpResult> {
   const response = await fetch(`${app.baseUrl}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', ...authFor(path), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
@@ -70,6 +76,13 @@ function betBody(
 
 function idempotencyKey(externalTransactionId: string): Record<string, string> {
   return { 'idempotency-key': `provider-a:${externalTransactionId}` };
+}
+
+/** Wallets and metrics are for the operator. Wagering and provider lookups are for provider-a. */
+function authFor(path: string): Record<string, string> {
+  const key =
+    path.startsWith('/wagering') || path.startsWith('/providers') ? providerKey : operatorKey;
+  return { authorization: `Bearer ${key}` };
 }
 
 describe('POST /wallets', () => {

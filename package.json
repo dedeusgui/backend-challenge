@@ -18,7 +18,9 @@
     "check:all": "bun run check:fast && bun run test:integration && bun run test:concurrency && bun run test:e2e",
     "test:concurrency": "bun test test/concurrency",
     "test:e2e": "bun test test/e2e",
-    "db:migrate": "bun run src/migrate.ts"
+    "db:migrate": "bun run src/migrate.ts",
+    "auth:create": "bun run src/auth.ts create",
+    "auth:revoke": "bun run src/auth.ts revoke"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

@@ -65,6 +65,15 @@ function httpFailure(status: number): ErrorResponse {
   if (status === 404) {
     return failure(404, 'NOT_FOUND', 'No route matches this request');
   }
+  if (status === 401) {
+    return {
+      ...failure(401, 'UNAUTHENTICATED', 'A valid API key is required'),
+      headers: { 'www-authenticate': 'Bearer' },
+    };
+  }
+  if (status === 403) {
+    return failure(403, 'FORBIDDEN', 'This API key may not perform the operation');
+  }
   if (status >= 400 && status < 500) {
     return failure(status, 'INVALID_REQUEST', 'The request could not be parsed');
   }

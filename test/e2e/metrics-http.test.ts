@@ -5,10 +5,16 @@ import { startTestApp, type TestApp } from './support/test-app';
 
 let database: TestDatabase;
 let app: TestApp;
+let operatorKey = '';
+let providerKey = '';
 
 beforeAll(async () => {
   database = await createTestDatabase();
   app = await startTestApp(database.url);
+  operatorKey = (await app.createApiClient({ name: 'operator', role: 'OPERATOR' })).apiKey;
+  providerKey = (
+    await app.createApiClient({ name: 'provider a', role: 'PROVIDER', providerId: 'provider-a' })
+  ).apiKey;
 });
 
 afterAll(async () => {
@@ -16,13 +22,20 @@ afterAll(async () => {
   await database.drop();
 });
 
+/** Wallets and metrics are for the operator. Wagering and provider lookups are for provider-a. */
+function authFor(path: string): Record<string, string> {
+  const key =
+    path.startsWith('/wagering') || path.startsWith('/providers') ? providerKey : operatorKey;
+  return { authorization: `Bearer ${key}` };
+}
+
 describe('GET /metrics', () => {
   test('counts processed transactions and idempotent replays of this process', async () => {
     const playerId = randomUUID();
     const wallet = (await (
       await fetch(`${app.baseUrl}/wallets`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authFor('/wallets') },
         body: JSON.stringify({ playerId, initialBalance: { amount: '100.00', currency: 'BRL' } }),
       })
     ).json()) as { id: string };
@@ -39,12 +52,15 @@ describe('GET /metrics', () => {
     });
     const headers = {
       'content-type': 'application/json',
+      ...authFor('/wagering/transactions'),
       'idempotency-key': `provider-a:${externalTransactionId}`,
     };
     await fetch(`${app.baseUrl}/wagering/transactions`, { method: 'POST', headers, body });
     await fetch(`${app.baseUrl}/wagering/transactions`, { method: 'POST', headers, body });
 
-    const metrics = (await (await fetch(`${app.baseUrl}/metrics`)).json()) as {
+    const metrics = (await (
+      await fetch(`${app.baseUrl}/metrics`, { headers: authFor('/metrics') })
+    ).json()) as {
       counters: Record<string, number>;
       summaries: Record<string, { count: number }>;
     };

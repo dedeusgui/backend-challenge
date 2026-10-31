@@ -13,7 +13,11 @@ import {
   type OperationLogger,
 } from './shared/observability/structured-log';
 import { HEALTH_SERVICE, HealthService } from './health/health.service';
-import { createSqsClient, resolveQueues } from './shared/infrastructure/sqs/sqs-connection';
+import {
+  createSqsClient,
+  resolveQueues,
+  SqsClientLifecycle,
+} from './shared/infrastructure/sqs/sqs-connection';
 import { SQS_CLIENT, SQS_PROBE_CLIENT } from './shared/infrastructure/sqs/sqs.tokens';
 import type { ApplicationContext } from './shared/application/application-context';
 import { DatabaseLifecycle, ORM, ormProvider } from './shared/infrastructure/database/orm.provider';
@@ -59,6 +63,12 @@ export class AppModule {
         {
           provide: SQS_PROBE_CLIENT,
           useFactory: () => createSqsClient(config.sqs, { probe: true }),
+        },
+        {
+          provide: SqsClientLifecycle,
+          inject: [SQS_CLIENT, SQS_PROBE_CLIENT],
+          useFactory: (client: SQSClient, probe: SQSClient) =>
+            new SqsClientLifecycle([client, probe]),
         },
         {
           provide: HEALTH_SERVICE,

@@ -73,6 +73,7 @@ export async function createWorkerRuntime(
     leaseDurationMs: config.outboxLeaseMs,
     batchSize: config.outboxBatchSize,
     metrics,
+    logger: options.logger,
   });
 
   return {

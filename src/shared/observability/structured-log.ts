@@ -7,6 +7,25 @@ export interface OperationLog {
   walletId?: string;
   providerId?: string;
   durationMs?: number;
+  errorName?: string;
+  errorCode?: string;
+}
+
+/**
+ * The class name and the code of a thrown value. The class name is used, not `error.name`,
+ * because the application's own errors do not set `name` and would all read as "Error". The
+ * message is left out on purpose: it can carry a payload, and the log must never hold one.
+ */
+export type ErrorFields = Pick<OperationLog, 'errorName' | 'errorCode'>;
+
+export function describeError(error: unknown): ErrorFields {
+  if (!(error instanceof Error)) {
+    return { errorName: 'NonError' };
+  }
+  const errorName = error.constructor.name;
+  return 'code' in error && typeof error.code === 'string'
+    ? { errorName, errorCode: error.code }
+    : { errorName };
 }
 
 /**
@@ -27,6 +46,8 @@ export function formatOperationLog(entry: OperationLog, at: Date = new Date()): 
     'walletId',
     'providerId',
     'durationMs',
+    'errorName',
+    'errorCode',
   ] as const) {
     const value = entry[key];
     if (value !== undefined) {

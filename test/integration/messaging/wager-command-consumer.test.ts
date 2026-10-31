@@ -13,6 +13,7 @@ import {
 } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
+import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 
@@ -43,7 +44,11 @@ afterAll(async () => {
 });
 
 function consumerWith(
-  options: { faults?: ConsumerFaults; process?: Pick<ProcessWagerTransaction, 'execute'> } = {},
+  options: {
+    faults?: ConsumerFaults;
+    process?: Pick<ProcessWagerTransaction, 'execute'>;
+    logger?: (entry: OperationLog) => void;
+  } = {},
 ) {
   return new WagerCommandConsumer({
     consumerName: 'wager-transactions',
@@ -53,6 +58,7 @@ function consumerWith(
     visibilityTimeoutSeconds: 1,
     faults: options.faults ?? NO_FAULTS,
     metrics,
+    logger: options.logger,
   });
 }
 
@@ -88,8 +94,9 @@ function requestedMessage(
   });
 }
 
-async function send(body: string): Promise<void> {
-  await new SqsQueue(sqs, queues.commandQueueUrl).send(body, 'group', randomUUID());
+/** Messages share one FIFO group by default. A test that must not wait behind an in-flight message uses its own group. */
+async function send(body: string, group = 'group'): Promise<void> {
+  await new SqsQueue(sqs, queues.commandQueueUrl).send(body, group, randomUUID());
 }
 
 async function debitsOf(walletId: string): Promise<number> {
@@ -216,6 +223,30 @@ describe('WagerCommandConsumer', () => {
     const queue = new SqsQueue(sqs, queues.commandQueueUrl);
     expect(await queue.countInFlight()).toBe(1);
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('a failed command is logged with its error class and code, and never with its amount', async () => {
+    const wallet = await fundedWallet();
+    // The transient test above leaves its message in flight in the default group, which would block this one.
+    await send(requestedMessage(wallet), `log-${randomUUID()}`);
+    const logged: OperationLog[] = [];
+    const failing = {
+      execute: async () => {
+        throw new ConcurrencyConflictError('lost a race for 25.00 BRL');
+      },
+    };
+
+    await consumerWith({ process: failing, logger: (entry) => logged.push(entry) }).pollOnce();
+
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        operation: 'command.settle',
+        status: 'RETRY',
+        errorName: 'ConcurrencyConflictError',
+        errorCode: 'CONCURRENCY_CONFLICT',
+      }),
+    );
+    expect(JSON.stringify(logged)).not.toContain('25.00');
   });
 
   test('the consumer counts each disposition it produced', () => {

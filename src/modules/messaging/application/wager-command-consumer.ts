@@ -7,7 +7,12 @@ import type { MessageQueue, ReceivedMessage } from './message-queue.port';
 import { classifyCommandFailure } from './failure-classification';
 import { parseWagerCommandMessage } from './wager-command-message';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
-import { SILENT_LOGGER, type OperationLogger } from '../../../shared/observability/structured-log';
+import {
+  describeError,
+  SILENT_LOGGER,
+  type ErrorFields,
+  type OperationLogger,
+} from '../../../shared/observability/structured-log';
 
 /** Test-only seam at the point where a crash would hurt most. The production default does nothing. */
 export interface ConsumerFaults {
@@ -38,6 +43,13 @@ const MAX_RETRY_DELAY_SECONDS = 300;
 const DEAD_LETTER_GROUP = 'dead-letter';
 
 type Disposition = 'APPLIED' | 'DEAD' | 'RETRY';
+
+interface Attempt {
+  disposition: Disposition;
+  messageId: string | undefined;
+  /** Class and code of the failure that decided the disposition. Absent when the command applied. */
+  failure?: ErrorFields;
+}
 
 /**
  * Consumes wager commands. The same ProcessWagerTransaction use case as HTTP does
@@ -74,9 +86,9 @@ export class WagerCommandConsumer {
 
   private async settle(message: ReceivedMessage): Promise<boolean> {
     const { queue, deadLetters, faults } = this.options;
-    const { disposition, messageId } = await this.attempt(message);
+    const { disposition, messageId, failure } = await this.attempt(message);
     this.metrics.increment('commands_total', { result: disposition });
-    this.logger({ operation: 'command.settle', status: disposition, messageId });
+    this.logger({ operation: 'command.settle', status: disposition, messageId, ...failure });
 
     if (disposition === 'APPLIED') {
       // Outside the attempt on purpose: a crash here must leave the message for redelivery.
@@ -94,14 +106,12 @@ export class WagerCommandConsumer {
   }
 
   /** `messageId` is read from the body when the body parses, so logs name the message that was handled. */
-  private async attempt(
-    message: ReceivedMessage,
-  ): Promise<{ disposition: Disposition; messageId: string | undefined }> {
+  private async attempt(message: ReceivedMessage): Promise<Attempt> {
     let command: ProcessWagerCommand;
     try {
       command = parseWagerCommandMessage(message.body, this.options.consumerName);
-    } catch {
-      return { disposition: 'DEAD', messageId: undefined };
+    } catch (error) {
+      return { disposition: 'DEAD', messageId: undefined, failure: describeError(error) };
     }
     const messageId = command.inbound?.messageId;
 
@@ -110,7 +120,7 @@ export class WagerCommandConsumer {
       return { disposition: 'APPLIED', messageId };
     } catch (error) {
       const disposition = classifyCommandFailure(error) === 'PERMANENT' ? 'DEAD' : 'RETRY';
-      return { disposition, messageId };
+      return { disposition, messageId, failure: describeError(error) };
     }
   }
 }

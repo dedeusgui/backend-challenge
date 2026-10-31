@@ -11,6 +11,7 @@ import {
 } from '../../../src/modules/messaging/application/outbox-publisher';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
+import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
@@ -63,7 +64,12 @@ function transportFor(): CountingTransport {
   return new CountingTransport(new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)));
 }
 
-function publisherFor(transport: OutboxTransport, clock: () => Date = () => NOW, batchSize = 10) {
+function publisherFor(
+  transport: OutboxTransport,
+  clock: () => Date = () => NOW,
+  batchSize = 10,
+  logger?: (entry: OperationLog) => void,
+) {
   return new OutboxPublisher({
     store: new MikroOrmOutboxStore(database.orm),
     transport,
@@ -72,6 +78,7 @@ function publisherFor(transport: OutboxTransport, clock: () => Date = () => NOW,
     leaseDurationMs: 30_000,
     batchSize,
     metrics,
+    logger,
   });
 }
 
@@ -231,5 +238,30 @@ describe('OutboxPublisher', () => {
 
     expect(published).toBe(0);
     expect(metrics.snapshot().counters['outbox_lost_lease_total']).toBe(before + 1);
+  });
+
+  test('a failed broker send is logged with its error class, and never with its message', async () => {
+    await committedEvents();
+    const transport = transportFor();
+    transport.failuresRemaining = await pendingCount();
+    const logged: OperationLog[] = [];
+
+    await publisherFor(
+      transport,
+      () => NOW,
+      10,
+      (entry) => logged.push(entry),
+    ).publishOnce();
+
+    expect(logged.length).toBeGreaterThan(0);
+    for (const entry of logged) {
+      expect(entry).toMatchObject({
+        operation: 'outbox.publish',
+        status: 'failed',
+        errorName: 'Error',
+      });
+      expect(entry.messageId).toBeDefined();
+    }
+    expect(JSON.stringify(logged)).not.toContain('simulated broker outage');
   });
 });

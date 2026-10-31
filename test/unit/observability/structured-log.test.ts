@@ -1,10 +1,53 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  describeError,
   formatOperationLog,
   type OperationLog,
 } from '../../../src/shared/observability/structured-log';
 
 const OCCURRED = new Date('2026-07-29T15:00:00.000Z');
+
+class NetworkingError extends Error {
+  readonly code = 'ECONNRESET';
+}
+
+describe('describeError', () => {
+  test('gives the class name and the code of an error, and never its message', () => {
+    const failure = new NetworkingError('amount 25.00 for player 42');
+
+    expect(describeError(failure)).toEqual({
+      errorName: 'NetworkingError',
+      errorCode: 'ECONNRESET',
+    });
+  });
+
+  test('gives only a name for an error without a code', () => {
+    expect(describeError(new RangeError('amount 25.00'))).toEqual({ errorName: 'RangeError' });
+  });
+
+  test('names a thrown value that is not an Error without reading it', () => {
+    expect(describeError('amount 25.00')).toEqual({ errorName: 'NonError' });
+  });
+});
+
+describe('formatOperationLog: error fields', () => {
+  test('writes the error name and code of a failed operation', () => {
+    const line = formatOperationLog(
+      {
+        operation: 'command.settle',
+        status: 'failed',
+        errorName: 'NetworkingError',
+        errorCode: 'ECONNRESET',
+      },
+      OCCURRED,
+    );
+
+    expect(JSON.parse(line)).toMatchObject({
+      errorName: 'NetworkingError',
+      errorCode: 'ECONNRESET',
+    });
+  });
+});
 
 describe('formatOperationLog', () => {
   test('writes one JSON object with the required correlation fields and no amounts', () => {

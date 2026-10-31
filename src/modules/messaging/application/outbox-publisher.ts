@@ -1,5 +1,11 @@
 import type { OutboxMessage } from '../domain/outbox-message';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
+import {
+  describeError,
+  SILENT_LOGGER,
+  type ErrorFields,
+  type OperationLogger,
+} from '../../../shared/observability/structured-log';
 import type { OutboxStore } from './outbox-store.port';
 
 /** The external system an event is published to. The SQS adapter is the only implementation. */
@@ -21,6 +27,7 @@ export interface OutboxPublisherOptions {
   leaseDurationMs: number;
   batchSize: number;
   metrics?: MetricsSink;
+  logger?: OperationLogger;
 }
 
 /**
@@ -31,9 +38,11 @@ export interface OutboxPublisherOptions {
  */
 export class OutboxPublisher {
   private readonly metrics: MetricsSink;
+  private readonly logger: OperationLogger;
 
   constructor(private readonly options: OutboxPublisherOptions) {
     this.metrics = options.metrics ?? NO_METRICS;
+    this.logger = options.logger ?? SILENT_LOGGER;
   }
 
   /** Returns how many events were published successfully in this pass. */
@@ -59,14 +68,16 @@ export class OutboxPublisher {
   private async deliver(message: OutboxMessage, token: string): Promise<boolean> {
     const attemptAt = this.options.clock();
     let sent = true;
+    let failure: ErrorFields = {};
     try {
       await this.options.transport.publish({
         id: message.id,
         aggregateId: message.aggregateId,
         payload: message.payload,
       });
-    } catch {
+    } catch (error) {
       sent = false;
+      failure = describeError(error);
     }
 
     // Recording the outcome is outside the try: a failure here must surface, not be counted as a send failure.
@@ -85,6 +96,12 @@ export class OutboxPublisher {
       return true;
     }
     this.metrics.increment('outbox_publish_failures_total');
+    this.logger({
+      operation: 'outbox.publish',
+      status: 'failed',
+      messageId: message.id,
+      ...failure,
+    });
     message.scheduleRetry(attemptAt);
     await this.options.store.reschedule(message, token);
     return false;

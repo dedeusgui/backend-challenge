@@ -194,7 +194,11 @@ A replay takes no lock. A stored transaction's payload never changes, and the re
 nothing, so it is answered from the stored row before the wallet is locked. The lookup
 order is: inbox check, idempotency lookup, then, only for a new identity, the lock and a
 second lookup. The second lookup stops an identical request that waited for the lock from
-inserting, colliding on the unique key and retrying, which under load could end in a 503.
+inserting, colliding on the unique key and retrying, which under load could end in a 503. A queue duplicate
+that waited is the same case for the inbox: when the second lookup finds the committed transaction, the
+inbox is checked again, so the duplicate records nothing and is answered as a replay. Before this check it
+inserted its inbox row, collided on the primary key, rolled back, and counted a lost race that was not one.
+The test is `integration: a duplicate delivery that waits for the wallet lock`.
 
 ```mermaid
 sequenceDiagram

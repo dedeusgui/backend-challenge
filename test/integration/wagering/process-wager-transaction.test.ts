@@ -14,7 +14,9 @@ import { InboxMessage } from '../../../src/modules/messaging/domain/inbox-messag
 import {
   ProcessWagerTransaction,
   type ProcessWagerCommand,
+  type ProcessWagerOutcome,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
+import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
@@ -278,6 +280,31 @@ async function holdWalletLock(walletId: string): Promise<() => Promise<void>> {
   };
 }
 
+/**
+ * Resolves once `count` sessions of this database are waiting for a lock. It asks the server, so the
+ * test does not depend on a guessed delay.
+ */
+async function waitForLockWaiters(count: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const [row] = (await database.orm.em
+      .getConnection()
+      .execute(
+        `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+      )) as Array<{ n: number }>;
+    if (row === undefined) {
+      throw new Error('pg_stat_activity returned no count');
+    }
+    if (row.n >= count) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`Only ${row.n} of ${count} sessions are waiting for a lock`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 const TIMED_OUT = Symbol('timed out');
 
 describe('ProcessWagerTransaction: early replay, and the lookup order', () => {
@@ -337,6 +364,41 @@ describe('ProcessWagerTransaction: early replay, and the lookup order', () => {
     await expect(
       unitOfWork.run((repositories) => repositories.inbox.insert(inbound)),
     ).rejects.toBeInstanceOf(ConcurrencyConflictError);
+  });
+
+  test('a duplicate delivery that waits for the wallet lock is answered as a replay, with no lost race', async () => {
+    const wallet = await fundedWallet('100.00');
+    const delivery = command(wallet, {
+      kind: 'BET',
+      money: brl('25.00'),
+      inbound: { consumerName: 'wager-transactions', messageId: `msg-${randomUUID()}` },
+    });
+    const registry = new MetricsRegistry();
+    const counted = new ProcessWagerTransaction({
+      unitOfWork: new MikroOrmFinancialUnitOfWork(database.orm),
+      clock: () => NOW,
+      newId: randomUUID,
+      metrics: registry,
+    });
+
+    // Both deliveries look before the lock, find nothing, and queue behind the holder. Each waits
+    // for the other to be queued, so the order of the test does not decide the outcome.
+    const release = await holdWalletLock(wallet.walletId);
+    let deliveries: Promise<ProcessWagerOutcome>[] = [];
+    try {
+      deliveries = [counted.execute(delivery), counted.execute(delivery)];
+      await waitForLockWaiters(2);
+    } finally {
+      await release();
+    }
+    const outcomes = await Promise.all(deliveries);
+
+    expect(outcomes.filter((outcome) => !outcome.idempotentReplay)).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.idempotentReplay)).toHaveLength(1);
+    expect(await balanceOf(wallet.walletId)).toBe('75.00');
+    // The loser found the winner under the lock. Its inbox record is the winner's, so it must not insert
+    // a second one and collide with it: a collision would roll back a finished replay and count a lost race.
+    expect(registry.snapshot().counters).not.toHaveProperty('concurrency_conflicts_total');
   });
 });
 

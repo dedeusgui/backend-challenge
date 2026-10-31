@@ -117,7 +117,11 @@ export class ProcessWagerTransaction {
     }
     const committed = await this.findStored(repositories, command);
     if (committed !== undefined) {
-      return this.answerReplay(repositories, command, committed, payloadHash, inboundRecorded);
+      // The same message may have been recorded while this one waited. Its inbox row is then the winner's,
+      // and a second insert would collide with it, roll back a finished replay, and count a lost race.
+      const recorded =
+        inboundRecorded || (await this.isInboundRecorded(repositories, command, payloadHash));
+      return this.answerReplay(repositories, command, committed, payloadHash, recorded);
     }
 
     const outcome = await this.settleNew(repositories, command, payloadHash, wallet);

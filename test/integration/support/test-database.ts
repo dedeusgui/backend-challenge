@@ -23,6 +23,8 @@ async function withAdminConnection<T>(work: (orm: MikroORM) => Promise<T>): Prom
 
 export interface TestDatabase {
   orm: MikroORM;
+  /** Connection URL of this isolated database, for starting processes against it. */
+  url: string;
   /** Closes the connection and drops the database, even when tests failed. */
   drop(): Promise<void>;
 }
@@ -37,11 +39,13 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     admin.em.getConnection().execute(`CREATE DATABASE "${name}"`),
   );
 
-  const orm = await MikroORM.init(ormOptions(withDatabase(DATABASE_URL, name)));
+  const url = withDatabase(DATABASE_URL, name);
+  const orm = await MikroORM.init(ormOptions(url));
   await orm.migrator.up();
 
   return {
     orm,
+    url,
     async drop() {
       await orm.close(true);
       await withAdminConnection((admin) =>

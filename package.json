@@ -15,8 +15,9 @@
     "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit",
     "infra:up": "docker compose up -d --wait postgres localstack",
     "test:integration": "bun test test/integration",
-    "check:all": "bun run check:fast && bun run test:integration && bun run test:concurrency",
-    "test:concurrency": "bun test test/concurrency"
+    "check:all": "bun run check:fast && bun run test:integration && bun run test:concurrency && bun run test:e2e",
+    "test:concurrency": "bun test test/concurrency",
+    "test:e2e": "bun test test/e2e"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

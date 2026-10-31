@@ -80,10 +80,10 @@ describe('the detail of each run', () => {
     expect(report).not.toContain('undefined');
   });
 
-  test('gives the per-kind latency and the unexpected answers of the agreed step', () => {
+  test('gives the per-kind latency, the incorrect and the concurrent answers of the agreed step', () => {
     const report = renderReport([TWO_CPUS], '2026-10-31T12:00:00.000Z');
     expect(report).toContain('#### Latency by operation at the agreed rate');
-    expect(report).toContain('| BET | 900 | 900 | 0 | 4.0 | 9.0 | 12.0 |');
+    expect(report).toContain('| BET | 900 | 900 | 0 | n/a | 4.0 | 9.0 | 12.0 |');
   });
 
   test('states the limits of the method, so that a number is never read without them', () => {

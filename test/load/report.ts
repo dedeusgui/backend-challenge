@@ -134,7 +134,8 @@ ${same ? 'Every run used the constraints below.' : 'The runs used different cons
 | Outbox drained after the step | within ${constraints.maxOutboxDrainSeconds} s |
 | Resident memory of any one process | at most ${constraints.maxRssMiBPerProcess} MiB |
 | Balance equals the ledger, and no balance below zero | every wallet, every step |
-| A transaction processed twice | none |
+| A transaction processed twice (by provider and external id, and by provider and idempotency key) | none |
+| Answers the contract does not allow for the request that got them | none |
 
 Each step lasts ${constraints.stepSeconds} seconds. The mix is a share of all operations, configured in
 \`test/load/thresholds.ts\` and realised by \`test/load/workload.ts\`:
@@ -159,7 +160,7 @@ const LIMITS = [
   'PostgreSQL runs with its default configuration, on local disk, with no replica and no tuning.',
   'The mix is ours, and it goes through HTTP only. Providers that send operations through the command queue are not in it; the concurrency tests cover that path. The shares are in the constraints section, and the realised shares are the ones the run sent.',
   'Latency is the client view, measured from the scheduled send time. The percentiles come from our own sample, not from a histogram.',
-  'Business refusals (409, 422) and waiting answers (202) are answers, not errors. Errors are 5xx answers and requests that got no response. An answer that is not the one the operation should get is counted per operation, and it is reported, not failed.',
+  "An answer is judged against the request it answers, and against what the client knew when it sent that request. A business answer that the run's concurrency makes possible (a replay, a reference still pending, a read that raced its write) is counted as concurrent, and it is not a failure. Any other answer that the contract does not allow is incorrect, and a step with one fails, whatever its latency. Errors, for the error rate, are 5xx answers and requests that got no response.",
   'CPU is read from /proc for each process, and from `docker stats` for each container. The container figure is a sample, not a cumulative counter. Each component is taken above its own idle baseline, measured with no traffic before the ramp.',
   'CPU per request is the whole stack divided by the requests answered. It is not a cost per operation type: the CPU of an operation cannot be separated from the others it shares a process with.',
   'Each step ran once. There is no confidence interval, and the same rate on another run can land on the other side of a constraint.',
@@ -223,7 +224,7 @@ function runSection(run: RunRecord): string {
           .map((kind) => {
             const row = focus.byKind[kind];
             if (row === undefined) return '';
-            return `| ${kind} | ${row.sent} | ${row.answered} | ${row.unexpected} | ${na(row.p50)} | ${na(row.p95)} | ${na(row.p99)} | ${statusText(row.statuses)} |`;
+            return `| ${kind} | ${row.sent} | ${row.answered} | ${row.unexpected} | ${row.concurrent ?? 'n/a'} | ${na(row.p50)} | ${na(row.p95)} | ${na(row.p99)} | ${statusText(row.statuses)} |`;
           })
           .join('\n');
   const kindHeading =
@@ -289,8 +290,8 @@ ${cpuRows}
 
 ${kindHeading}
 
-| Operation | Sent | Answered | Unexpected answers | p50 (ms) | p95 (ms) | p99 (ms) | Statuses |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Operation | Sent | Answered | Incorrect answers | Concurrent answers | p50 (ms) | p95 (ms) | p99 (ms) | Statuses |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 ${kinds}
 
 #### Lost requests
@@ -360,8 +361,10 @@ ${sections}
 - **Sent**: a request the generator put on the wire at its scheduled time.
 - **Answered**: a request that received an HTTP response of any status.
 - **Lost**: a request that received no response: a timeout, or a connection that closed.
-- **Error**: a 5xx answer, or a lost request. A 4xx answer (409, 422, 400) is a correct answer, and it is not an error.
-- **Unexpected answer**: an answer other than the one the operation should get (201 for a bet, 200 for a replay).
+- **Error**: a 5xx answer, or a lost request. It is the error rate of a step.
+- **Incorrect answer**: an answer the contract does not allow for that request, given what the client knew when it sent it. Examples: a 422 to a settlement (the planner sends none the API must refuse), a 404 to a read of a BET the client had seen applied, a 202 to a settlement of such a BET. A step with one fails.
+- **Concurrent answer**: a valid business answer that the run's concurrency makes possible: a 200 replay of a BET, a 202 reference pending or a 404 read while the BET was still in flight. It is counted, and it does not fail a step.
+- **Primary answer**: the status the request gets when it does its job (201 for a bet or a settlement, 200 for a replay or a read).
 - **Generator lag**: how late the generator sent a request compared with its schedule.
 - **CPU µs per request**: the stack's CPU above its idle baseline, in microseconds, divided by the requests answered.
 

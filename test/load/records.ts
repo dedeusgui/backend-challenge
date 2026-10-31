@@ -10,8 +10,16 @@ export const RUN_VERSION = 1;
 export interface KindRecord {
   sent: number;
   answered: number;
-  /** Answers other than the status the operation should get. Reported, not failed: a 202 is an answer. */
+  /**
+   * Answers the contract does not allow for the request that got them. A step with one fails (thresholds.ts).
+   * Runs made before the judgement was counted this way reported these as "unexpected", and failed no step.
+   */
   unexpected: number;
+  /**
+   * Answers that are valid business answers because of the run's concurrency: a reference still pending, a
+   * read that raced its write, a replay. Absent in runs made before this count existed.
+   */
+  concurrent?: number;
   p50: number | null;
   p95: number | null;
   p99: number | null;

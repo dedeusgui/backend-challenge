@@ -58,6 +58,15 @@ import {
   type StepRecord,
 } from './records';
 import { readRuns, renderReport, writeRun } from './report';
+import {
+  acceptableAnswers,
+  appliedBy,
+  classifyAnswer,
+  DRAIN_CAP_SECONDS,
+  dependencyOf,
+  incorrectAnswers,
+  stepReasons,
+} from './judgement';
 import { LOAD_THRESHOLDS } from './thresholds';
 import {
   WORKLOAD_KINDS,
@@ -78,7 +87,6 @@ const IDLE_SECONDS = Number(env.LOAD_IDLE_SECONDS ?? LOAD_THRESHOLDS.idleSeconds
 const WARMUP_SECONDS = Number(env.LOAD_WARMUP_SECONDS ?? LOAD_THRESHOLDS.warmupSeconds);
 const RESULTS_DIR = env.LOAD_RESULTS_DIR ?? `${import.meta.dir}/../../docs/load/results`;
 const REPORT_PATH = env.LOAD_REPORT_PATH ?? `${import.meta.dir}/../../docs/LOAD_TEST_RESULTS.md`;
-const DRAIN_CAP_SECONDS = 120;
 const PROVIDER_ID = 'provider-a';
 const GAME_ID = 'fortune-chimp';
 const CONTAINER_SERVICES = ['postgres', 'localstack'] as const;
@@ -91,7 +99,10 @@ interface Sample {
   kind: WorkloadKind;
   latencyMs: number;
   outcome: number | 'LOST';
-  expected: number;
+  /** The answer the request gets when it does its job. */
+  primary: number;
+  /** Every answer the contract allows this request, given what the client knew when it sent it. */
+  acceptable: readonly number[];
   hot: boolean;
   /** For a lost request: the error class and its message. Never a payload. */
   lostReason?: string;
@@ -311,7 +322,8 @@ function kindRecords(samples: readonly Sample[]): Record<string, KindRecord> {
     result[kind] = {
       sent: own.length,
       answered: answered.length,
-      unexpected: answered.filter((sample) => sample.outcome !== sample.expected).length,
+      unexpected: answered.filter((sample) => classifyAnswer(sample) === 'incorrect').length,
+      concurrent: answered.filter((sample) => classifyAnswer(sample) === 'concurrent').length,
       p50: finite(percentile(latencies, 0.5)),
       p95: finite(percentile(latencies, 0.95)),
       p99: finite(percentile(latencies, 0.99)),
@@ -454,6 +466,8 @@ async function measureRun(
     return Object.values(rows[0] ?? {})[0] ?? '';
   };
 
+  // The BETs applied so far in this run, across the warm-up and every step.
+  const applied = new Set<string>();
   // The warm-up is run and not kept: its requests warm the stack, and the drain after it keeps the idle
   // measurement free of publishing.
   const warmup = await runStep({
@@ -470,6 +484,7 @@ async function measureRun(
     outboxCount,
     unpublished,
     scalar,
+    applied,
   });
   const idle = await measureWindow(names, containers, () => sleep(IDLE_SECONDS * 1000));
 
@@ -489,6 +504,7 @@ async function measureRun(
       outboxCount,
       unpublished,
       scalar,
+      applied,
     });
     steps.push(step);
     console.log(
@@ -605,10 +621,23 @@ interface StepInput {
   outboxCount: () => Promise<number>;
   unpublished: () => Promise<number>;
   scalar: (sql: string) => Promise<string>;
+  /** The BETs the run has seen applied, across every step: a later request is judged against them. */
+  applied: Set<string>;
 }
 
 async function runStep(input: StepInput): Promise<StepRecord> {
-  const { rate, seconds, cluster, names, apis, operatorKey, providerKey, context, planner } = input;
+  const {
+    rate,
+    seconds,
+    cluster,
+    names,
+    apis,
+    operatorKey,
+    providerKey,
+    context,
+    planner,
+    applied,
+  } = input;
   const total = Math.round(rate * seconds);
   const interval = 1000 / rate;
   const operations = planner.next(total);
@@ -650,6 +679,11 @@ async function runStep(input: StepInput): Promise<StepRecord> {
     scheduled: number,
   ): Promise<void> => {
     const request = requestFor(operation, context);
+    const dependency = dependencyOf(operation);
+    const acceptable = acceptableAnswers({
+      kind: operation.kind,
+      dependencyApplied: dependency === undefined ? undefined : applied.has(dependency),
+    });
     const headers: Record<string, string> = {
       authorization: `Bearer ${request.audience === 'operator' ? operatorKey : providerKey}`,
     };
@@ -665,11 +699,14 @@ async function runStep(input: StepInput): Promise<StepRecord> {
         signal: AbortSignal.timeout(LOAD_THRESHOLDS.requestTimeoutMs),
       });
       await response.text();
+      const applies = appliedBy(operation, response.status);
+      if (applies !== undefined) applied.add(applies);
       samples.push({
         kind: operation.kind,
         latencyMs: performance.now() - scheduled,
         outcome: response.status,
-        expected: request.expectedStatus,
+        primary: request.expectedStatus,
+        acceptable,
         hot: hotOf(operation),
       });
     } catch (error) {
@@ -677,7 +714,8 @@ async function runStep(input: StepInput): Promise<StepRecord> {
         kind: operation.kind,
         latencyMs: performance.now() - scheduled,
         outcome: 'LOST',
-        expected: request.expectedStatus,
+        primary: request.expectedStatus,
+        acceptable,
         hot: hotOf(operation),
         lostReason: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       });
@@ -759,33 +797,18 @@ async function runStep(input: StepInput): Promise<StepRecord> {
   const p95 = percentile(latencies, 0.95);
   const p99 = percentile(latencies, 0.99);
 
-  const reasons: string[] = [];
-  if (lost > LOAD_THRESHOLDS.maxLostRequests)
-    reasons.push(`${lost} requests lost (max ${LOAD_THRESHOLDS.maxLostRequests})`);
-  if (errorRate > LOAD_THRESHOLDS.maxErrorRate)
-    reasons.push(
-      `error rate ${(errorRate * 100).toFixed(3)}% (max ${LOAD_THRESHOLDS.maxErrorRate * 100}%)`,
-    );
-  if (!(p95 <= LOAD_THRESHOLDS.maxP95Ms))
-    reasons.push(`p95 ${p95.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP95Ms})`);
-  if (!(p99 <= LOAD_THRESHOLDS.maxP99Ms))
-    reasons.push(`p99 ${p99.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxP99Ms})`);
-  if (!(lagP99Ms <= LOAD_THRESHOLDS.maxGeneratorLagP99Ms))
-    reasons.push(
-      `generator lag p99 ${lagP99Ms.toFixed(1)} ms (max ${LOAD_THRESHOLDS.maxGeneratorLagP99Ms})`,
-    );
-  if (drainSeconds === null || !(drainSeconds <= LOAD_THRESHOLDS.maxOutboxDrainSeconds))
-    reasons.push(
-      `outbox drained in ${drainSeconds === null ? `more than ${DRAIN_CAP_SECONDS} s` : `${drainSeconds.toFixed(1)} s`} (max ${LOAD_THRESHOLDS.maxOutboxDrainSeconds})`,
-    );
-  if (violations > 0) reasons.push(`${violations} wallets where balance differs from the ledger`);
-  if (duplicates > 0) reasons.push(`${duplicates} transactions processed more than once`);
-  for (const [name, mib] of peakRssMiB) {
-    if (mib > LOAD_THRESHOLDS.maxRssMiBPerProcess)
-      reasons.push(
-        `${name} peaked at ${mib.toFixed(0)} MiB (max ${LOAD_THRESHOLDS.maxRssMiBPerProcess})`,
-      );
-  }
+  const reasons = stepReasons({
+    lost,
+    errorRate,
+    p95,
+    p99,
+    lagP99Ms,
+    drainSeconds,
+    violations,
+    duplicates,
+    incorrect: incorrectAnswers(samples),
+    peakRssMiB: Object.fromEntries(peakRssMiB),
+  });
 
   return {
     rate,
@@ -829,6 +852,14 @@ async function runStep(input: StepInput): Promise<StepRecord> {
  * re-launches itself under taskset with the same plan in its environment.
  */
 async function launch(): Promise<number> {
+  // Re-renders the report from the run records already in LOAD_RESULTS_DIR. Nothing is measured and no run is
+  // written, so the committed results stay as they were measured.
+  if (env.LOAD_REPORT_ONLY === '1') {
+    const runs = await readRuns(RESULTS_DIR);
+    await writeFile(REPORT_PATH, renderReport(runs, new Date().toISOString()));
+    console.log(`report re-rendered from ${runs.length} runs in ${RESULTS_DIR}: ${REPORT_PATH}`);
+    return 0;
+  }
   const pinnable = platform() === 'linux';
   const allowed = await allowedCpus();
   const stackCount = env.LOAD_CPUS === undefined ? allowed.length : Number(env.LOAD_CPUS);

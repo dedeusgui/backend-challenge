@@ -24,6 +24,12 @@ export const LOAD_THRESHOLDS = {
   maxErrorRate: 0.001,
   /** Requests that got no HTTP response at all. */
   maxLostRequests: 0,
+  /**
+   * Answers the contract does not allow for the request that got them: a 404 to a read of a BET the
+   * client had seen applied, a 202 to a settlement of such a BET, a rejection, a conflict. A business
+   * answer the run's concurrency makes possible is not counted (see judgement.ts).
+   */
+  maxIncorrectAnswers: 0,
   /** Latency of every answered request, measured from the scheduled send time. */
   maxP95Ms: 500,
   maxP99Ms: 1000,

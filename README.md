@@ -98,6 +98,34 @@ Os limites são `EDGE_WRITE_RATE` (20 por segundo), `EDGE_WRITE_BURST` (40), `ED
 A lista completa, com a interpretação de cada regra ambígua do enunciado, está em
 [ARCHITECTURE.md §13](ARCHITECTURE.md) e [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md).
 
+## Evidências de desempenho
+
+Além de provar a integridade financeira sob concorrência, o projeto mede desempenho com
+**carga aberta, limites explícitos e reconciliação de todas as carteiras**. Os resultados
+abaixo são de execuções registradas, não de uma estimativa de capacidade em produção.
+
+| CPUs destinadas à stack | Maior taxa que passou todos os limites | Próximo degrau |
+| ---: | ---: | --- |
+| 1 | 100 req/s | 125 req/s: falhou por latência |
+| 2 | 200 req/s | 300 req/s: falhou por latência |
+| 4 | 400 req/s | Não medido: a rampa terminava em 400 req/s |
+
+Cada degrau durou 20 segundos. Para passar, precisava cumprir simultaneamente p95 ≤ 500 ms,
+p99 ≤ 1.000 ms, zero requisições perdidas, taxa de erro ≤ 0,1%, drenagem da outbox
+e invariantes financeiras. Com quatro CPUs, **400 req/s foi o limite do ensaio,
+não o limite de capacidade do sistema**.
+
+Houve também um experimento pareado no mesmo host, com duas CPUs: a 100 req/s,
+o p99 caiu de **120/134 ms** (duas execuções da versão inicial) para **31/32 ms**
+(duas execuções após alterações na consulta e no caminho do lock). A comparação
+não isola o efeito de uma única mudança, mas os arquivos permitem auditar os dois
+estados e repetir o experimento.
+
+**Fontes, ambiente e ressalvas:** [relatório com metodologia e critérios](docs/LOAD_TEST_RESULTS.md),
+[histórico dos experimentos pareados](docs/LOAD_TEST_HISTORY.md) e
+[registros JSON das execuções](docs/load/). São medições com LocalStack, não AWS SQS;
+não há soak test prolongado nem SLO de produção validado.
+
 ## Diagramas dos fluxos
 
 Os diagramas abaixo são os **mesmos arquivos SVG versionados** utilizados na vitrine estática. Eles

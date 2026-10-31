@@ -25,8 +25,10 @@ export interface ReconciliationReport {
 }
 
 /**
- * Read-side use cases for wallets. They run in a read transaction without the wallet
- * lock, because reads must never queue behind a financial write.
+ * Read-side use cases for wallets. They take no lock, so reads never queue behind a
+ * financial write. The one exception is reconciliation, which takes a shared lock on the
+ * wallet: it compares the balance with the ledger, and a debit committed between those two
+ * reads would look like a divergence that does not exist.
  */
 export class WalletQueries {
   private readonly metrics: MetricsSink;
@@ -66,7 +68,10 @@ export class WalletQueries {
 
   async reconcile(walletId: string): Promise<ReconciliationReport> {
     const report = await this.context.unitOfWork.run(async (repositories) => {
-      const wallet = await this.getWalletOrFail(repositories, walletId);
+      const wallet = await repositories.wallets.findForShare(walletId);
+      if (wallet === undefined) {
+        throw new WalletNotFoundError(walletId);
+      }
       const summary = await repositories.ledger.summarize(walletId, wallet.currency);
       const difference = wallet.balance.subtract(summary.calculated);
       return {

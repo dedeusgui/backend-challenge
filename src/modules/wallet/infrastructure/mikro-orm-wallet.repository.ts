@@ -30,6 +30,16 @@ export class MikroOrmWalletRepository implements WalletRepository {
     return record ? toDomain(record) : undefined;
   }
 
+  /** A shared lock blocks writers and lets other readers through, so reconciliation never sees a half-applied debit. */
+  async findForShare(walletId: string): Promise<Wallet | undefined> {
+    const record = await this.em.findOne(
+      WalletRecord,
+      { id: walletId },
+      { lockMode: LockMode.PESSIMISTIC_READ, refresh: true },
+    );
+    return record ? toDomain(record) : undefined;
+  }
+
   async insert(wallet: Wallet): Promise<void> {
     try {
       await this.em.insert(WalletRecord, toRecordData(wallet));

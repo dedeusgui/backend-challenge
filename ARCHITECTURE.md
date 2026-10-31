@@ -303,6 +303,11 @@ Reconciliation recomputes the wallet from every ledger entry, and checks that ea
 starts where the previous one ended. A divergence is reported with its difference and
 counted in `reconciliation_divergences_total`. It is never corrected.
 
+It reads the balance and the ledger in one transaction under a shared lock on the wallet
+row (`FOR SHARE`). A debit of that wallet waits until the reconciliation commits, so a debit
+cannot land between the two reads and show up as a divergence that does not exist. The wait
+lasts as long as one reconciliation. Other reads take no lock.
+
 ## 11. Observability
 
 Operation logs are one JSON object per line. The fields are `time`, `level`, `operation`,

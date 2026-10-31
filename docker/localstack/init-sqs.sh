@@ -11,7 +11,7 @@ MAIN_URL=$(awslocal sqs get-queue-url --queue-name wager-transactions.fifo --que
 
 # Pass nested JSON as a file instead of relying on CLI shorthand quoting.
 cat > /tmp/wager-redrive-policy.json <<EOF
-{"RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"$DLQ_ARN\\",\\"maxReceiveCount\\":\\"5\\"}"}
+{"RedrivePolicy":"{\"deadLetterTargetArn\":\"$DLQ_ARN\",\"maxReceiveCount\":\"5\"}"}
 EOF
 awslocal sqs set-queue-attributes --queue-url "$MAIN_URL" --attributes file:///tmp/wager-redrive-policy.json
 

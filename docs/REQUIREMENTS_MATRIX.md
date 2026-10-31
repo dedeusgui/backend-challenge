@@ -1,0 +1,170 @@
+# Requirements matrix
+
+Traceability between the [challenge specification](CHALLENGE.md) and this
+implementation. Section numbers refer to `docs/CHALLENGE.md`.
+
+Status values: `NOT_STARTED`, `IN_PROGRESS`, `PASSING` (backed by an executed
+test or check), `BLOCKED`. A row is `PASSING` only when the listed test
+command has been run and passed. Update this file in the same commit as the
+slice that changes a row.
+
+## Invariants and restrictions (§3, §5, §8)
+
+| ID     | Requisito (§) | Garantia / invariante                        | Componente                                    | Constraint no banco                                                                                                                   | Testes                                      | Status      | Observações |
+| ------ | ------------- | -------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | ----------- |
+| INV-01 | §3            | Nenhum crédito ou débito duplicado           | `ProcessWagerTransaction`, `WagerTransaction` | `UNIQUE(provider_id, idempotency_key)`, `UNIQUE(provider_id, external_transaction_id)`, `UNIQUE(wallet_id, transaction_id)` on ledger | `concurrency: 50 identical BETs`            | NOT_STARTED |             |
+| INV-02 | §3, §5.3      | Ledger e saldo sempre consistentes           | `Wallet`, `WalletLedgerEntry`                 | ledger `CHECK` aritmético, saldo `CHECK >= 0`                                                                                         | `integration: wallet equals ledger sum`     | NOT_STARTED |             |
+| INV-03 | §5.1          | Dinheiro nunca em `number`/`float`           | `Money`                                       | `NUMERIC(20,2)`                                                                                                                       | `unit: money`                               | NOT_STARTED |             |
+| INV-04 | §5.2          | Idempotência persistente, nunca em memória   | `wager_transactions`, `inbox_messages`        | unique constraints acima                                                                                                              | `integration: duplicate requests`           | NOT_STARTED |             |
+| INV-05 | §5.4          | Nenhuma publicação antes do commit           | `OutboxMessage` gravado na transação          | outbox na mesma transação SQL                                                                                                         | `integration: publish after commit`         | NOT_STARTED |             |
+| INV-06 | §5.5          | Ledger não é sobrescrito nem excluído        | `WalletLedgerEntry`                           | trigger `BEFORE UPDATE OR DELETE OR TRUNCATE`                                                                                         | `integration: ledger immutable`             | NOT_STARTED |             |
+| INV-07 | §5.6          | Sem lock global entre wallets                | `Wallet` repository                           | `SELECT ... FOR UPDATE` por wallet                                                                                                    | `concurrency: distinct wallets in parallel` | NOT_STARTED |             |
+| INV-08 | §5.7          | Sem `read → calculate → update` sem controle | `ProcessWagerTransaction`                     | lock de linha antes da decisão                                                                                                        | `concurrency: hot wallet 80/80`             | NOT_STARTED |             |
+| INV-09 | §5.8          | Correto com múltiplas instâncias             | processo independente                         | todas as garantias acima no banco                                                                                                     | `concurrency: 3 processes`                  | NOT_STARTED |             |
+| INV-10 | §5.9          | Garantias no schema do banco                 | migrations                                    | CHECK, UNIQUE, FK, trigger                                                                                                            | `integration: constraints reject bad rows`  | NOT_STARTED |             |
+| INV-11 | §8            | Unidade de concorrência é a `walletId`       | `ProcessWagerTransaction`                     | lock por `wallet_id`                                                                                                                  | `concurrency: hot wallet`                   | NOT_STARTED |             |
+
+## Money (§6.1)
+
+| ID     | Requisito (§) | Garantia / invariante                                                                | Componente                 | Constraint no banco | Testes                          | Status      | Observações                                      |
+| ------ | ------------- | ------------------------------------------------------------------------------------ | -------------------------- | ------------------- | ------------------------------- | ----------- | ------------------------------------------------ |
+| MNY-01 | §6.1          | Valor é string decimal com escala fixa de 2 casas                                    | `Money`                    | `NUMERIC(20,2)`     | `unit: money parsing`           | PASSING     | `bun test test/unit/shared/domain/money.test.ts` |
+| MNY-02 | §6.1          | Rejeita `NaN`, `Infinity`, notação científica, vazio, >2 casas, negativos em entrada | `Money`                    | —                   | `unit: money parsing`           | PASSING     | `bun test test/unit/shared/domain/money.test.ts` |
+| MNY-03 | §6.1          | Operações entre moedas diferentes lançam erro de domínio                             | `Money`                    | —                   | `unit: money currency`          | PASSING     | `bun test test/unit/shared/domain/money.test.ts` |
+| MNY-04 | §6.1          | Imutável: toda operação retorna nova instância                                       | `Money`                    | —                   | `unit: money immutability`      | PASSING     | `bun test test/unit/shared/domain/money.test.ts` |
+| MNY-05 | §6.1          | Persistência exata e reidratada como `Money`                                         | mapper de wallet/transação | `NUMERIC(20,2)`     | `integration: money round-trip` | NOT_STARTED |                                                  |
+
+## Wallet (§6.2)
+
+| ID     | Requisito (§) | Garantia / invariante                                       | Componente           | Constraint no banco           | Testes                                                               | Status      | Observações |
+| ------ | ------------- | ----------------------------------------------------------- | -------------------- | ----------------------------- | -------------------------------------------------------------------- | ----------- | ----------- |
+| WAL-01 | §6.2          | No máximo uma wallet por `playerId` + `currency`            | `Wallet`, migration  | `UNIQUE(player_id, currency)` | `integration: duplicate wallet is conflict`                          | NOT_STARTED |             |
+| WAL-02 | §6.2          | Saldo nunca negativo                                        | `Wallet.debit`       | `CHECK (balance >= 0)`        | `unit: wallet insufficient balance`, `integration: check constraint` | NOT_STARTED |             |
+| WAL-03 | §6.2          | Toda alteração de saldo tem lançamento e vice-versa         | `Wallet`             | ledger por transação          | `integration: wallet equals ledger`                                  | NOT_STARTED |             |
+| WAL-04 | §6.2          | Moeda da operação igual à da wallet                         | `Wallet`             | —                             | `unit: wallet currency mismatch`                                     | NOT_STARTED |             |
+| WAL-05 | §6.2          | `version` inicia em 1 e muda somente com alteração de saldo | `Wallet`             | `CHECK (version >= 1)`        | `unit: wallet version`, `integration: version not bumped by LOSS`    | NOT_STARTED |             |
+| WAL-06 | §6.2          | Sem lost update em concorrência                             | repositório com lock | `FOR UPDATE`                  | `concurrency: hot wallet`                                            | NOT_STARTED |             |
+
+## WagerTransaction and ledger (§6.3, §6.4)
+
+| ID     | Requisito (§) | Garantia / invariante                                       | Componente                           | Constraint no banco                           | Testes                                                          | Status      | Observações |
+| ------ | ------------- | ----------------------------------------------------------- | ------------------------------------ | --------------------------------------------- | --------------------------------------------------------------- | ----------- | ----------- |
+| WTX-01 | §6.3          | Kinds `OPENING`, `BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK` | `WagerTransaction`                   | `CHECK kind IN (...)`                         | `unit: transaction kinds`                                       | NOT_STARTED |             |
+| WTX-02 | §6.3          | Estados e transições explícitos; terminais não reabrem      | `WagerTransaction`                   | `CHECK status IN (...)`                       | `unit: transitions`, `unit: terminal states`                    | NOT_STARTED |             |
+| WTX-03 | §6.3          | `OPENING` não pode ser submetido por API nem fila           | `ProcessWagerTransaction`, HTTP, SQS | —                                             | `unit: opening is internal`, `integration: API rejects OPENING` | NOT_STARTED |             |
+| WTX-04 | §6.3          | Mesma chave com payload diferente é conflito                | `PayloadHash`, use case              | `UNIQUE(provider_id, idempotency_key)`        | `unit: payload hash`, `integration: payload conflict`           | NOT_STARTED |             |
+| LED-01 | §6.4          | Ledger imutável e append-only                               | `WalletLedgerEntry`                  | trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` | `integration: ledger immutable`                                 | NOT_STARTED |             |
+| LED-02 | §6.4          | `balanceBefore ± money == balanceAfter` validado na criação | `WalletLedgerEntry.create`           | `CHECK` aritmético                            | `unit: ledger balanced`, `integration: ledger check`            | NOT_STARTED |             |
+| LED-03 | §6.4          | No máximo um lançamento por wallet por transação            | ledger                               | `UNIQUE(wallet_id, transaction_id)`           | `integration: one entry per transaction`                        | NOT_STARTED |             |
+| LED-04 | §6.4          | `LOSS` e `REJECTED` não geram lançamento                    | `ProcessWagerTransaction`            | —                                             | `unit: loss no ledger`, `integration: rejected no ledger`       | NOT_STARTED |             |
+
+## Business rules (§7)
+
+| ID     | Requisito (§) | Garantia / invariante                                                         | Componente                                | Constraint no banco                                                      | Testes                                                 | Status      | Observações |
+| ------ | ------------- | ----------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------ | ----------- | ----------- |
+| BR-01  | §7            | `BET` debita e rejeita saldo insuficiente                                     | `Wallet.debit`, `ProcessWagerTransaction` | saldo `CHECK`                                                            | `unit: bet rules`, `concurrency: hot wallet`           | NOT_STARTED |             |
+| BR-02  | §7            | `WIN` credita e pode referenciar `BET` da rodada                              | `ProcessWagerTransaction`                 | FK composta de referência                                                | `unit: win rules`                                      | NOT_STARTED |             |
+| BR-03  | §7            | `LOSS` não move saldo                                                         | `ProcessWagerTransaction`                 | —                                                                        | `unit: loss rules`                                     | NOT_STARTED |             |
+| BR-04  | §7            | `REFUND` reverte `BET` `PROCESSED` uma única vez                              | `ProcessWagerTransaction`                 | índice único parcial `(reference_transaction_id, kind)` onde `PROCESSED` | `unit: refund rules`, `integration: double refund`     | NOT_STARTED |             |
+| BR-05  | §7            | `ROLLBACK` reverte `BET`, `WIN` ou `REFUND` `PROCESSED` uma única vez         | `ProcessWagerTransaction`                 | mesmo índice parcial                                                     | `unit: rollback rules`, `integration: double rollback` | NOT_STARTED |             |
+| BR-06  | §7            | Referência validada por provider, player, wallet, moeda, rodada, valor e kind | `WagerTransaction` reference rules        | FK composta `(reference_id, provider_id, wallet_id)`                     | `unit: reference compatibility`                        | NOT_STARTED |             |
+| BR-07  | §7            | Valor de `REFUND`/`ROLLBACK` igual ao da referência                           | `WagerTransaction`                        | —                                                                        | `unit: reversal amount`                                | NOT_STARTED |             |
+| BR-08  | §7            | `REJECTED` não altera saldo nem gera ledger                                   | `ProcessWagerTransaction`                 | —                                                                        | `integration: rejected no effect`                      | NOT_STARTED |             |
+| BR-09  | §7            | Replay retorna resultado original, incluindo saldo observado                  | `ProcessWagerTransaction`                 | `result_balance` persistido                                              | `integration: replay after later balance change`       | NOT_STARTED |             |
+| BR-10  | §7            | Referência ausente → `PENDING_REFERENCE`                                      | `ProcessWagerTransaction`                 | —                                                                        | `integration: reversal before reference`               | NOT_STARTED |             |
+| BR-11  | §7            | Reversão que deixaria saldo negativo: rejeição com `failureCode` distinto     | `ProcessWagerTransaction`                 | `CHECK saldo >= 0`                                                       | `unit: overdraw reversal code`                         | NOT_STARTED |             |
+| BR-12  | §7            | Interpretações adicionais documentadas                                        | `ARCHITECTURE.md`                         | —                                                                        | revisão                                                | NOT_STARTED |             |
+| REF-01 | §7.1          | Worker agendado com backoff exponencial                                       | `ProcessPendingReferences`                | índice parcial em `PENDING_REFERENCE`                                    | `integration: backoff schedule`                        | NOT_STARTED |             |
+| REF-02 | §7.1          | Limite de tentativas explícito                                                | worker                                    | `reference_attempts`                                                     | `integration: attempts exhausted`                      | NOT_STARTED |             |
+| REF-03 | §7.1          | Esgotado: `REJECTED` com código de referência inexistente e evento            | worker                                    | —                                                                        | `integration: exhausted reference`                     | NOT_STARTED |             |
+| REF-04 | §7.1          | Recuperação após reinício sem reaplicar efeito                                | worker                                    | estado persistido                                                        | `concurrency: restart during reference recovery`       | NOT_STARTED |             |
+| FC-01  | §7.2          | `failureCode` estável, legível por máquina, documentado                       | `FailureCode`                             | `CHECK failure_code`                                                     | `unit: failure code taxonomy`                          | NOT_STARTED |             |
+
+## HTTP API (§9)
+
+| ID     | Requisito (§) | Garantia / invariante                                                    | Componente         | Constraint no banco                            | Testes                                           | Status      | Observações                                                              |
+| ------ | ------------- | ------------------------------------------------------------------------ | ------------------ | ---------------------------------------------- | ------------------------------------------------ | ----------- | ------------------------------------------------------------------------ |
+| API-01 | §9            | `POST /wallets` cria wallet e `OPENING` na mesma transação               | wallet use case    | —                                              | `integration: open wallet atomic`                | NOT_STARTED |                                                                          |
+| API-02 | §9            | Wallet duplicada é conflito                                              | HTTP mapping       | `UNIQUE(player_id, currency)`                  | `integration: duplicate wallet 409`              | NOT_STARTED |                                                                          |
+| API-03 | §9            | `GET /wallets/:walletId`                                                 | wallet query       | —                                              | `e2e: get wallet`                                | NOT_STARTED |                                                                          |
+| API-04 | §9            | Ledger com cursor estável e opaco                                        | wallet query       | `UNIQUE(wallet_id, seq)`                       | `integration: ledger cursor`                     | NOT_STARTED |                                                                          |
+| API-05 | §9            | Consultas de transação por id e por provider + externalId                | wagering query     | `UNIQUE(provider_id, external_transaction_id)` | `e2e: transaction lookups`                       | NOT_STARTED |                                                                          |
+| API-06 | §9            | `POST /wagering/transactions` exige `Idempotency-Key`                    | HTTP controller    | —                                              | `e2e: missing key 400`                           | NOT_STARTED |                                                                          |
+| API-07 | §9            | `idempotentReplay` true em replay idêntico                               | use case           | —                                              | `e2e: replay`                                    | NOT_STARTED |                                                                          |
+| API-08 | §9            | Mapeamento de status consistente e distinguível                          | HTTP error mapping | —                                              | `e2e: status taxonomy`                           | NOT_STARTED |                                                                          |
+| API-09 | §9            | `POST /wallets/:walletId/reconciliation` read-only, sinaliza divergência | reconciliation     | —                                              | `integration: reconciliation detects divergence` | NOT_STARTED |                                                                          |
+| API-10 | §9            | `GET /health/live` sem autenticação                                      | health             | —                                              | `unit: live`                                     | PASSING     | Coberto por `test/unit/health.controller.test.ts` (`bun run test:unit`). |
+| API-11 | §9            | `GET /health/ready` verifica PostgreSQL e SQS de fato                    | health             | —                                              | `e2e: ready fails when SQS down`                 | NOT_STARTED | Atualmente não implementado.                                             |
+
+## Messaging (§10, §11)
+
+| ID     | Requisito (§) | Garantia / invariante                                         | Componente            | Constraint no banco                       | Testes                                       | Status      | Observações |
+| ------ | ------------- | ------------------------------------------------------------- | --------------------- | ----------------------------------------- | -------------------------------------------- | ----------- | ----------- |
+| MSG-01 | §10           | Consumidor SQS usa o mesmo use case da HTTP                   | SQS consumer          | —                                         | `integration: consumer uses use case`        | NOT_STARTED |             |
+| MSG-02 | §10           | Inbox deduplica por `(consumerName, messageId)` e valida hash | `InboxMessage`        | `PRIMARY KEY (consumer_name, message_id)` | `integration: inbox dedup`                   | NOT_STARTED |             |
+| MSG-03 | §10           | ACK somente após commit                                       | SQS consumer          | —                                         | `concurrency: crash after commit before ack` | NOT_STARTED |             |
+| MSG-04 | §10           | Classifica negócio, transitório e permanente                  | SQS consumer          | —                                         | `unit: error classification`                 | NOT_STARTED |             |
+| MSG-05 | §10           | Limite de tentativas antes da DLQ                             | SQS consumer, redrive | `maxReceiveCount=5`                       | `integration: retry then DLQ`                | NOT_STARTED |             |
+| MSG-06 | §10           | `SIGTERM` conclui ou devolve visibilidade                     | `worker.ts`           | —                                         | `concurrency: graceful shutdown`             | NOT_STARTED |             |
+| MSG-07 | §10           | Redelivery não duplica efeito                                 | inbox + idempotência  | —                                         | `concurrency: redelivery`                    | NOT_STARTED |             |
+| OUT-01 | §11           | Publica `WagerTransactionProcessed` (inclui LOSS)             | outbox                | —                                         | `integration: processed event`               | NOT_STARTED |             |
+| OUT-02 | §11           | Publica `WagerTransactionRejected`                            | outbox                | —                                         | `integration: rejected event`                | NOT_STARTED |             |
+| OUT-03 | §11           | Publica `WalletBalanceChanged` somente quando saldo muda      | outbox                | —                                         | `integration: balance event only on change`  | NOT_STARTED |             |
+| OUT-04 | §11           | Publica `WagerTransactionPendingReference`                    | outbox                | —                                         | `integration: pending reference event`       | NOT_STARTED |             |
+| OUT-05 | §11           | Envelope é classe abstrata com subclasses concretas tipadas   | `IntegrationEvent`    | —                                         | `unit: event envelope`                       | NOT_STARTED |             |
+| OUT-06 | §11           | Claim/lease com múltiplos publishers                          | outbox publisher      | índice parcial em pendentes               | `concurrency: two publishers`                | NOT_STARTED |             |
+| OUT-07 | §11           | At-least-once com `eventId` estável                           | outbox publisher      | `outbox.id`                               | `concurrency: republish dedup`               | NOT_STARTED |             |
+| OUT-08 | §11           | Recupera trabalho após lease expirado                         | outbox publisher      | —                                         | `concurrency: expired lease recovered`       | NOT_STARTED |             |
+
+## Observability (§12)
+
+| ID     | Requisito (§) | Garantia / invariante                                                                 | Componente | Constraint no banco | Testes                         | Status      | Observações |
+| ------ | ------------- | ------------------------------------------------------------------------------------- | ---------- | ------------------- | ------------------------------ | ----------- | ----------- |
+| OBS-01 | §12           | Logs JSON com `correlationId`, `messageId`, `transactionId`, `walletId`, `providerId` | logger     | —                   | `unit: log shape`              | NOT_STARTED |             |
+| OBS-02 | §12           | Sem dados sensíveis nem payload financeiro completo                                   | logger     | —                   | `unit: log redaction`          | NOT_STARTED |             |
+| OBS-03 | §12           | Métricas: status, duplicatas, retries, DLQ, conflitos de lock, outbox lag, latência   | metrics    | —                   | `integration: metrics exposed` | NOT_STARTED |             |
+| OBS-04 | §12           | Health de liveness e readiness separados                                              | health     | —                   | `e2e: health`                  | NOT_STARTED |             |
+
+## Required tests (§13)
+
+| ID       | Requisito (§)    | Teste                                                                 | Status      | Observações                                                                                          |
+| -------- | ---------------- | --------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| TST-U-01 | §13 unidade      | `Money`: escala, arredondamento, entradas inválidas                   | IN_PROGRESS | Money cases covered; arredondamento não se aplica, pois entradas com mais de 2 casas são rejeitadas. |
+| TST-U-02 | §13 unidade      | Invariantes da `Wallet`                                               | NOT_STARTED |                                                                                                      |
+| TST-U-03 | §13 unidade      | Regras de BET, WIN, LOSS, REFUND, ROLLBACK                            | NOT_STARTED |                                                                                                      |
+| TST-U-04 | §13 unidade      | Conflito de moeda                                                     | NOT_STARTED |                                                                                                      |
+| TST-U-05 | §13 unidade      | Idempotency key com payload divergente                                | NOT_STARTED |                                                                                                      |
+| TST-I-01 | §13 integração   | Migrations e constraints                                              | NOT_STARTED |                                                                                                      |
+| TST-I-02 | §13 integração   | Atomicidade wallet, ledger, inbox e outbox                            | NOT_STARTED |                                                                                                      |
+| TST-I-03 | §13 integração   | Inbox e redelivery                                                    | NOT_STARTED |                                                                                                      |
+| TST-I-04 | §13 integração   | Publishers concorrentes sobre a mesma outbox                          | NOT_STARTED |                                                                                                      |
+| TST-I-05 | §13 integração   | Retry e DLQ                                                           | NOT_STARTED |                                                                                                      |
+| TST-I-06 | §13 integração   | Recuperação após reinicialização                                      | NOT_STARTED |                                                                                                      |
+| TST-C-01 | §13 concorrência | Mesma aposta 50 vezes em paralelo → um débito                         | NOT_STARTED |                                                                                                      |
+| TST-C-02 | §13 concorrência | Hot wallet 80.00 vs 100.00 (cenário §8)                               | NOT_STARTED |                                                                                                      |
+| TST-C-03 | §13 concorrência | Wallets distintas em paralelo                                         | NOT_STARTED |                                                                                                      |
+| TST-C-04 | §13 concorrência | Três ou mais processos independentes                                  | NOT_STARTED |                                                                                                      |
+| TST-C-05 | §13 concorrência | Worker morto após commit e antes do ack                               | NOT_STARTED |                                                                                                      |
+| TST-C-06 | §13 concorrência | Dois publishers sobre a mesma outbox                                  | NOT_STARTED |                                                                                                      |
+| TST-C-07 | §13 concorrência | ROLLBACK ou REFUND antes da referência                                | NOT_STARTED |                                                                                                      |
+| TST-C-08 | §13 concorrência | Reinício com consistência final                                       | NOT_STARTED |                                                                                                      |
+| TST-INV  | §13              | `wallet.balance == saldo reconstruído pelo ledger` em todos os testes | NOT_STARTED |                                                                                                      |
+
+## Evaluation eliminators (§14)
+
+| ID      | Eliminatório                 | Como é evitado                              | Evidência                           | Status      |
+| ------- | ---------------------------- | ------------------------------------------- | ----------------------------------- | ----------- |
+| ELIM-01 | `number` para dinheiro       | `Money` com `decimal.js`, colunas `NUMERIC` | `unit: money`, revisão de tipos     | IN_PROGRESS |
+| ELIM-02 | Saldo negativo por race      | lock de linha + `CHECK`                     | `concurrency: hot wallet`           | NOT_STARTED |
+| ELIM-03 | Débito ou crédito duplicado  | idempotência persistente + unique           | `concurrency: 50 identical`         | NOT_STARTED |
+| ELIM-04 | Idempotência só em memória   | unique constraints                          | `integration: duplicate requests`   | NOT_STARTED |
+| ELIM-05 | Correto só com uma instância | processos independentes                     | `concurrency: 3 processes`          | NOT_STARTED |
+| ELIM-06 | Publicação antes do commit   | outbox na transação                         | `integration: publish after commit` | NOT_STARTED |
+| ELIM-07 | Sem ledger auditável         | ledger append-only                          | `integration: ledger`               | NOT_STARTED |
+| ELIM-08 | Testes só com mocks          | PostgreSQL e LocalStack reais               | `integration`, `concurrency`        | NOT_STARTED |
+
+## Authentication (§2)
+
+| ID      | Requisito (§) | Decisão                                                                                   | Status  | Observações                                                                           |
+| ------- | ------------- | ----------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------- |
+| AUTH-01 | §2            | Diferido e documentado em `ARCHITECTURE.md`, com ponto de extensão `ProviderIdentityPort` | PASSING | Documentação em `ARCHITECTURE.md` §7; port existe em `src/shared/application/ports/`. |

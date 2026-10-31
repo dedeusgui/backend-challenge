@@ -12,6 +12,7 @@ import {
   type ConsumerFaults,
 } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 
@@ -21,6 +22,7 @@ let database: TestDatabase;
 let sqs: SQSClient;
 let queues: TestQueues;
 let processWager: ProcessWagerTransaction;
+const metrics = new MetricsRegistry();
 let openWallet: OpenWallet;
 
 beforeAll(async () => {
@@ -50,6 +52,7 @@ function consumerWith(
     process: options.process ?? processWager,
     visibilityTimeoutSeconds: 1,
     faults: options.faults ?? NO_FAULTS,
+    metrics,
   });
 }
 
@@ -213,5 +216,13 @@ describe('WagerCommandConsumer', () => {
     const queue = new SqsQueue(sqs, queues.commandQueueUrl);
     expect(await queue.countInFlight()).toBe(1);
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
+  });
+
+  test('the consumer counts each disposition it produced', () => {
+    const counters = metrics.snapshot().counters;
+
+    expect(counters['commands_total{result="APPLIED"}']).toBeGreaterThanOrEqual(1);
+    expect(counters['commands_total{result="DEAD"}']).toBeGreaterThanOrEqual(1);
+    expect(counters['commands_total{result="RETRY"}']).toBeGreaterThanOrEqual(1);
   });
 });

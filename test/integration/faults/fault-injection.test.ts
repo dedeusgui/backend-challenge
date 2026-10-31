@@ -23,6 +23,8 @@ import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import { ConcurrencyConflictError } from '../../../src/shared/application/application-errors';
+import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 
 /**
  * Fault injection at the critical points. The wrappers below sit around real components
@@ -63,6 +65,24 @@ class CrashBeforeCommit implements FinancialUnitOfWork {
       if (this.armed) {
         this.armed = false;
         throw new Error('injected crash before commit');
+      }
+      return result;
+    });
+  }
+}
+
+/** Loses a race once: the work runs, then the unit of work reports a conflict, as a lost unique identity does. */
+class LostRaceOnce implements FinancialUnitOfWork {
+  armed = false;
+
+  constructor(private readonly inner: FinancialUnitOfWork) {}
+
+  run<T>(work: (repositories: FinancialRepositories) => Promise<T>): Promise<T> {
+    return this.inner.run(async (repositories) => {
+      const result = await work(repositories);
+      if (this.armed) {
+        this.armed = false;
+        throw new ConcurrencyConflictError('injected lost race');
       }
       return result;
     });
@@ -310,5 +330,35 @@ describe('fault injection', () => {
         [funds.walletId],
       ),
     ).toBe('2');
+  });
+
+  test('a lost race is retried against the winner, and counted as a lock conflict', async () => {
+    const metrics = new MetricsRegistry();
+    const funds = await wallet('100.00');
+    const racing = new LostRaceOnce(real);
+    racing.armed = true;
+    const bet = command(funds.walletId, funds.playerId, {
+      kind: 'BET',
+      money: Money.from({ amount: '25.00', currency: 'BRL' }),
+    });
+
+    const outcome = await new ProcessWagerTransaction({
+      unitOfWork: racing,
+      clock: () => NOW,
+      newId: randomUUID,
+      metrics,
+    }).execute(bet);
+
+    expect(outcome.transaction.status).toBe('PROCESSED');
+    expect(metrics.snapshot().counters['concurrency_conflicts_total']).toBe(1);
+    expect(await scalar(`SELECT balance::text FROM wallets WHERE id = ?`, [funds.walletId])).toBe(
+      '75.00',
+    );
+    expect(
+      await scalar(
+        `SELECT count(*)::text FROM wallet_ledger_entries WHERE wallet_id = ? AND direction = 'DEBIT'`,
+        [funds.walletId],
+      ),
+    ).toBe('1');
   });
 });

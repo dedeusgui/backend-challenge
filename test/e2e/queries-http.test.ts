@@ -225,6 +225,10 @@ describe('reconciliation', () => {
       difference: { amount: '1.00', currency: 'BRL' },
     });
     expect(after.body.balance).toEqual({ amount: '101.00', currency: 'BRL' });
+    const metrics = (await (await fetch(`${app.baseUrl}/metrics`)).json()) as {
+      counters: Record<string, number>;
+    };
+    expect(metrics.counters['reconciliation_divergences_total']).toBeGreaterThanOrEqual(1);
     // The divergence was injected on purpose. Restore it so the database-wide invariant holds at teardown.
     await database.orm.em
       .getConnection()

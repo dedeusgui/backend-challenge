@@ -10,6 +10,7 @@ import {
   type OutboxTransport,
 } from '../../../src/modules/messaging/application/outbox-publisher';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
+import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
@@ -21,6 +22,7 @@ let database: TestDatabase;
 let sqs: SQSClient;
 let queues: TestQueues;
 let processWager: ProcessWagerTransaction;
+const metrics = new MetricsRegistry();
 let openWallet: OpenWallet;
 
 beforeAll(async () => {
@@ -69,6 +71,7 @@ function publisherFor(transport: OutboxTransport, clock: () => Date = () => NOW,
     newLeaseToken: randomUUID,
     leaseDurationMs: 30_000,
     batchSize,
+    metrics,
   });
 }
 
@@ -113,6 +116,7 @@ describe('OutboxPublisher', () => {
     }
 
     expect(await pendingCount()).toBe(0);
+    expect(metrics.snapshot().summaries['outbox_lag_seconds']?.count).toBeGreaterThanOrEqual(1);
     for (const sends of transport.sendsByEvent.values()) {
       expect(sends).toBe(1);
     }
@@ -194,5 +198,38 @@ describe('OutboxPublisher', () => {
     const completed = await store.complete(event, staleToken, NOW);
 
     expect(completed).toBe(false);
+  });
+
+  test('a publisher whose lease was taken over counts the refused mark and does not report success', async () => {
+    await committedEvents();
+    const real = new MikroOrmOutboxStore(database.orm);
+    let refusedOnce = false;
+    const store = {
+      claimDue: (request: Parameters<typeof real.claimDue>[0]) => real.claimDue(request),
+      complete: (message: Parameters<typeof real.complete>[0], token: string, at: Date) => {
+        if (refusedOnce) {
+          return real.complete(message, token, at);
+        }
+        refusedOnce = true;
+        return Promise.resolve(false);
+      },
+      reschedule: (message: Parameters<typeof real.reschedule>[0], token: string) =>
+        real.reschedule(message, token),
+    };
+    const before = metrics.snapshot().counters['outbox_lost_lease_total'] ?? 0;
+    const publisher = new OutboxPublisher({
+      store,
+      transport: transportFor(),
+      clock: () => NOW,
+      newLeaseToken: randomUUID,
+      leaseDurationMs: 30_000,
+      batchSize: 1,
+      metrics,
+    });
+
+    const published = await publisher.publishOnce();
+
+    expect(published).toBe(0);
+    expect(metrics.snapshot().counters['outbox_lost_lease_total']).toBe(before + 1);
   });
 });

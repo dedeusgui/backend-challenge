@@ -46,10 +46,13 @@ describe('GET /metrics', () => {
 
     const metrics = (await (await fetch(`${app.baseUrl}/metrics`)).json()) as {
       counters: Record<string, number>;
+      summaries: Record<string, { count: number }>;
     };
 
     // One new transaction and one replay of it: the replay must not be counted as a transaction.
     expect(metrics.counters['transactions_total{status="PROCESSED"}']).toBe(1);
     expect(metrics.counters['idempotent_replays_total']).toBe(1);
+    // Latency is timed for every request, the replay included, so the count is the number of requests.
+    expect(metrics.summaries['processing_latency_ms']?.count).toBe(2);
   });
 });

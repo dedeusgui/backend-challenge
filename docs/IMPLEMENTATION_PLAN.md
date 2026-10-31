@@ -40,14 +40,14 @@ summarises the slices and what each one proved.
 
 - [x] Command consumer: ACK after commit, permanent to the DLQ, transient with backoff.
 - [x] Outbox publisher: claim and lease with `SKIP LOCKED`, lease-owned marks, at-least-once.
-- [ ] Broker-side redrive after five deliveries is configured but not exercised by a test.
+- [x] Broker-side redrive after five deliveries is verified on the Compose-provisioned queue.
 
 ## HTTP, health and observability
 
 - [x] Endpoints in `ARCHITECTURE.md` section 10, with the status taxonomy.
 - [x] Liveness is dependency-free. Readiness probes PostgreSQL and SQS and answers 503 when either fails.
 - [x] JSON operation logs with no amounts. Per-process metrics at `GET /metrics`.
-- [ ] Only two counters are asserted end to end. The others are exposed but not yet tested.
+- [x] Each minimum metric has an assertion: transactions, replays, lock conflicts, retries, DLQ, outbox lag, latency and divergences.
 
 ## Concurrency and failure proof
 

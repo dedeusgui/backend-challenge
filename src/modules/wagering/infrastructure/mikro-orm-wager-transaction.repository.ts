@@ -3,7 +3,10 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { ConcurrencyConflictError } from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
 import { nullableToOptional, oneOf } from '../../../shared/infrastructure/database/stored-values';
-import type { WagerTransactionRepository } from '../application/wager-transaction-repository.port';
+import type {
+  ProcessedOutcomes,
+  WagerTransactionRepository,
+} from '../application/wager-transaction-repository.port';
 import { FAILURE_CODES } from '../domain/failure-code';
 import {
   WAGER_TRANSACTION_STATUSES,
@@ -52,11 +55,21 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     return this.findOneBy({ id: transactionId });
   }
 
-  async findByIdempotencyKey(
+  /** Both unique keys are checked by one query, which returns at most one row per key. */
+  async findByIdentity(
     providerId: string,
     idempotencyKey: string,
+    externalTransactionId: string,
   ): Promise<WagerTransaction | undefined> {
-    return this.findOneBy({ providerId, idempotencyKey });
+    const records = await this.em.find(
+      WagerTransactionRecord,
+      { providerId, $or: [{ idempotencyKey }, { externalTransactionId }] },
+      { refresh: true },
+    );
+    const record =
+      records.find((candidate) => candidate.idempotencyKey === idempotencyKey) ??
+      records.find((candidate) => candidate.externalTransactionId === externalTransactionId);
+    return record === undefined ? undefined : WagerTransaction.rehydrate(toState(record));
   }
 
   async findByExternalId(
@@ -66,22 +79,21 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     return this.findOneBy({ providerId, externalTransactionId });
   }
 
-  async hasProcessedReversal(referenceTransactionId: string): Promise<boolean> {
-    const count = await this.em.count(WagerTransactionRecord, {
+  /**
+   * At most one reversal and one settlement can be processed against a reference, so the answer is
+   * short. Each arm of the OR matches one of the partial unique indexes on the reference. A single
+   * `kind IN (...)` over all four kinds matches neither, and PostgreSQL then scans the table (measured).
+   */
+  async processedOutcomesOf(referenceTransactionId: string): Promise<ProcessedOutcomes> {
+    const records = await this.em.find(WagerTransactionRecord, {
       referenceTransactionId,
-      kind: { $in: ['REFUND', 'ROLLBACK'] },
       status: 'PROCESSED',
+      $or: [{ kind: { $in: ['REFUND', 'ROLLBACK'] } }, { kind: { $in: ['WIN', 'LOSS'] } }],
     });
-    return count > 0;
-  }
-
-  async hasProcessedResult(referenceTransactionId: string): Promise<boolean> {
-    const count = await this.em.count(WagerTransactionRecord, {
-      referenceTransactionId,
-      kind: { $in: ['WIN', 'LOSS'] },
-      status: 'PROCESSED',
-    });
-    return count > 0;
+    return {
+      reversed: records.some((record) => record.kind === 'REFUND' || record.kind === 'ROLLBACK'),
+      settled: records.some((record) => record.kind === 'WIN' || record.kind === 'LOSS'),
+    };
   }
 
   private async findOneBy(where: WagerLookup): Promise<WagerTransaction | undefined> {

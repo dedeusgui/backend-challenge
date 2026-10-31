@@ -351,6 +351,20 @@ describe('ProcessWagerTransaction: early replay, and the lookup order', () => {
     expect(await balanceOf(owner.walletId)).toBe('75.00');
   });
 
+  test('a key that belongs to one transaction conflicts, even when its external id belongs to another with the same payload', async () => {
+    const wallet = await fundedWallet('100.00');
+    const first = command(wallet, { kind: 'BET', money: brl('10.00') });
+    await processWager.execute(first);
+    const second = command(wallet, { kind: 'BET', money: brl('20.00') });
+    await processWager.execute(second);
+
+    // The key of the first, and the external id and payload of the second. The key is the source of truth.
+    const attempt = processWager.execute({ ...second, idempotencyKey: first.idempotencyKey });
+
+    await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
+    expect(await balanceOf(wallet.walletId)).toBe('70.00');
+  });
+
   test('a second inbox record for one message is a lost race, which the use case retries, not a failure', async () => {
     const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
     const inbound = InboxMessage.receive({

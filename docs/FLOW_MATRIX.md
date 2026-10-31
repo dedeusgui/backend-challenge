@@ -173,11 +173,11 @@ memory and returned, **E** enqueued in the outbox in the same transaction, **—
 | 4   | `ProcessWagerTransaction.execute` → `WagerTransaction.create`                                       | —                          | —      | C                 | —     | —                          | —                         | —     | HTTP, queue               |
 | 5   | `process` → `MikroOrmWalletRepository.findForUpdate`                                                | L                          | —      | —                 | —     | —                          | —                         | —     | HTTP, queue, reference    |
 | 6   | `isInboundRecorded` → `MikroOrmInboxRepository.find`                                                | —                          | —      | —                 | R     | —                          | —                         | —     | queue                     |
-| 7   | `MikroOrmWagerTransactionRepository.findByIdempotencyKey`                                           | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue               |
+| 7   | `MikroOrmWagerTransactionRepository.findByIdentity`                                                 | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue               |
 | 8   | `replay` (when the key was seen)                                                                    | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue               |
 | 9   | `TransactionSettlement.settle` → `findByExternalId` (reference)                                     | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue, reference    |
 | 10  | `WagerTransaction.walletMismatch`, `WagerTransaction.evaluateReference`                             | —                          | —      | —                 | —     | —                          | —                         | —     | all                       |
-| 11  | `hasProcessedReversal`, `hasProcessedResult`                                                        | —                          | —      | R                 | —     | —                          | —                         | —     | all                       |
+| 11  | `processedOutcomesOf`                                                                               | —                          | —      | R                 | —     | —                          | —                         | —     | all                       |
 | 12  | `Wallet.canDebit`, `Wallet.debit` or `Wallet.credit`                                                | —                          | C      | —                 | —     | —                          | —                         | —     | all                       |
 | 13  | `WagerTransaction.markProcessed`, `reject`, `markPendingReference`                                  | —                          | —      | C (state)         | —     | —                          | —                         | —     | all                       |
 | 14  | `save` → `MikroOrmWagerTransactionRepository.insert` or `update`                                    | —                          | —      | W                 | —     | —                          | —                         | —     | all                       |
@@ -240,15 +240,14 @@ Six tables hold everything. The rest is passed in memory, or in a message.
 
 ### WagerTransaction
 
-| Method                      | Caller                                   | Effect                                              |
-| --------------------------- | ---------------------------------------- | --------------------------------------------------- |
-| `findByIdempotencyKey`      | `process`                                | the replay check                                    |
-| `findByExternalId`          | `settle`, `WagerQueries.getByExternalId` | the reference, or a lookup by provider id           |
-| `findById`                  | `WagerQueries.getById`, `resolveOne`     | one row                                             |
-| `findDueForReferenceLookup` | `ProcessPendingReferences.runOnce`       | held rows whose lookup is due, at most 20           |
-| `hasProcessedReversal`      | `settle`                                 | REFUND or ROLLBACK already applied to the reference |
-| `hasProcessedResult`        | `settle`                                 | WIN or LOSS already applied to the BET              |
-| `insert`, `update`          | `save`, `holdOrRecordMiss`               | one row                                             |
+| Method                      | Caller                                   | Effect                                                                |
+| --------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| `findByIdentity`            | `process`                                | the replay check, by key first, then external id                      |
+| `findByExternalId`          | `settle`, `WagerQueries.getByExternalId` | the reference, or a lookup by provider id                             |
+| `findById`                  | `WagerQueries.getById`, `resolveOne`     | one row                                                               |
+| `findDueForReferenceLookup` | `ProcessPendingReferences.runOnce`       | held rows whose lookup is due, at most 20                             |
+| `processedOutcomesOf`       | `settle`                                 | REFUND or ROLLBACK, and WIN or LOSS, already applied to the reference |
+| `insert`, `update`          | `save`, `holdOrRecordMiss`               | one row                                                               |
 
 ### InboxMessage and OutboxMessage
 

@@ -174,12 +174,12 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
 
 Indexes exist for a named query each:
 
-| Index                                                                                      | Query it serves                                |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `ledger_wallet_seq_idx (wallet_id, seq)`                                                   | ledger pages for one wallet, in sequence order |
-| `wager_one_processed_reversal_per_reference` (partial)                                     | the "reversed once" rule, whatever the kind    |
-| `wager_pending_reference_due_idx (reference_next_attempt_at)` (partial, PENDING_REFERENCE) | the reference worker's due scan                |
-| `outbox_due_unpublished_idx (next_attempt_at)` (partial, unpublished)                      | the publisher's claim                          |
+| Index                                                                                                            | Query it serves                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `ledger_wallet_seq_idx (wallet_id, seq)`                                                                         | ledger pages for one wallet, in sequence order                                                                                  |
+| `wager_one_processed_reversal_per_reference` (partial), `wager_one_processed_settlement_per_reference` (partial) | the "reversed once" and "settled once" rules, and the outcome lookup of a reference (`processedOutcomesOf`, one `OR` over both) |
+| `wager_pending_reference_due_idx (reference_next_attempt_at)` (partial, PENDING_REFERENCE)                       | the reference worker's due scan                                                                                                 |
+| `outbox_due_unpublished_idx (next_attempt_at)` (partial, unpublished)                                            | the publisher's claim                                                                                                           |
 
 Reference lookup by `(provider_id, external_transaction_id)` uses the unique constraint's index.
 
@@ -192,7 +192,7 @@ wallet are serialized. Operations on different wallets never wait for each other
 
 A replay takes no lock. A stored transaction's payload never changes, and the replay writes
 nothing, so it is answered from the stored row before the wallet is locked. The lookup
-order is: inbox check, idempotency lookup, then, only for a new identity, the lock and a
+order is: inbox check, identity lookup (one query for the key and the external id), then, only for a new identity, the lock and a
 second lookup. The second lookup stops an identical request that waited for the lock from
 inserting, colliding on the unique key and retrying, which under load could end in a 503. A queue duplicate
 that waited is the same case for the inbox: when the second lookup finds the committed transaction, the
@@ -248,6 +248,29 @@ wallet balance, which `GET /wallets/:id` reports. Once a held transaction is res
 the processed result with the balance after that processing. A different payload is
 `IDEMPOTENCY_CONFLICT`, also when the new request names a wallet that does not exist, since
 the key was already used. The conflict is checked before the wallet. Decision: [ADR 0003](docs/adr/0003-idempotency-scope-and-payload-hash.md).
+
+### The replay contract, question by question
+
+The specification asks that a replay return the original result, with the balance observed at the time.
+A reference that has not arrived has no result yet, so a held operation has two states. The contract below
+gives one stored snapshot per transaction: the status and the balance it had when it reached its current
+state. A replay returns that snapshot, and nothing else is recomputed.
+
+| Question                                    | Answer                                                                                                                                                                                                               | Proven by                                                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| The first POST                              | 201 `PROCESSED` with the balance after the operation; 202 `PENDING_REFERENCE` with the balance observed when it was held; 422 `REJECTED` with its `failureCode` and the balance observed. `idempotentReplay: false`. | `e2e: wagering-http` (the status of each outcome)                                                                                      |
+| An identical POST while it is pending       | 202 `PENDING_REFERENCE`, `idempotentReplay: true`, and the balance it was held with. It takes no wallet lock and writes nothing.                                                                                     | `integration: a redelivered or resent held REFUND ... answer the balance it was held with`                                             |
+| An identical POST after it resolved         | 200 with the processed result and the balance after processing, or 422 with the balance observed at rejection. The status changes once, from 202 to the outcome it reached.                                          | `integration: a held REFUND is applied once its BET has been processed`                                                                |
+| Replay of the command, against `GET`        | The replay and `GET /wagering/transactions/:id` return the same stored snapshot. Only the replay carries `idempotentReplay`. `GET /wallets/:id` is the live balance, which changes with later operations.            | `e2e: queries-http`, `e2e: wagering-http`                                                                                              |
+| Keeping the observed balance                | `resultingBalance` is stored in the same transaction that decides the state: when it is held, when it is processed and when it is rejected. A later change to the wallet does not alter it.                          | `integration: a replay of a held REFUND returns the balance it was held with`                                                          |
+| After a restart                             | Every state is in PostgreSQL. The same replay answers from the stored row, and a restarted reference worker continues the persisted schedule.                                                                        | `integration: a restarted worker continues the persisted schedule`, `concurrency: a worker killed inside a transaction, before commit` |
+| HTTP and the queue carry the same operation | One idempotency key per provider and one stored transaction. The second arrival is a replay, or a conflict if its payload differs.                                                                                   | `integration: duplicate deliveries` (twenty copies, three consumers, HTTP and queue)                                                   |
+
+Interpretation. The specification's words are "the original result, including the balance observed at that time".
+For an operation that waits for its reference, its first answer is "pending", not a result. So the replay after
+resolution reports the result the operation reached, with the balance observed when it reached it. Its status
+changes once. Returning 202 forever would tell the provider nothing about the outcome. This needs no second state
+machine and no snapshot table: the row already holds the one snapshot each state needs.
 
 ## 7. Queue ingress, inbox and dead letters
 
@@ -305,11 +328,11 @@ and LocalStack.
 
 | How the duplicate arrives                                                | What stops its effect                                                                                                                           | Proven by                                                                                                    |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The same message again (lost acknowledgement, crash, expired visibility) | Inbox row `(consumer, messageId)`, written in the operation's transaction, and the idempotency lookup                                           | `duplicate-deliveries`: twenty copies, three consumers at once; `wager-command-consumer`: crash after commit |
+| The same message again (lost acknowledgement, crash, expired visibility) | Inbox row `(consumer, messageId)`, written in the operation's transaction, and the identity lookup                                              | `duplicate-deliveries`: twenty copies, three consumers at once; `wager-command-consumer`: crash after commit |
 | The producer resends it under a new message id                           | The idempotency key and the external id, each unique per provider                                                                               | `duplicate-deliveries`: five resends under five ids                                                          |
 | The same operation over HTTP and in the queue                            | The same idempotency key                                                                                                                        | `duplicate-deliveries`: HTTP and queue                                                                       |
 | The same external id under another key, with the same payload            | The external id lookup, which replays (ADR 0003)                                                                                                | `duplicate-deliveries`: rekeyed copy                                                                         |
-| A reversal delivered more than once                                      | `hasProcessedReversal`, and the partial unique index on the reference                                                                           | `duplicate-deliveries`: refund five times                                                                    |
+| A reversal delivered more than once                                      | `processedOutcomesOf`, and the partial unique index on the reference                                                                            | `duplicate-deliveries`: refund five times                                                                    |
 | Two copies racing on one wallet                                          | The wallet lock, the second look under it, and the unique constraints                                                                           | `hot-wallet`, `distributed-contention`                                                                       |
 | Whatever the code does, the last line                                    | `UNIQUE (provider, external id)`, `UNIQUE (provider, idempotency key)`, `UNIQUE (wallet, transaction)` in the ledger, and the inbox primary key | `schema-constraints`, one test per constraint                                                                |
 

@@ -1,6 +1,9 @@
 import type { IntegrationEvent } from '../../../shared/domain/integration-event';
 
 export interface OutboxRepository {
-  /** Stores the event in the current transaction. It is published only after that transaction commits. */
-  enqueue(event: IntegrationEvent<unknown>): Promise<void>;
+  /**
+   * Stores the events in the current transaction, in one insert. They are published only after that
+   * transaction commits.
+   */
+  enqueue(...events: IntegrationEvent<unknown>[]): Promise<void>;
 }

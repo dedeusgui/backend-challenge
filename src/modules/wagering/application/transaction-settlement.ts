@@ -1,5 +1,6 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
 import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
+import type { ProcessedOutcomes } from './wager-transaction-repository.port';
 import type { IntegrationEventContext } from '../../../shared/domain/integration-event';
 import { WalletBalanceChanged } from '../../wallet/domain/events/wallet-balance-changed.event';
 import type { Wallet } from '../../wallet/domain/wallet';
@@ -11,6 +12,8 @@ import { referenceRetryDelayMs } from '../domain/reference-retry-policy';
 import type { Money } from '../../../shared/domain/money';
 import type { WagerTransaction } from '../domain/wager-transaction';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
+
+const NO_PROCESSED_OUTCOMES: ProcessedOutcomes = { reversed: false, settled: false };
 
 export interface SettlementOutcome {
   transaction: WagerTransaction;
@@ -79,19 +82,20 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, evaluation.code, options);
     }
 
+    const outcomes =
+      reference === undefined
+        ? NO_PROCESSED_OUTCOMES
+        : await repositories.wagers.processedOutcomesOf(reference.id);
+
     // A referenced transaction is reversed at most once, whatever the kind of reversal. A
     // WIN on a BET that was already refunded or rolled back is refused for the same reason.
-    if (reference !== undefined && (await repositories.wagers.hasProcessedReversal(reference.id))) {
+    if (outcomes.reversed) {
       return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
     }
 
     // A BET settles once. A second result, or a REFUND after a result, is refused. ROLLBACK is
     // not checked here: it applies in every state of the transaction it reverses.
-    if (
-      reference !== undefined &&
-      transaction.requiresUnsettledReference() &&
-      (await repositories.wagers.hasProcessedResult(reference.id))
-    ) {
+    if (transaction.requiresUnsettledReference() && outcomes.settled) {
       return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_SETTLED', options);
     }
 
@@ -140,8 +144,8 @@ export class TransactionSettlement {
     await repositories.ledger.append(entry);
 
     const eventContext = this.eventContext(options);
-    await repositories.outbox.enqueue(WagerTransactionProcessed.from(transaction, eventContext));
     await repositories.outbox.enqueue(
+      WagerTransactionProcessed.from(transaction, eventContext),
       WalletBalanceChanged.from(wallet, entry, { ...eventContext, eventId: this.context.newId() }),
     );
     return { transaction, balance: wallet.balance, idempotentReplay: false };

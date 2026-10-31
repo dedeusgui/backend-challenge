@@ -284,7 +284,7 @@ and a partial unique index enforces it, so a second writer cannot break it.
 
 ```ts
 // src/modules/wagering/application/transaction-settlement.ts
-if (reference !== undefined && (await repositories.wagers.hasProcessedReversal(reference.id))) {
+if ((await repositories.wagers.processedOutcomesOf(reference.id)).reversed) {
   return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
 }
 ```
@@ -368,3 +368,59 @@ These were considered and not built. Each row says why, so that a later reader d
 | O-03 | Helmet                                                              | A subset is set in `configureHttp` (no `x-powered-by`, `nosniff`, `no-store`). That covers the responses this API sends, with no dependency.      |
 | O-04 | Keycloak or Zitadel                                                 | Not required by the specification, and ADR 0007 and decision D5 in INVARIANT_REVIEW decide it. The IdP is the production path.                    |
 | O-05 | Changing a hot path for speed                                       | No bottleneck was measured in this review, and the load report was not regenerated. A change without a measurement is not claimed as faster.      |
+
+## P. Decisions of the finalization review
+
+Each decision names its evidence. The commit that made it is in the git log. Decisions that rest on a
+measurement state the host, and every figure comes from `docs/LOAD_TEST_RESULTS.md` or from a test.
+
+- **P-01 The replay contract is kept.** A replay returns one stored snapshot per transaction: the status and
+  the balance it had when it reached its current state. A held operation answers 202 with the balance it was
+  held with, and after resolution it answers its outcome with the balance then. The specification's "original
+  result" is read this way, because a pending operation has no result yet. ARCHITECTURE section 6 has the table
+  question by question, with the test that proves each answer. No second state machine or snapshot table was
+  added. Cost if wrong: a provider that expects 202 forever after resolution must read the status instead.
+- **P-02 The two-decimal money rule is verified, not changed.** `b5ba60d` already refuses `25` and `25.1` on
+  every path, and the matrix row MNY-01 is backed by suites that pass at HEAD. Cost if wrong: none found.
+- **P-03 One parser for the business fields of HTTP and of the queue** (`d437452`). A queue command with a
+  walletId that is not a UUID is dead-lettered at once, as HTTP refuses it. Before, it reached PostgreSQL, was
+  classified as transient, and was retried ten times. A control character in the Idempotency-Key is refused on
+  both paths. Cost if wrong: a queue producer that sent non-UUID walletIds would now see them dead-lettered. The
+  specification's examples are UUIDs.
+- **P-04 The dead-letter copy has a content-derived deduplication id** (`ebc9589`). A crash between the
+  dead-letter send and the acknowledgement leaves one copy, not two, while the broker's five-minute window lasts.
+  After the window a redelivery adds another copy, so nothing is lost. Cost if wrong: a copy consumed and deleted
+  inside the window is not re-created by the same content. Its content is the same message, so nothing is lost.
+- **P-05 A duplicate that waits for the wallet lock records no second inbox row** (`a10fd11`). It was rolling back
+  and counting a lost race that was not one. The lost-race counter now means what its name says. The duplicate
+  check under the lock runs only on that path, so a new command pays nothing for it.
+- **P-06 The outbox sends claimed batches in requests of ten, and it claims in due order** (`89b7bc1`).
+  Measured with paired runs on two CPUs: the agreed rate rose from 100 req/s to 150 and 200, and the CPU that
+  LocalStack used per request fell by about three quarters. The ordering defect it fixed was real: `UPDATE ...
+RETURNING` does not keep the subquery's order. Events of one wallet that share a timestamp have no defined
+  order, and consumers order by `walletVersion`. Cost if wrong: a second publisher can still send a wallet's
+  events out of order, as before (section 14).
+- **P-07 The lock path makes fewer round trips** (this commit). One query finds the transaction by key, and
+  falls back to the external id; the key wins when they name different rows, which a test pins. The two
+  balance events of a transaction are inserted in one statement. The outcome of a reference is one query. That
+  query has an `OR` of two arms, each of which matches a partial unique index on the reference. A single `kind
+IN (...)` over all four kinds was tried first and rejected: `EXPLAIN (ANALYZE, BUFFERS)` on 20,000 rows showed
+  a sequential scan at 3.9 ms, against 0.09 ms for the arms. The idle service time of the lock path fell by about
+  a quarter. Cost if wrong: an `OR` that the planner stops using would scan again, so the plan is worth
+  rechecking after any index change.
+- **P-08 Phase metrics are summaries, with no identifier in any label** (`ceb60c7`). Each summary carries the
+  count, the sum and the maximum. The instrumentation added no measurable CPU at 100 req/s: the four runs of the
+  baseline and of the instrumented build sit within the spread of the runs. A static test reads the source and
+  fails on an identifier label. Cost: no percentile per process; the load test measures percentiles.
+- **P-09 Zod is not adopted.** The validators are about 400 lines across the modules, and most of that is field
+  checks that produce the stable codes the provider relies on (`IDEMPOTENCY_KEY_REQUIRED`, `INVALID_MONEY`,
+  `INVALID_REQUEST`). A schema library would add a dependency, and it would still need the domain check of
+  `Money`, which must stay in the domain (section 6.1). After the shared parser of P-03 the duplication between
+  HTTP and the queue is one function. Zod would remove little, so the change is not made. Cost if wrong: a few
+  more lines to read.
+- **P-10 Authentication stays one lookup per request, and its result is not cached.** On an idle system the
+  lookup takes 0.8 ms (mean, 3000 calls). The 7 ms seen under load is contention for the two saturated CPUs. A
+  cache would keep a revoked key valid for as long as it lived. Cost: one database round trip per request.
+- **P-11 The 4-CPU load figure is not a capacity figure on this host.** With the stack given all four CPUs, the
+  generator shares them, and the generator-lag constraint fails at 50 req/s. The 1- and 2-CPU figures are the
+  valid ones here. The published cloud-VM report keeps its own numbers.

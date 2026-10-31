@@ -160,20 +160,15 @@ export class ProcessWagerTransaction {
     return outcome;
   }
 
-  /** The idempotency key is the source of truth; the external id is the second lookup of the same identity. */
-  private async findStored(
+  /** The idempotency key is the source of truth, and the external id is the same identity under another key. */
+  private findStored(
     repositories: FinancialRepositories,
     command: ProcessWagerCommand,
   ): Promise<WagerTransaction | undefined> {
-    return (
-      (await repositories.wagers.findByIdempotencyKey(
-        command.providerId,
-        command.idempotencyKey,
-      )) ??
-      (await repositories.wagers.findByExternalId(
-        command.providerId,
-        command.externalTransactionId,
-      ))
+    return repositories.wagers.findByIdentity(
+      command.providerId,
+      command.idempotencyKey,
+      command.externalTransactionId,
     );
   }
 

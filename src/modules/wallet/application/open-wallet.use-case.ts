@@ -63,8 +63,8 @@ export class OpenWallet {
         correlationId: walletId,
         occurredAt: openedAt,
       };
-      await repositories.outbox.enqueue(WagerTransactionProcessed.from(opening, context));
       await repositories.outbox.enqueue(
+        WagerTransactionProcessed.from(opening, context),
         WalletBalanceChanged.from(wallet, openingEntry, {
           ...context,
           eventId: this.context.newId(),

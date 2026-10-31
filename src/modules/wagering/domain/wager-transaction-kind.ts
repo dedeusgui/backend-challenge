@@ -1,6 +1,15 @@
 import type { LedgerDirection } from '../../../shared/domain/ledger-direction';
 
-export type WagerTransactionKind = 'OPENING' | 'BET' | 'WIN' | 'LOSS' | 'REFUND' | 'ROLLBACK';
+export const WAGER_TRANSACTION_KINDS = [
+  'OPENING',
+  'BET',
+  'WIN',
+  'LOSS',
+  'REFUND',
+  'ROLLBACK',
+] as const;
+
+export type WagerTransactionKind = (typeof WAGER_TRANSACTION_KINDS)[number];
 
 export interface ReferenceRule {
   /** Kinds this transaction may reference. */

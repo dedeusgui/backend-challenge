@@ -12,7 +12,10 @@
     "test:unit": "bun test test/unit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit"
+    "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit",
+    "infra:up": "docker compose up -d --wait postgres localstack",
+    "test:integration": "bun test test/integration",
+    "check:all": "bun run check:fast && bun run test:integration"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

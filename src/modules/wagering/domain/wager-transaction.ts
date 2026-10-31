@@ -6,8 +6,15 @@ import { KIND_RULES, type WagerTransactionKind } from './wager-transaction-kind'
 
 export type { WagerTransactionKind } from './wager-transaction-kind';
 
-export type WagerTransactionStatus =
-  'PENDING' | 'PENDING_REFERENCE' | 'PROCESSED' | 'REJECTED' | 'FAILED';
+export const WAGER_TRANSACTION_STATUSES = [
+  'PENDING',
+  'PENDING_REFERENCE',
+  'PROCESSED',
+  'REJECTED',
+  'FAILED',
+] as const;
+
+export type WagerTransactionStatus = (typeof WAGER_TRANSACTION_STATUSES)[number];
 
 const TERMINAL_STATUSES: readonly WagerTransactionStatus[] = ['PROCESSED', 'REJECTED', 'FAILED'];
 

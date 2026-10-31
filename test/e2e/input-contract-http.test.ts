@@ -123,6 +123,25 @@ describe('a control character in an identifier is 400 INVALID_REQUEST', () => {
     expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
   });
 
+  test('a control character in the Idempotency-Key is refused, as the queue refuses it, and nothing is stored', async () => {
+    const wallet = await openWallet('100.00');
+    const body = submission(wallet);
+    const externalTransactionId = String(body.externalTransactionId);
+
+    const result = await send('POST', '/wagering/transactions', providerKey, body, {
+      'idempotency-key': `provider-a:${externalTransactionId}\tsuffix`,
+    });
+
+    expect(result.status).toBe(400);
+    expect(errorCodeOf(result)).toBe('INVALID_REQUEST');
+    const lookup = await send(
+      'GET',
+      `/providers/provider-a/wagering/transactions/${externalTransactionId}`,
+      providerKey,
+    );
+    expect(lookup.status).toBe(404);
+  });
+
   test('a NUL character in playerId when opening a wallet is refused', async () => {
     const result = await send('POST', '/wallets', operatorKey, {
       playerId: 'player\u0000one',

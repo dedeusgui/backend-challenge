@@ -288,6 +288,33 @@ describe('WagerCommandConsumer', () => {
     expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
   });
 
+  test('a wallet id that is not a UUID is dead-lettered at once, as HTTP refuses it, and reaches no transaction', async () => {
+    const body = JSON.stringify({
+      messageId: `msg-${randomUUID()}`,
+      type: 'WagerTransactionRequested',
+      occurredAt: NOW.toISOString(),
+      data: {
+        providerId: 'provider-a',
+        externalTransactionId: `transaction-${randomUUID()}`,
+        idempotencyKey: `provider-a:transaction-${randomUUID()}`,
+        playerId: `player-${randomUUID()}`,
+        walletId: 'not-a-uuid',
+        roundId: 'round-987',
+        gameId: 'fortune-chimp',
+        kind: 'BET',
+        money: { amount: '25.00', currency: 'BRL' },
+      },
+    });
+    // Its own FIFO group: a message that stays in flight here must not block the shared group.
+    await send(body, `uuid-${randomUUID()}`);
+
+    const removed = await consumerWith().pollOnce();
+
+    expect(removed).toBe(1);
+    expect(await drain(queues.commandQueueUrl)).toBe(0);
+    expect(await drain(queues.deadLetterQueueUrl)).toBe(1);
+  });
+
   test('a reused messageId with a different payload is dead-lettered as permanently invalid', async () => {
     const wallet = await fundedWallet();
     const messageId = `msg-${randomUUID()}`;

@@ -361,13 +361,13 @@ These are facts of the environment, and the project depends on them without choo
 
 These were considered and not built. Each row says why, so that a later reader does not have to ask.
 
-| ID   | Option                                                              | Why not now                                                                                                                                       |
-| ---- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| O-01 | Zod for the HTTP and queue contracts (challenge section 4.1)        | The validators are small, and each has a test. A dependency for them would add code without a proven gain. Revisit when the contract grows.       |
-| O-02 | Rate limiting at the edge (Nginx profile) or in process (section 7) | The edge needs Docker, which was not available here, so a profile could not be verified. An in-process throttle would not limit across instances. |
-| O-03 | Helmet                                                              | A subset is set in `configureHttp` (no `x-powered-by`, `nosniff`, `no-store`). That covers the responses this API sends, with no dependency.      |
-| O-04 | Keycloak or Zitadel                                                 | Not required by the specification, and ADR 0007 and decision D5 in INVARIANT_REVIEW decide it. The IdP is the production path.                    |
-| O-05 | Changing a hot path for speed                                       | No bottleneck was measured in this review, and the load report was not regenerated. A change without a measurement is not claimed as faster.      |
+| ID   | Option                                                       | Why not now                                                                                                                                  |
+| ---- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| O-01 | Zod for the HTTP and queue contracts (challenge section 4.1) | The validators are small, and each has a test. A dependency for them would add code without a proven gain. Revisit when the contract grows.  |
+| O-02 | Rate limiting at the edge (Nginx profile) or in process      | Superseded by Q-01. Docker is available in this environment, and the profile was built, started and tested.                                  |
+| O-03 | Helmet                                                       | A subset is set in `configureHttp` (no `x-powered-by`, `nosniff`, `no-store`). That covers the responses this API sends, with no dependency. |
+| O-04 | Keycloak or Zitadel                                          | Not required by the specification, and ADR 0007 and decision D5 in INVARIANT_REVIEW decide it. The IdP is the production path.               |
+| O-05 | Changing a hot path for speed without a measurement          | Superseded by P-06 and P-07. The bottlenecks were measured first, and each change was measured against the one before it.                    |
 
 ## P. Decisions of the finalization review
 
@@ -424,3 +424,23 @@ IN (...)` over all four kinds was tried first and rejected: `EXPLAIN (ANALYZE, B
 - **P-11 The 4-CPU load figure is not a capacity figure on this host.** With the stack given all four CPUs, the
   generator shares them, and the generator-lag constraint fails at 50 req/s. The 1- and 2-CPU figures are the
   valid ones here. The published cloud-VM report keeps its own numbers.
+
+## Q. The protected mode
+
+- **Q-01 An optional Nginx edge limits each client address, and it is the only public entry in protected mode.**
+  The default mode is unchanged. The protected mode is an override file, so `docker compose up` still runs
+  without it. The limit is keyed on the TCP peer. The edge never reads a forwarding header for a quota, and it
+  sets the forwarding headers itself. Writes and reads have separate quotas, with explicit bursts and a connection
+  limit. A refusal is 429, as JSON, with `Retry-After`. Health checks are not limited. Evidence: the eleven tests of
+  `test/edge`, and two mutations that each made one test fail (a key on `X-Forwarded-For` failed the spoofing test,
+  and a shared key failed the isolation test). The cost is one hop: about 0.1 ms at the median and 0.3 ms at p95,
+  measured once in each configuration (`docs/edge/results`). Cost if wrong: a deployment behind a load balancer
+  must add that balancer's address with `set_real_ip_from`, or every client shares the balancer's quota.
+- **Q-02 The protected mode is not a security boundary, and it says so.** A per-address limit does not stop a
+  distributed attack. Keys still travel in plain HTTP, so TLS belongs in front of the edge. The architecture
+  document, section 15, states both, and the README repeats them.
+- **Q-03 The image for the sandbox is built from a scratch context.** The repository's Dockerfile needs the
+  package registry through the sandbox's TLS proxy, which the build container does not trust. The verification used
+  an image built from the same sources, with the sandbox CA added, outside the repository (as
+  `ARCHITECTURE.md` section 14 already records). The repository's Dockerfile is unchanged. An evaluator outside the
+  sandbox builds it with `docker compose up --build`.

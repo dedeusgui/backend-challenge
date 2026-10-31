@@ -7,18 +7,22 @@ what mutation evidence says about whether they can fail.
 
 ## Suites and commands
 
-| Command                    | What it runs                                                                                              | Real infrastructure       |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                      | none                      |
-| `bun run lint`             | oxlint on `src` and `test`                                                                                | none                      |
-| `bun run format:check`     | Prettier                                                                                                  | none                      |
-| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops            | none                      |
-| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table      | PostgreSQL and LocalStack |
-| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown          | PostgreSQL and LocalStack |
-| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys and the input contract (malformed input is 400) | PostgreSQL and LocalStack |
-| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md`  | PostgreSQL and LocalStack |
-| `bun run check:fast`       | typecheck, lint, format, unit                                                                             | none                      |
-| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                     | all of the above          |
+| Command                    | What it runs                                                                                                                                                                                                      | Real infrastructure       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                                                                                                                              | none                      |
+| `bun run lint`             | oxlint on `src` and `test`                                                                                                                                                                                        | none                      |
+| `bun run format:check`     | Prettier                                                                                                                                                                                                          | none                      |
+| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops                                                                                                                    | none                      |
+| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table                                                                                                              | PostgreSQL and LocalStack |
+| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown                                                                                                                  | PostgreSQL and LocalStack |
+| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys and the input contract (malformed input is 400)                                                                                                         | PostgreSQL and LocalStack |
+| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md`                                                                                                          | PostgreSQL and LocalStack |
+| `bun run check:fast`       | typecheck, lint, format, unit                                                                                                                                                                                     | none                      |
+| `bun run test:edge`        | `test/edge`: protected mode. The API has no port, limits per address, 429 as JSON, spoofed headers, isolation, the connection flood, the financial result through the edge. Needs the protected stack (`edge:up`) | the protected stack       |
+| `bun run edge:check`       | starts the protected stack, runs `test:edge`, then stops the stack and reports its exit code                                                                                                                      | Docker                    |
+| `bun run bench:edge`       | `test/edge/overhead.ts`: the same reads through the edge and directly, and the refusal share at the default limits                                                                                                | a running stack           |
+| `bun run demo:finance`     | `test/demo/finance.ts`: the financial flow of demonstration 1, against the running API, checking each balance                                                                                                     | the default stack         |
+| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                                                                                                                             | all of the above          |
 
 `test:load` is not part of `check:all`. It takes minutes, and its numbers describe the machine
 it runs on.

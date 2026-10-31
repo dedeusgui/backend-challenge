@@ -21,7 +21,13 @@
     "db:migrate": "bun run src/migrate.ts",
     "auth:create": "bun run src/auth.ts create",
     "auth:revoke": "bun run src/auth.ts revoke",
-    "test:load": "bun run test/load/load-test.ts"
+    "test:load": "bun run test/load/load-test.ts",
+    "edge:up": "docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build -d --wait",
+    "edge:down": "docker compose -f docker-compose.yml -f docker-compose.protected.yml down",
+    "test:edge": "bun test test/edge",
+    "bench:edge": "bun run test/edge/overhead.ts",
+    "demo:finance": "bun run test/demo/finance.ts",
+    "edge:check": "bun run edge:up && bun run test:edge; status=$?; bun run edge:down; exit $status"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",

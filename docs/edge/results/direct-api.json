@@ -1,0 +1,20 @@
+{
+  "label": "direct-api",
+  "baseUrl": "http://localhost:3000",
+  "sequential": {
+    "requests": 500,
+    "answered": 500,
+    "statuses": { "200": 500 },
+    "p50Ms": 2.95,
+    "p95Ms": 5.45,
+    "p99Ms": 9.34
+  },
+  "concurrent": {
+    "concurrency": 8,
+    "seconds": 10,
+    "requests": 11533,
+    "perSecond": 1153.3,
+    "statuses": { "200": 11533 },
+    "refusedShare": 0
+  }
+}

@@ -567,8 +567,8 @@ config` validates the file. No test starts a container and kills it.
   events committed at the same instant have no defined order. `integration: two publishers send one wallet's events out of
 commit order` shows it. Consumers order by `walletVersion`, so no order is promised across publishers.
 - **Reconciliation runs on demand.** There is no scheduled job.
-- **No rate limiting.** Abuse protection is not built. An edge proxy is the intended place. An in-process
-  throttle would count per process, so it would not limit across instances.
+- **Rate limiting is per client address, and only in protected mode.** The default mode has none. The
+  optional edge (section 15) limits each address, which is not protection against a distributed attack.
 - **No dead-letter replay tooling.**
 - **A win resent under a new external id is a second credit** unless it names its BET (section 7).
 - **Dead-letter duplicates after the deduplication window.** A crash between a dead-letter send and its
@@ -589,3 +589,48 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is
   a pure function, and it could move to its own file if the class grows.
+
+## 15. Protected mode: an optional edge
+
+The default mode is `docker compose up`, with the API published on port 3000 and no limit. The protected mode
+adds an Nginx edge in front of the API: `docker compose -f docker-compose.yml -f docker-compose.protected.yml up
+--build`. It is an operational control. It is not a security boundary, and section 14 says what it does not do.
+
+- **The edge is the only way in.** The API publishes no port in this mode (`docker inspect` shows `3000/tcp: null`).
+  The edge publishes the public port, 3000, so the examples in the README work in both modes.
+- **Limits are per client address.** The key is `$binary_remote_addr`, the TCP peer. The edge never reads a
+  forwarding header to choose a quota. It sets `X-Forwarded-For` and `X-Real-IP` from the peer, replacing any
+  value the client sent, and it drops `Forwarded`. It trusts no proxy: behind another proxy, that proxy's
+  address must be added with `set_real_ip_from`, explicitly, and only then.
+- **Writes and reads have their own quotas.** `POST /wagering/transactions` and `POST /wallets` share
+  `EDGE_WRITE_RATE` (20 per second) with a burst of `EDGE_WRITE_BURST` (40), refused at once beyond it. Every other
+  route shares `EDGE_READ_RATE` (50 per second) with a burst of `EDGE_READ_BURST` (100). A client may hold
+  `EDGE_MAX_CONNECTIONS` (50) requests in progress.
+- **A refusal is 429.** It carries `Retry-After: 1` and the body `{"error":{"code":"RATE_LIMITED",...}}`, the same
+  shape as every error of the API.
+- **Health checks are not limited.** `/health/live` and `/health/ready` answer while a client is throttled, so the
+  monitor sees the service.
+- **A refusal is logged once**, with its time, client address, method, path and status. No header, body or query
+  string is logged, so no key or payload reaches the log.
+- **Slow clients are bounded.** Headers and bodies time out after 10 seconds. The edge reads up to 1 MB, and the API
+  keeps its own 16 kB limit and its 413.
+
+**What it does not do.** A limit per address does not stop a distributed or volumetric attack. Docker's userland
+proxy can give every host client one address, so one host shares a quota. Keys still travel in plain HTTP, and
+TLS belongs in front of the edge in a deployment. There is one edge, so quotas are not shared across several.
+
+**What it cost, measured on this host** (`bun run bench:edge`, one run each, `docs/edge/results/`). Sequential
+reads with the API directly: p50 2.95 ms, p95 5.45 ms, p99 9.34 ms. Through the edge with the limits raised, so
+nothing is refused: p50 3.08 ms, p95 5.72 ms, p99 9.70 ms. Under eight concurrent clients the throughput was 1,153
+and 1,113 requests per second. At the default limits, the edge served 500 of 197,790 requests in ten seconds, which
+is its quota of 50 per second, and it refused the rest at once.
+
+**What the tests prove** (`bun run edge:up`, then `bun run test:edge`). The API has no host port. The API is reached
+on the internal network only through the edge. A legitimate client is served and its financial result is unchanged,
+with a replay and a ledger. A request without a key is refused with its own code. A burst above the limit is 429,
+as JSON, with `Retry-After`. Health checks answer while a client is throttled. The quota recovers. Spoofed
+forwarding headers do not change a quota. Two client containers at different addresses have separate quotas. A
+flood of open connections is refused. The stack starts and stops cleanly (`bun run edge:check`). The isolation
+tests use containers on the compose network, so each has its own address; requests from the host do not show it.
+Two mutations were run and caught. Keying the read limit on `X-Forwarded-For` fails the spoofing test. Keying it on
+a constant fails the isolation test.

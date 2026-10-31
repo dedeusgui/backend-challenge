@@ -45,6 +45,24 @@ bun run dev                   # API with restart on change
 bun run src/worker.ts         # worker, in another terminal
 ```
 
+## Protected mode (optional)
+
+The default mode above has no rate limit. The protected mode puts an Nginx edge in front of the API. It limits
+each client address, and it refuses the rest with 429. The API publishes no port of its own in this mode, so the
+edge is the only way in. The public port is the same, 3000.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
+bun run test:edge                 # the protected-mode suite, against the running stack
+docker compose -f docker-compose.yml -f docker-compose.protected.yml down
+```
+
+The limits are set with `EDGE_WRITE_RATE` (20r/s), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50r/s),
+`EDGE_READ_BURST` (100) and `EDGE_MAX_CONNECTIONS` (50). A refused request is 429 with `Retry-After`, and its body
+is JSON. Health checks are not limited. `bun run edge:check` starts the stack, runs the suite and stops it.
+`bun run bench:edge <label>` measures the cost of the edge against the API. `ARCHITECTURE.md` section 15 gives the
+design, what it does not protect, and the measured cost.
+
 ## Test
 
 ```bash
@@ -53,18 +71,21 @@ bun run infra:up              # the integration, concurrency and e2e suites need
 bun run check:all             # the final gate: typecheck, lint, format, and every suite
 ```
 
-| Command                    | Purpose                                                               |
-| -------------------------- | --------------------------------------------------------------------- |
-| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure        |
-| `bun run test:unit`        | domain and pure-logic tests                                           |
-| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults     |
-| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped |
-| `bun run test:e2e`         | the HTTP application, with API keys                                   |
-| `bun run check:all`        | everything above. This is the gate, and CI runs it                    |
-| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)            |
-| `bun run db:migrate`       | apply pending migrations and exit                                     |
-| `bun run auth:create`      | create an API client and print its key once                           |
-| `bun run auth:revoke`      | revoke an API client by id                                            |
+| Command                    | Purpose                                                                    |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure             |
+| `bun run test:unit`        | domain and pure-logic tests                                                |
+| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults          |
+| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped      |
+| `bun run test:e2e`         | the HTTP application, with API keys                                        |
+| `bun run check:all`        | everything above. This is the gate, and CI runs it                         |
+| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)                 |
+| `bun run test:edge`        | protected mode: the edge's limits and isolation, against the running stack |
+| `bun run edge:check`       | starts the protected stack, runs `test:edge`, and stops the stack          |
+| `bun run demo:finance`     | demonstration 1: the financial flow, against the running API               |
+| `bun run db:migrate`       | apply pending migrations and exit                                          |
+| `bun run auth:create`      | create an API client and print its key once                                |
+| `bun run auth:revoke`      | revoke an API client by id                                                 |
 
 No suite replaces PostgreSQL or the queue with a mock. Each concurrency test asserts that exactly one
 operation has the effect and that the others are replays, conflicts or rejections.
@@ -72,6 +93,22 @@ operation has the effect and that the others are replays, conflicts or rejection
 
 The load test pins the stack to a number of CPUs and ramps the request rate in steps. Its method and
 results are in `docs/LOAD_TEST_RESULTS.md`. The numbers describe the machine that ran them.
+
+## Demonstrations
+
+Three scenarios show the guarantees. Each one prints its result, and each needs only the commands below.
+
+1. **Financial processing.** Start the stack (`docker compose up --build`), then run
+   `bun run demo:finance`. It opens a wallet with 100.00, runs a BET, a WIN, a BET and its REFUND, and a ROLLBACK
+   of the WIN, and it checks every balance, the refusal of a second ROLLBACK, the replay of a BET, the ledger sum
+   and the reconciliation.
+2. **Concurrency.** `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`. Fifty
+   identical requests run in parallel over three API processes and one database. One debit is applied, and the
+   other requests are replays of the same transaction.
+3. **Recovery.** `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`. A
+   worker process exits with code 137 after its command has committed and before the message is acknowledged. A
+   restarted worker takes the message back. The queue is drained, the balance is 75.00, the ledger sums to
+   75.00, and it holds exactly one debit for the command.
 
 ## Endpoints
 
@@ -123,6 +160,8 @@ The full list is in `ARCHITECTURE.md` section 14. The most important:
 
 - **API keys, not an identity provider.** Keys last until revoked, with no rotation or login. The API
   serves plain HTTP, so a deployment must put it behind TLS. See [ADR 0007](docs/adr/0007-api-key-authentication.md).
+- **Rate limiting is per client address, and only in protected mode.** It is not protection against a
+  distributed attack, and the default mode has none. See `ARCHITECTURE.md` section 15.
 - **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
 - **The Dockerfile image build** could not run in the authoring sandbox, whose TLS proxy blocks package
   downloads. The stack was verified from clean volumes with an image built from the same source and the
@@ -154,4 +193,8 @@ test/
   e2e/                    HTTP
   load/                   optional load test: workload, pinning, measurement, report
 docker/localstack/        queue provisioning
+docker/edge/              the protected mode's Nginx template and forwarding headers
+docker-compose.protected.yml  the protected mode, as an override of docker-compose.yml
+test/edge/                protected-mode suite, and the edge overhead measurement
+test/demo/                demonstration 1, the financial flow
 ```

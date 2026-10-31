@@ -1,0 +1,20 @@
+{
+  "label": "edge-default-limits",
+  "baseUrl": "http://localhost:3000",
+  "sequential": {
+    "requests": 500,
+    "answered": 135,
+    "statuses": { "200": 135, "429": 365 },
+    "p50Ms": 4.04,
+    "p95Ms": 7.3,
+    "p99Ms": 12.33
+  },
+  "concurrent": {
+    "concurrency": 8,
+    "seconds": 10,
+    "requests": 197790,
+    "perSecond": 19779,
+    "statuses": { "200": 500, "429": 197290 },
+    "refusedShare": 99.7
+  }
+}

@@ -1,0 +1,75 @@
+# Protected mode: the only public entry point of the API. The nginx image writes this file from the
+# template with the EDGE_* variables of docker-compose.protected.yml.
+#
+# Limits are per client address: $binary_remote_addr is the TCP peer, and no header can change it. This
+# is a per-IP limit for one edge. It is not protection against a distributed or volumetric attack.
+
+limit_req_zone $binary_remote_addr zone=writes:10m rate=${EDGE_WRITE_RATE};
+limit_req_zone $binary_remote_addr zone=reads:10m rate=${EDGE_READ_RATE};
+limit_conn_zone $binary_remote_addr zone=perclient:10m;
+
+# Both limits answer 429, and the answer is JSON, like every other error of the API.
+limit_req_status 429;
+limit_conn_status 429;
+# Limit events are logged once, by the access line below, not again by the error log.
+limit_req_log_level info;
+limit_conn_log_level info;
+
+# A blocked request is logged with its time, client address, method, path and status. Nothing else: no
+# headers, no body and no query string, so no key or payload reaches the log.
+log_format blocked 'time=$time_iso8601 event=blocked remote=$remote_addr method=$request_method path=$uri status=$status';
+map $status $is_blocked { ~^429$ 1; default 0; }
+
+server {
+    listen 8080;
+    server_name _;
+
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $api http://api:3000;
+
+    # The API refuses bodies above 16 kB with its own 413. The edge only bounds what it reads.
+    client_max_body_size 1m;
+    client_header_timeout 10s;
+    client_body_timeout 10s;
+    send_timeout 10s;
+    keepalive_timeout 30s;
+
+    limit_conn perclient ${EDGE_MAX_CONNECTIONS};
+    access_log /dev/stderr blocked if=$is_blocked;
+
+    error_page 429 = @rate_limited;
+    location @rate_limited {
+        default_type application/json;
+        add_header Retry-After 1 always;
+        return 429 '{"error":{"code":"RATE_LIMITED","message":"Too many requests from this client; retry after a second"}}';
+    }
+
+    # Health checks are not rate limited: monitoring must see the service when clients are throttled.
+    location = /health/live {
+        include /etc/nginx/edge/proxy.inc;
+        proxy_pass $api;
+    }
+    location = /health/ready {
+        include /etc/nginx/edge/proxy.inc;
+        proxy_pass $api;
+    }
+
+    # Writes: a wallet opening and a submission. Their burst is the explicit allowance for a retry storm.
+    location = /wagering/transactions {
+        limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
+        include /etc/nginx/edge/proxy.inc;
+        proxy_pass $api;
+    }
+    location = /wallets {
+        limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
+        include /etc/nginx/edge/proxy.inc;
+        proxy_pass $api;
+    }
+
+    # Everything else: reads of wallets, ledgers, transactions and the metrics.
+    location / {
+        limit_req zone=reads burst=${EDGE_READ_BURST} nodelay;
+        include /etc/nginx/edge/proxy.inc;
+        proxy_pass $api;
+    }
+}

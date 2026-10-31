@@ -66,3 +66,8 @@ export const KIND_RULES: Readonly<Record<WagerTransactionKind, KindRules>> = {
     externallySubmittable: true,
   },
 };
+
+/** Narrows an untrusted value to a kind. Anything unknown is undefined, so the caller decides how to refuse it. */
+export function parseWagerTransactionKind(value: unknown): WagerTransactionKind | undefined {
+  return WAGER_TRANSACTION_KINDS.find((kind) => kind === value);
+}

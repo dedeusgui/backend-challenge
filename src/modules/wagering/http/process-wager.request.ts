@@ -1,6 +1,7 @@
 import type { ProcessWagerCommand } from '../application/process-wager-transaction.use-case';
 import {
   WAGER_TRANSACTION_KINDS,
+  parseWagerTransactionKind,
   type WagerTransactionKind,
 } from '../domain/wager-transaction-kind';
 import {
@@ -10,7 +11,7 @@ import {
   requiredMoney,
   requiredString,
   RequestValidationError,
-} from '../../../shared/http/request-validation';
+} from '../../../shared/validation/request-validation';
 
 const ALLOWED_FIELDS = [
   'providerId',
@@ -69,9 +70,9 @@ export function parseProcessWagerRequest(
 }
 
 function parseKind(value: unknown): WagerTransactionKind {
-  const match = WAGER_TRANSACTION_KINDS.find((kind) => kind === value);
-  if (match === undefined) {
+  const kind = parseWagerTransactionKind(value);
+  if (kind === undefined) {
     throw new RequestValidationError(`kind must be one of ${WAGER_TRANSACTION_KINDS.join(', ')}`);
   }
-  return match;
+  return kind;
 }

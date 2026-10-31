@@ -4,7 +4,7 @@ import {
   expectOnlyKeys,
   requiredMoney,
   requiredString,
-} from '../../../shared/http/request-validation';
+} from '../../../shared/validation/request-validation';
 
 export interface OpenWalletRequest {
   playerId: string;

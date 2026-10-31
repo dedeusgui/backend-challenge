@@ -6,7 +6,7 @@ import {
   WalletNotFoundError,
 } from '../application/application-errors';
 import { DomainError } from '../domain/domain-error';
-import { RequestValidationError } from './request-validation';
+import { RequestValidationError } from '../validation/request-validation';
 
 export interface ErrorResponse {
   status: number;

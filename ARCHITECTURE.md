@@ -606,9 +606,11 @@ What is not claimed, and why:
 - **No login and no key rotation.** Keys last until they are revoked. The challenge's suggested identity provider (Keycloak or Zitadel) is not integrated. See section 12 and ADR 0007.
 - **Plain HTTP.** Keys travel in every request, so a real deployment must put the API behind TLS.
 - **Local infrastructure only.** PostgreSQL 17 and LocalStack 4.14, not AWS. The repository's
-  Dockerfile image build could not run in the authoring sandbox, because its TLS proxy
-  blocks package downloads. The stack was verified from clean volumes with an image built
-  from the same source and the sandbox CA, outside the repository.
+  Dockerfile build cannot run in the authoring sandbox: `bun install` fails with `SELF_SIGNED_CERT_IN_CHAIN`
+  behind the sandbox TLS proxy. The stack was run from an image built outside the repository, from a copy of
+  the Dockerfile that adds only the sandbox CA. That image runs as uid 1000 (`bun`). The default stack
+  (health, `demo:finance`) and the protected stack (`test:edge`, 12 of 12) were run from it. `edge:check`
+  uses `--build`, which the sandbox cannot run.
 - **Broker redrive is checked on the provisioned queue** (section 7), not on a queue the test creates.
 - **Metrics are per process.** No aggregation or dashboard.
 - **Fault injection is partial.** Crash after commit and before acknowledgement, and crash

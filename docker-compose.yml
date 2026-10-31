@@ -64,6 +64,18 @@ services:
       PORT: '3000'
     ports:
       - '${PUBLISH_HOST:-127.0.0.1}:3000:3000'
+    # The image has no curl, so the probe is the runtime itself. It asks the liveness route.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     # A crashed process is restarted. `docker stop` still stops it for good.
     restart: unless-stopped
     depends_on:
@@ -81,6 +93,17 @@ services:
       WORKER_HTTP_PORT: '3001'
     expose:
       - '3001'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
     stop_grace_period: 30s
     depends_on:

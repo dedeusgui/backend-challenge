@@ -153,7 +153,26 @@ describe('protected mode: the edge is the only way in', () => {
       '--format',
       '{{json .NetworkSettings.Ports}}',
     ]);
-    expect(edge.stdout).toContain('"8080/tcp":[{"HostIp":"0.0.0.0","HostPort":"3000"}]');
+    // The edge binds loopback only. It used to bind every interface, which this test pinned until the infra fix.
+    expect(edge.stdout).toContain('"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"3000"}]');
+  });
+
+  test('PostgreSQL and LocalStack publish no port in protected mode, at run time', async () => {
+    for (const container of ['backend-challenge-postgres-1', 'backend-challenge-localstack-1']) {
+      const inspect = await run([
+        'docker',
+        'inspect',
+        container,
+        '--format',
+        '{{json .NetworkSettings.Ports}}',
+      ]);
+
+      expect(inspect.code).toBe(0);
+      const ports = JSON.parse(inspect.stdout) as Record<string, unknown>;
+      for (const [port, binding] of Object.entries(ports)) {
+        expect({ container, port, binding }).toEqual({ container, port, binding: null });
+      }
+    }
   });
 
   test('the API is reachable on the internal network, so only the edge stands in front of it', async () => {

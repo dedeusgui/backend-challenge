@@ -6,12 +6,15 @@
  * It opens a wallet with 100.00, then runs a BET, a WIN, a BET and its REFUND, and a ROLLBACK of the WIN. Each
  * step prints the balance and the answer, and checks it against the rules. It then reads the ledger, checks that
  * its sum is the balance, and runs the reconciliation. It needs `.env` (DATABASE_URL), because it creates its own
- * API keys with the auth command, and the stack must be running (`docker compose up --build`).
+ * API keys with the auth command, and the stack must be running (`docker compose up --build`). Without DATABASE_URL
+ * in the environment, it uses the development database of docker-compose.yml, on this machine.
  */
 
 export {};
 
 const baseUrl = process.env.API_URL ?? 'http://localhost:3000';
+/** The development database that docker-compose.yml publishes on this machine. Only a default: set DATABASE_URL to override. */
+const DEVELOPMENT_DATABASE_URL = 'postgresql://wagering:wagering@127.0.0.1:5432/wagering';
 const tag = Date.now().toString(36);
 
 /** Narrows an answer to an object, so that its fields are read as unknown, never trusted as a type. */
@@ -44,15 +47,14 @@ async function createKey(
   if (providerId !== undefined) args.push('--provider', providerId);
   const child = Bun.spawn(['bun', ...args], {
     cwd: `${import.meta.dir}/../..`,
+    env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? DEVELOPMENT_DATABASE_URL },
     stdout: 'pipe',
     stderr: 'pipe',
   });
   const output = await new Response(child.stdout).text();
   const match = /^key: (.+)$/m.exec(output);
   if ((await child.exited) !== 0 || match?.[1] === undefined) {
-    throw new Error(
-      'could not create a key: check DATABASE_URL in .env and that the database is migrated',
-    );
+    throw new Error('could not create a key: check DATABASE_URL and that the database is migrated');
   }
   return match[1];
 }

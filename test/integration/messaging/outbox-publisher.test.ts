@@ -297,3 +297,105 @@ describe('OutboxPublisher', () => {
     expect(JSON.stringify(logged)).not.toContain('simulated broker outage');
   });
 });
+
+/** A promise that a test resolves on purpose. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+/** Holds one event inside the transport until the test releases it, so the test sets the order of sends. */
+class HeldTransport implements OutboxTransport {
+  readonly sent: string[] = [];
+  readonly entered = deferred();
+  readonly released = deferred();
+
+  constructor(private readonly heldId: string) {}
+
+  async publish(message: Parameters<OutboxTransport['publish']>[0]): Promise<void> {
+    if (message.id === this.heldId) {
+      this.entered.resolve();
+      await this.released.promise;
+    }
+    this.sent.push(message.id);
+  }
+}
+
+class RecordingTransport implements OutboxTransport {
+  readonly sent: string[] = [];
+
+  async publish(message: Parameters<OutboxTransport['publish']>[0]): Promise<void> {
+    this.sent.push(message.id);
+  }
+}
+
+describe('OutboxPublisher: order across publishers', () => {
+  test("two publishers can send one wallet's events out of commit order, so no order is promised across them", async () => {
+    // Earlier tests may leave due events. Drain them, so only this test's events are pending.
+    const drain = publisherFor(transportFor());
+    while ((await drain.publishOnce()) > 0) {
+      // Each pass publishes what is due. The loop ends when nothing is due.
+    }
+
+    const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
+    const at = (instant: Date) => ({ unitOfWork, clock: () => instant, newId: randomUUID });
+    const playerId = `player-${randomUUID()}`;
+    const { walletId } = await new OpenWallet(at(new Date(NOW.getTime() - 3_000))).execute({
+      playerId,
+      initialBalance: Money.from({ amount: '10.00', currency: 'BRL' }),
+    });
+    await drain.publishOnce();
+    const bet = (instant: Date) =>
+      new ProcessWagerTransaction(at(instant)).execute({
+        idempotencyKey: `k-${randomUUID()}`,
+        providerId: 'provider-a',
+        externalTransactionId: `t-${randomUUID()}`,
+        playerId,
+        walletId,
+        roundId: 'round-987',
+        gameId: 'fortune-chimp',
+        kind: 'BET',
+        money: Money.from({ amount: '1.00', currency: 'BRL' }),
+        referenceExternalTransactionId: undefined,
+        correlationId: 'corr',
+      });
+    // Two BETs commit at different instants. Each produces a balance event for the wallet, and an
+    // event for its transaction, which belongs to another aggregate.
+    await bet(new Date(NOW.getTime() - 2_000));
+    await bet(new Date(NOW.getTime() - 1_000));
+
+    const connection = database.orm.em.getConnection();
+    const walletEvents = (await connection.execute(
+      `SELECT id::text AS id FROM outbox_messages
+        WHERE aggregate_id = ? AND event_type = 'WalletBalanceChanged' AND published_at IS NULL
+        ORDER BY occurred_at`,
+      [walletId],
+    )) as Array<{ id: string }>;
+    expect(walletEvents).toHaveLength(2);
+    const earlierCommit = walletEvents[0]?.id ?? '';
+    const laterCommit = walletEvents[1]?.id ?? '';
+    // Only the wallet's events are claimed in this test. The transaction events wait out of the window.
+    await connection.execute(
+      `UPDATE outbox_messages SET next_attempt_at = next_attempt_at + interval '1 day'
+        WHERE published_at IS NULL AND aggregate_id <> ?`,
+      [walletId],
+    );
+
+    // Publisher A claims the earlier commit, and stops inside the transport, holding its lease.
+    const held = new HeldTransport(earlierCommit);
+    const inFlight = publisherFor(held, () => NOW, 1).publishOnce();
+    await held.entered.promise;
+
+    // Publisher B claims the later commit while A is in flight, and sends it first.
+    const other = new RecordingTransport();
+    expect(await publisherFor(other, () => NOW, 1).publishOnce()).toBe(1);
+    held.released.resolve();
+    expect(await inFlight).toBe(1);
+
+    // The later commit reached the broker first. Consumers order one wallet's events by walletVersion.
+    expect([...other.sent, ...held.sent]).toEqual([laterCommit, earlierCommit]);
+  });
+});

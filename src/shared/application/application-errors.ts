@@ -50,3 +50,12 @@ export class MessagePayloadConflictError extends Error {
     this.name = 'MessagePayloadConflictError';
   }
 }
+
+export class TransactionNotFoundError extends Error {
+  readonly code = 'TRANSACTION_NOT_FOUND';
+
+  constructor(reference: string) {
+    super(`Transaction ${reference} does not exist`);
+    this.name = 'TransactionNotFoundError';
+  }
+}

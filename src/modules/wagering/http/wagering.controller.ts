@@ -1,10 +1,12 @@
-import { Body, Controller, Headers, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   ProcessWagerTransaction,
   type ProcessWagerOutcome,
 } from '../application/process-wager-transaction.use-case';
 import { parseProcessWagerRequest } from './process-wager.request';
+import { WagerQueries } from '../application/wager-queries';
+import { presentTransaction } from './transaction.presenter';
 
 /** The subset of the Express response this controller needs. Keeps the controller independent of Express types. */
 interface StatusSetter {
@@ -21,7 +23,15 @@ export interface WagerTransactionResponse {
 
 @Controller('wagering/transactions')
 export class WageringController {
-  constructor(private readonly processWager: ProcessWagerTransaction) {}
+  constructor(
+    private readonly processWager: ProcessWagerTransaction,
+    private readonly queries: WagerQueries,
+  ) {}
+
+  @Get(':transactionId')
+  async getById(@Param('transactionId') transactionId: string) {
+    return presentTransaction(await this.queries.getById(transactionId));
+  }
 
   @Post()
   async submit(

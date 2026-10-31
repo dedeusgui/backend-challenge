@@ -67,9 +67,9 @@ function toDomain(row: OutboxRow): OutboxMessage {
     aggregateId: row.aggregate_id,
     eventType: row.event_type,
     payload: parseEnvelope(row.payload),
-    occurredAt: row.occurred_at,
+    occurredAt: new Date(row.occurred_at),
     attempts: row.attempts,
-    nextAttemptAt: row.next_attempt_at,
+    nextAttemptAt: new Date(row.next_attempt_at),
     publishedAt: undefined,
   });
 }

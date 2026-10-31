@@ -16,6 +16,9 @@ import { OpenWallet } from './modules/wallet/application/open-wallet.use-case';
 import { WalletController } from './modules/wallet/http/wallet.controller';
 import { ProcessWagerTransaction } from './modules/wagering/application/process-wager-transaction.use-case';
 import { WageringController } from './modules/wagering/http/wagering.controller';
+import { ProvidersController } from './modules/wagering/http/providers.controller';
+import { WalletQueries } from './modules/wallet/application/wallet-queries';
+import { WagerQueries } from './modules/wagering/application/wager-queries';
 
 const APPLICATION_CONTEXT = Symbol('APPLICATION_CONTEXT');
 
@@ -28,7 +31,7 @@ export class AppModule {
   static register(config: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, WalletController, WageringController],
+      controllers: [HealthController, WalletController, WageringController, ProvidersController],
       providers: [
         ormProvider(config.databaseUrl),
         DatabaseLifecycle,
@@ -61,6 +64,16 @@ export class AppModule {
           provide: ProcessWagerTransaction,
           inject: [APPLICATION_CONTEXT],
           useFactory: (context: ApplicationContext) => new ProcessWagerTransaction(context),
+        },
+        {
+          provide: WalletQueries,
+          inject: [APPLICATION_CONTEXT],
+          useFactory: (context: ApplicationContext) => new WalletQueries(context),
+        },
+        {
+          provide: WagerQueries,
+          inject: [APPLICATION_CONTEXT],
+          useFactory: (context: ApplicationContext) => new WagerQueries(context),
         },
         { provide: APP_FILTER, useClass: HttpErrorFilter },
       ],

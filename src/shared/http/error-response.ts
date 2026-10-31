@@ -2,9 +2,11 @@ import {
   ConcurrencyConflictError,
   IdempotencyConflictError,
   MessagePayloadConflictError,
+  TransactionNotFoundError,
   WalletAlreadyExistsError,
   WalletNotFoundError,
 } from '../application/application-errors';
+import { HttpException } from '@nestjs/common';
 import { DomainError } from '../domain/domain-error';
 import { RequestValidationError } from '../validation/request-validation';
 
@@ -28,6 +30,10 @@ const CALLER_DOMAIN_CODES: readonly string[] = [
  * not leak to callers.
  */
 export function toErrorResponse(error: unknown): ErrorResponse {
+  if (error instanceof HttpException) {
+    // Framework-level failures keep their status: an unknown route is 404, malformed JSON is 400.
+    return httpFailure(error.getStatus());
+  }
   if (error instanceof RequestValidationError) {
     return failure(400, error.code, error.message);
   }
@@ -36,7 +42,7 @@ export function toErrorResponse(error: unknown): ErrorResponse {
       ? failure(400, error.code, error.message)
       : failure(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   }
-  if (error instanceof WalletNotFoundError) {
+  if (error instanceof WalletNotFoundError || error instanceof TransactionNotFoundError) {
     return failure(404, error.code, error.message);
   }
   if (
@@ -51,6 +57,16 @@ export function toErrorResponse(error: unknown): ErrorResponse {
       ...failure(503, error.code, 'The wallet is busy; retry the request'),
       headers: { 'retry-after': '1' },
     };
+  }
+  return failure(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
+}
+
+function httpFailure(status: number): ErrorResponse {
+  if (status === 404) {
+    return failure(404, 'NOT_FOUND', 'No route matches this request');
+  }
+  if (status >= 400 && status < 500) {
+    return failure(status, 'INVALID_REQUEST', 'The request could not be parsed');
   }
   return failure(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
 }

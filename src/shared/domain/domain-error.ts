@@ -10,6 +10,13 @@ export type DomainErrorCode =
   | 'INVALID_INBOX_TRANSITION'
   | 'INVALID_API_CLIENT';
 
+export const DOMAIN_INPUT_ERROR_CODES: readonly DomainErrorCode[] = [
+  'INVALID_MONEY',
+  'CURRENCY_MISMATCH',
+  'INVALID_WALLET',
+  'INVALID_TRANSACTION',
+];
+
 /**
  * Violation of a domain rule on input or on an operation.
  *

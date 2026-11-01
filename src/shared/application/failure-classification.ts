@@ -3,7 +3,7 @@ import {
   MessagePayloadConflictError,
   WalletNotFoundError,
 } from './application-errors';
-import { DomainError } from '../domain/domain-error';
+import { DOMAIN_INPUT_ERROR_CODES, DomainError } from '../domain/domain-error';
 import { RequestValidationError } from '../validation/request-validation';
 
 /**
@@ -12,19 +12,12 @@ import { RequestValidationError } from '../validation/request-validation';
  */
 export type FailureDisposition = 'PERMANENT' | 'TRANSIENT';
 
-const PERMANENT_DOMAIN_CODES: readonly string[] = [
-  'INVALID_MONEY',
-  'CURRENCY_MISMATCH',
-  'INVALID_WALLET',
-  'INVALID_TRANSACTION',
-];
-
 export function classifyCommandFailure(error: unknown): FailureDisposition {
   if (error instanceof RequestValidationError) {
     return 'PERMANENT';
   }
   if (error instanceof DomainError) {
-    return PERMANENT_DOMAIN_CODES.includes(error.code) ? 'PERMANENT' : 'TRANSIENT';
+    return DOMAIN_INPUT_ERROR_CODES.includes(error.code) ? 'PERMANENT' : 'TRANSIENT';
   }
   if (
     error instanceof WalletNotFoundError ||

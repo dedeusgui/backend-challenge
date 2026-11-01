@@ -7,7 +7,7 @@ import {
   WalletNotFoundError,
 } from '../application/application-errors';
 import { HttpException } from '@nestjs/common';
-import { DomainError } from '../domain/domain-error';
+import { DOMAIN_INPUT_ERROR_CODES, DomainError } from '../domain/domain-error';
 import { RequestValidationError } from '../validation/request-validation';
 
 export interface ErrorResponse {
@@ -15,14 +15,6 @@ export interface ErrorResponse {
   body: { error: { code: string; message: string } };
   headers?: Record<string, string>;
 }
-
-/** Domain codes that describe a contract the caller got wrong. Other domain codes indicate a bug. */
-const CALLER_DOMAIN_CODES: readonly string[] = [
-  'INVALID_MONEY',
-  'CURRENCY_MISMATCH',
-  'INVALID_WALLET',
-  'INVALID_TRANSACTION',
-];
 
 /**
  * Maps every failure to one stable, machine-readable code and status. Unknown
@@ -38,7 +30,7 @@ export function toErrorResponse(error: unknown): ErrorResponse {
     return failure(400, error.code, error.message);
   }
   if (error instanceof DomainError) {
-    return CALLER_DOMAIN_CODES.includes(error.code)
+    return DOMAIN_INPUT_ERROR_CODES.includes(error.code)
       ? failure(400, error.code, error.message)
       : failure(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   }

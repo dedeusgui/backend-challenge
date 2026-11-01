@@ -82,7 +82,7 @@ Then, in this order:
    suite runs and what it does not replace.
 5. **Appendices, for deeper reading**: the [ADR index](docs/adr/README.en.md) and its records;
    [DECISIONS.md](DECISIONS.en.md), every decision with its evidence; the reviews in
-   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md) and [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.en.md);
+   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md);
    [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.en.md); the load reports in
    [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), the local baseline with 13 scenarios, correctness and
    concurrency in [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md), and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.en.md);
@@ -258,20 +258,12 @@ numbers is not an improvement, because the machines are different. Method, readi
 | `bun run edge:check`                                                   | starts protected mode, runs `test:edge`, and stops it                    |
 | `bun run bench:edge`                                                   | measures the edge overhead (`test/edge/overhead.ts`)                     |
 
-## References consulted
+## Alternatives considered
 
-Three public implementations of the same challenge were read. Their test suites were not run. The full comparison is in
-[docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md) (Portuguese).
-
-- **Adopted:** an outbox lease with `FOR UPDATE SKIP LOCKED`, and sending outside the claim transaction (paulovitorlr); a
-  pessimistic lock per wallet (all three).
-- **Not adopted:** sending to the queue inside the outbox transaction, which holds a connection and a row lock during the
-  broker call (AndreLopes30); Keycloak and Prometheus/Grafana dashboards (eriksonwilliam). The challenge suggests
-  Keycloak; this project uses API keys, as recorded in [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
-- **Different:** money as `decimal.js` with `NUMERIC(20,2)`. Two of the references use integer minor units (`bigint`) in
-  the domain. [ADR 0002](docs/adr/0002-money-representation.en.md) explains the choice.
-- **Beyond the references:** two workers contending on one wallet, with one worker killed in the middle of the contention
-  (`test/concurrency/distributed-contention.test.ts`).
+- **Adopted:** an outbox lease with `FOR UPDATE SKIP LOCKED`, and sending outside the claim transaction; a pessimistic lock per wallet.
+- **Not adopted:** sending to the queue inside the outbox transaction, which holds a connection and a row lock during the broker call; Keycloak and Prometheus/Grafana dashboards. The challenge suggests Keycloak; this project uses API keys, as recorded in [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
+- **Different:** money as `decimal.js` with `NUMERIC(20,2)`, instead of integer minor units (`bigint`). [ADR 0002](docs/adr/0002-money-representation.en.md) explains the choice.
+- **Beyond the alternatives:** two workers contending on one wallet, with one worker killed in the middle of the contention (`test/concurrency/distributed-contention.test.ts`).
 
 ## Demonstrations
 

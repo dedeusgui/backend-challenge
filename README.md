@@ -254,20 +254,12 @@ não é melhoria, porque as máquinas são diferentes. Método, leitura e limite
 [registros JSON das execuções](docs/load/). São medições com LocalStack, não AWS SQS;
 não há soak test prolongado nem SLO de produção validado.
 
-## Referências consultadas
+## Alternativas consideradas
 
-Três implementações públicas do mesmo desafio foram lidas. As suítes delas não foram executadas. A comparação completa
-está em [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md).
-
-- **Adotado:** lease no outbox com `FOR UPDATE SKIP LOCKED`, com o envio fora da transação de reivindicação
-  (paulovitorlr); trava pessimista por carteira (as três).
-- **Não adotado:** enviar à fila dentro da transação do outbox, que segura uma conexão e uma trava de linha durante a
-  chamada ao broker (AndreLopes30); Keycloak e painéis de Prometheus e Grafana (eriksonwilliam). O desafio sugere
-  Keycloak; esta solução usa chaves de API, por decisão registrada no [ADR 0007](docs/adr/0007-api-key-authentication.md).
-- **Diferente:** dinheiro como `decimal.js` com `NUMERIC(20,2)`. Duas referências usam inteiros de unidades fracionárias
-  (`bigint`) no domínio. O [ADR 0002](docs/adr/0002-money-representation.md) explica a escolha.
-- **Além das referências:** dois workers disputando uma carteira, com um deles encerrado no meio da disputa
-  (`test/concurrency/distributed-contention.test.ts`).
+- **Adotado:** lease no outbox com `FOR UPDATE SKIP LOCKED`, com o envio fora da transação de reivindicação; trava pessimista por carteira.
+- **Não adotado:** enviar à fila dentro da transação do outbox, que segura uma conexão e uma trava de linha durante a chamada ao broker; Keycloak e painéis de Prometheus e Grafana. O desafio sugere Keycloak; esta solução usa chaves de API, por decisão registrada no [ADR 0007](docs/adr/0007-api-key-authentication.md).
+- **Diferente:** dinheiro como `decimal.js` com `NUMERIC(20,2)`, em vez de inteiros de unidades fracionárias (`bigint`). O [ADR 0002](docs/adr/0002-money-representation.md) explica a escolha.
+- **Além das alternativas:** dois workers disputando uma carteira, com um deles encerrado no meio da disputa (`test/concurrency/distributed-contention.test.ts`).
 
 ## Testes
 
@@ -387,7 +379,6 @@ docs/                     guias, matriz, ADRs, contrato OpenAPI, relatórios de 
 - [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md): requisito a teste.
 - [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): auditoria final, com a situação de cada item e as decisões do dono.
 - [docs/audit/README.md](docs/audit/README.md): auditoria adversarial, com 15 achados e a prova de cada garantia.
-- [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md): comparação com três implementações públicas do mesmo desafio.
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): o que cada suíte prova e o que não substitui.
 - [docs/openapi.json](docs/openapi.json): contrato HTTP.
 - [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), [docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md) e [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.

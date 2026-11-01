@@ -73,7 +73,7 @@ resume os slices e o que cada um comprovou.
 
 - [x] `README.md`, `ARCHITECTURE.md` com cinco diagramas Mermaid, `docs/TEST_STRATEGY.md`.
 - [x] Sete ADRs em `docs/adr/`, cada um com as evidências que o sustentam. ADR 0006 foi substituído pelo 0007.
-- [x] `docs/REFERENCE_REVIEW.md` reescrito a partir dos três repositórios públicos, com citações a arquivos.
+- [x] Comparação com repositórios públicos reescrita e depois removida do repositório (histórico no git).
 - [x] `CLAUDE.md` para agentes.
 
 ## Não contemplado nesta versão

@@ -76,12 +76,24 @@ export class WagerCommandConsumer {
     });
 
     let removed = 0;
-    for (const message of messages) {
+    for (const [index, message] of messages.entries()) {
+      // The first message starts inside the window that receive set. Each later one may wait behind the
+      // messages before it, so every message still waiting gets a full window again, from now.
+      if (index > 0) {
+        await this.keepWaitingInvisible(messages.slice(index));
+      }
       if (await this.settle(message)) {
         removed += 1;
       }
     }
     return removed;
+  }
+
+  private keepWaitingInvisible(waiting: readonly ReceivedMessage[]): Promise<void> {
+    return this.options.queue.extendVisibility(
+      waiting.map((message) => message.receiptHandle),
+      this.options.visibilityTimeoutSeconds,
+    );
   }
 
   private async settle(message: ReceivedMessage): Promise<boolean> {

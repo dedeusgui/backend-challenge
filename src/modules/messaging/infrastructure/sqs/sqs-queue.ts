@@ -1,4 +1,5 @@
 import {
+  ChangeMessageVisibilityBatchCommand,
   ChangeMessageVisibilityCommand,
   DeleteMessageCommand,
   GetQueueAttributesCommand,
@@ -107,6 +108,30 @@ export class SqsQueue implements MessageQueue {
         VisibilityTimeout: seconds,
       }),
     );
+  }
+
+  /** One ChangeMessageVisibilityBatch request. A refused entry is an error, so the caller can fail closed. */
+  async extendVisibility(receiptHandles: readonly string[], seconds: number): Promise<void> {
+    if (receiptHandles.length === 0) {
+      return;
+    }
+    if (receiptHandles.length > 10) {
+      throw new Error('a visibility batch holds at most ten messages');
+    }
+    const response = await this.client.send(
+      new ChangeMessageVisibilityBatchCommand({
+        QueueUrl: this.queueUrl,
+        Entries: receiptHandles.map((receiptHandle, index) => ({
+          Id: String(index),
+          ReceiptHandle: receiptHandle,
+          VisibilityTimeout: seconds,
+        })),
+      }),
+    );
+    const refused = response.Failed ?? [];
+    if (refused.length > 0) {
+      throw new Error(`the broker refused the visibility of ${refused.length} message(s)`);
+    }
   }
 
   /** Messages still in the queue: visible ones plus those delivered and not yet acknowledged. */

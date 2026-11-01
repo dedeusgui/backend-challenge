@@ -17,4 +17,9 @@ export interface MessageQueue {
   receive(options: ReceiveOptions): Promise<ReceivedMessage[]>;
   acknowledge(receiptHandle: string): Promise<void>;
   changeVisibility(receiptHandle: string, seconds: number): Promise<void>;
+  /**
+   * Sets the visibility of up to ten received messages in one request, each to `seconds` from now.
+   * Rejects when the broker refuses any of them, so the caller never assumes an extension that did not happen.
+   */
+  extendVisibility(receiptHandles: readonly string[], seconds: number): Promise<void>;
 }

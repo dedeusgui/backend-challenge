@@ -300,6 +300,13 @@ sequenceDiagram
   end
 ```
 
+A batch of up to ten messages is processed one at a time. Before each message after the first, the
+consumer sets the visibility of the messages still waiting to a full window again (30 s by default), in
+one `ChangeMessageVisibilityBatch` request. Without this, a message at the end of a slow batch became
+visible while the first consumer still held it, and a second consumer received it
+(`test/integration/messaging/visibility-during-batch.test.ts`). Each message must still finish within the
+window; a longer message is the case the window does not cover.
+
 Classification (`failure-classification.ts`). Permanent failures go to the dead-letter
 queue. Transient ones are redelivered with visibility backoff of 2 s, 4 s, 8 s, up to 300 s.
 The queue's redrive policy (`maxReceiveCount = 10`) moves a message that keeps failing to

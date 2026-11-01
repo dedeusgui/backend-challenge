@@ -212,6 +212,8 @@ describe('WagerCommandConsumer', () => {
       receive: (options) => commands.receive(options),
       changeVisibility: (receiptHandle, seconds) =>
         commands.changeVisibility(receiptHandle, seconds),
+      extendVisibility: (receiptHandles, seconds) =>
+        commands.extendVisibility(receiptHandles, seconds),
       acknowledge: async (receiptHandle) => {
         if (!crashed) {
           crashed = true;
@@ -254,6 +256,8 @@ describe('WagerCommandConsumer', () => {
       receive: (options) => deadLetters.receive(options),
       changeVisibility: (receiptHandle, seconds) =>
         deadLetters.changeVisibility(receiptHandle, seconds),
+      extendVisibility: (receiptHandles, seconds) =>
+        deadLetters.extendVisibility(receiptHandles, seconds),
       acknowledge: (receiptHandle) => deadLetters.acknowledge(receiptHandle),
     };
 

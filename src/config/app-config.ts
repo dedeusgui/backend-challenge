@@ -1,5 +1,6 @@
 export interface SqsSettings {
   region: string;
+  requestTimeoutMs?: number;
   /** Set for LocalStack or another emulator. Leave unset to use AWS with GetQueueUrl. */
   endpoint: string | undefined;
   commandQueueName: string;
@@ -23,13 +24,33 @@ export function readAppConfig(env: Readonly<Record<string, string | undefined>>)
 }
 
 export function readSqsSettings(env: Readonly<Record<string, string | undefined>>): SqsSettings {
-  return {
+  const settings: SqsSettings = {
     region: env.AWS_REGION ?? 'us-east-1',
     endpoint: env.SQS_ENDPOINT?.trim() || undefined,
     commandQueueName: env.SQS_COMMAND_QUEUE ?? 'wager-transactions.fifo',
     deadLetterQueueName: env.SQS_COMMAND_DLQ ?? 'wager-transactions-dlq.fifo',
     eventsQueueName: env.SQS_EVENTS_QUEUE ?? 'wager-events.fifo',
   };
+  Object.defineProperty(settings, 'requestTimeoutMs', {
+    value: positiveInteger(env, 'SQS_REQUEST_TIMEOUT_MS', 5_000),
+  });
+  return settings;
+}
+
+function positiveInteger(
+  env: Readonly<Record<string, string | undefined>>,
+  name: string,
+  fallback: number,
+): number {
+  const raw = env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
 }
 
 function readPort(raw: string): number {

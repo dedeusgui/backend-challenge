@@ -1,4 +1,5 @@
 import { GetQueueAttributesCommand, type SQSClient } from '@aws-sdk/client-sqs';
+import type { AbortQueryOptions, LoggingOptions } from '@mikro-orm/core';
 import type { MikroORM } from '@mikro-orm/postgresql';
 
 export const HEALTH_SERVICE = Symbol('HEALTH_SERVICE');
@@ -19,6 +20,7 @@ export class HealthService implements ReadinessProbe {
     private readonly orm: MikroORM,
     private readonly sqs: SQSClient,
     private readonly commandQueueUrl: string,
+    private readonly requestTimeoutMs = 5_000,
   ) {}
 
   async ready(): Promise<ReadinessReport> {
@@ -31,25 +33,38 @@ export class HealthService implements ReadinessProbe {
   }
 
   private async databaseIsUp(): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
-      await this.orm.em.getConnection().execute('SELECT 1');
+      const abortOptions: LoggingOptions & AbortQueryOptions = {
+        signal: controller.signal,
+        inflightQueryAbortStrategy: 'cancel query',
+      };
+      await this.orm.em.getConnection().execute('SELECT 1', [], 'all', undefined, abortOptions);
       return true;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
   private async sqsIsUp(): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
       await this.sqs.send(
         new GetQueueAttributesCommand({
           QueueUrl: this.commandQueueUrl,
           AttributeNames: ['QueueArn'],
         }),
+        { abortSignal: controller.signal },
       );
       return true;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

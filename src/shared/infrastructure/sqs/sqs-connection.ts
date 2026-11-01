@@ -23,8 +23,8 @@ export class SqsClientLifecycle implements OnApplicationShutdown {
 const EMULATOR_CREDENTIALS = { accessKeyId: 'test', secretAccessKey: 'test' };
 
 /**
- * Creates an SQS client. `probe` clients fail fast, so a readiness check cannot hang
- * for minutes behind the SDK's default retry policy.
+ * Creates an SQS client. The request handler enforces the configured deadline for each
+ * network request, including calls made by existing queue adapters.
  *
  * With an emulator endpoint the fixed pair is used. Without one the SDK's default chain resolves
  * the credentials: environment, shared profile, or the task or instance role.
@@ -33,12 +33,17 @@ export function createSqsClient(
   settings: SqsSettings,
   options: { probe?: boolean } = {},
 ): SQSClient {
+  const requestTimeoutMs = settings.requestTimeoutMs ?? 5_000;
   return new SQSClient({
     region: settings.region,
     endpoint: settings.endpoint,
     credentials: settings.endpoint === undefined ? undefined : EMULATOR_CREDENTIALS,
     maxAttempts: options.probe ? 1 : 3,
-    requestHandler: options.probe ? { connectionTimeout: 1_000, requestTimeout: 2_000 } : undefined,
+    requestHandler: {
+      connectionTimeout: options.probe ? Math.min(1_000, requestTimeoutMs) : undefined,
+      requestTimeout: requestTimeoutMs,
+      throwOnRequestTimeout: true,
+    },
   });
 }
 

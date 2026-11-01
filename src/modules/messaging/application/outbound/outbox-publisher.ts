@@ -104,18 +104,26 @@ export class OutboxPublisher {
     const recorded = new Set(await this.options.store.complete(sent, token, attemptAt));
     let published = 0;
     for (const message of sent) {
-      if (recorded.has(message.id)) {
-        published += 1;
-        this.metrics.increment('outbox_published_total');
-        this.metrics.observe(
-          'outbox_lag_seconds',
-          (attemptAt.getTime() - message.occurredAt.getTime()) / 1000,
-        );
-      } else {
-        this.metrics.increment('outbox_lost_lease_total');
-      }
+      published += this.recordPublicationOutcome(message, recorded.has(message.id), attemptAt);
     }
     return published;
+  }
+
+  private recordPublicationOutcome(
+    message: OutboxMessage,
+    isRecorded: boolean,
+    attemptAt: Date,
+  ): number {
+    if (isRecorded) {
+      this.metrics.increment('outbox_published_total');
+      this.metrics.observe(
+        'outbox_lag_seconds',
+        (attemptAt.getTime() - message.occurredAt.getTime()) / 1000,
+      );
+      return 1;
+    }
+    this.metrics.increment('outbox_lost_lease_total');
+    return 0;
   }
 
   private async rescheduleFailed(

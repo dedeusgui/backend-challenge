@@ -35,9 +35,9 @@ function formatCounters(counters: MetricsSnapshot['counters']): string[] {
     const existing = counterGroups.get(name);
     if (existing !== undefined) {
       existing.push({ key, value });
-    } else {
-      counterGroups.set(name, [{ key, value }]);
+      continue;
     }
+    counterGroups.set(name, [{ key, value }]);
   }
 
   for (const [name, series] of counterGroups) {
@@ -60,9 +60,9 @@ function formatSummaries(summaries: MetricsSnapshot['summaries']): string[] {
     const existing = summaryGroups.get(name);
     if (existing !== undefined) {
       existing.push({ labels, summary });
-    } else {
-      summaryGroups.set(name, [{ labels, summary }]);
+      continue;
     }
+    summaryGroups.set(name, [{ labels, summary }]);
   }
 
   for (const [name, series] of summaryGroups) {

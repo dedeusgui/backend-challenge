@@ -65,7 +65,7 @@ Para qualquer outra garantia, o índice [audit/README.md](audit/README.md) apont
 
 ## 6. Contrato HTTP (5 min)
 
-[openapi.json](openapi.json) descreve as dez operações. Duas verificações o mantêm honesto:
+[openapi.json](openapi.json) descreve as onze operações, e a mesma especificação é servida em `GET /openapi.json`, com a interface em `GET /docs`. Duas verificações o mantêm honesto:
 `test/unit/openapi/openapi-contract.test.ts` (estrutura e paridade com as rotas registradas) e
 `test/e2e/openapi-responses.test.ts` (cada resposta real precisa ter status documentado e corpo válido). A segunda
 achou uma divergência, e o contrato foi corrigido: `seq` do ledger é texto.

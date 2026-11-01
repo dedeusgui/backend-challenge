@@ -122,6 +122,6 @@ describe('the document describes the routes the controllers register', () => {
     const documented = documentedRoutes(document);
 
     expect([...registered].sort()).toEqual([...documented].sort());
-    expect(registered.size).toBe(10);
+    expect(registered.size).toBe(11);
   });
 });

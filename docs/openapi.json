@@ -1065,6 +1065,66 @@
         },
         "description": "Somente chave OPERATOR. Cada réplica informa os próprios números; a superfície do worker tem o mesmo formato, em outra porta interna."
       }
+    },
+    "/metrics/prometheus": {
+      "get": {
+        "operationId": "getPrometheusMetrics",
+        "summary": "Métricas deste processo no formato de texto do Prometheus",
+        "tags": ["observability"],
+        "responses": {
+          "200": {
+            "description": "Texto no formato 0.0.4 do Prometheus, desde a inicialização do processo.",
+            "content": {
+              "text/plain; version=0.0.4": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta a chave, ela é desconhecida ou foi revogada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "..."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["Bearer"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Os mesmos contadores e resumos de GET /metrics, no formato de texto 0.0.4 do Prometheus. Sem identificadores nos rótulos. Somente chave OPERATOR."
+      }
     }
   },
   "components": {

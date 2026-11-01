@@ -15,7 +15,7 @@
     "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit",
     "infra:up": "docker compose up -d --wait postgres localstack",
     "test:integration": "bun test test/integration",
-    "check:all": "bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e",
+    "check:all": "bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features",
     "test:concurrency": "bun test test/concurrency",
     "test:e2e": "bun test test/e2e",
     "db:migrate": "bun run src/migrate.ts",
@@ -31,7 +31,8 @@
     "edge:check": "bun run edge:up && bun run test:edge; status=$?; bun run edge:down; exit $status",
     "test:infra": "bun test test/infra",
     "site:build": "bun run scripts/build-site.ts",
-    "diagrams:export": "bun run scripts/export-diagrams.ts"
+    "diagrams:export": "bun run scripts/export-diagrams.ts",
+    "test:features": "bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",
@@ -48,6 +49,7 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^13.3.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^24.0.0",
     "oxlint": "^1.90.0",

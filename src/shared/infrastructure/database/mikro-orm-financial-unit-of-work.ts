@@ -10,15 +10,41 @@ import type {
   FinancialUnitOfWork,
 } from '../../application/ports/financial-unit-of-work';
 
+export interface FinancialUnitOfWorkOptions {
+  /** Longest wait for a row lock. Past it the attempt fails with SQLSTATE 55P03, which is transient. */
+  lockTimeoutMs?: number;
+  /** Longest run of one statement. Past it the statement is cancelled with SQLSTATE 57014. */
+  statementTimeoutMs?: number;
+}
+
+const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
+const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
+
 /**
  * Runs financial work in one PostgreSQL transaction on a fresh EntityManager, so
- * each unit of work has its own identity map and connection.
+ * each unit of work has its own identity map and connection. The timeouts are set
+ * with `set_config(..., true)`, which lasts for this transaction only.
  */
 export class MikroOrmFinancialUnitOfWork implements FinancialUnitOfWork {
-  constructor(private readonly orm: MikroORM) {}
+  private readonly lockTimeoutMs: number;
+  private readonly statementTimeoutMs: number;
+
+  constructor(
+    private readonly orm: MikroORM,
+    options: FinancialUnitOfWorkOptions = {},
+  ) {
+    this.lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
+    this.statementTimeoutMs = options.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
+  }
 
   run<T>(work: (repositories: FinancialRepositories) => Promise<T>): Promise<T> {
-    return this.orm.em.fork().transactional((em) => work(repositoriesOn(em)));
+    return this.orm.em.fork().transactional(async (em) => {
+      await em.execute(
+        "SELECT set_config('lock_timeout', ?, true), set_config('statement_timeout', ?, true)",
+        [`${this.lockTimeoutMs}ms`, `${this.statementTimeoutMs}ms`],
+      );
+      return work(repositoriesOn(em));
+    });
   }
 }
 

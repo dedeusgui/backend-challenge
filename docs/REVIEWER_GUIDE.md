@@ -11,6 +11,9 @@ curl http://localhost:3000/health/ready
 bun run demo:finance
 ```
 
+A demonstração exige a stack em execução: ela chama a API, e é a stack que aplica as migrações ao banco. Sem a
+stack, a demonstração falha ao criar a primeira chave, com a mensagem que pede para verificar o banco e as migrações.
+
 A demonstração abre uma carteira com 100.00, faz uma aposta, um ganho, outra aposta com seu reembolso e um
 rollback do ganho. Ela confere cada saldo, recusa um segundo rollback, repete uma aposta como replay, e compara a soma
 do ledger com o saldo e com a reconciliação. Cada passo imprime o que foi observado. Ela não simula nada: chama a API.

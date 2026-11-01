@@ -176,10 +176,13 @@ Invariantes aplicadas pelo PostgreSQL, cada uma com um teste de constraint que t
   ordenação; `CHECK` aritmético para CREDIT e DEBIT; `amount > 0`; uma chave estrangeira
   composta `(transaction_id, wallet_id)`, de modo que um lançamento deve pertencer a uma transação da
   mesma carteira. Somente anexação (append-only): triggers `BEFORE UPDATE OR DELETE` e `BEFORE TRUNCATE`
-  recusam mutação. A concordância entre cada saldo e seu ledger (desafio 6.2) não é uma
-  constraint de banco de dados: ela é verificada sob demanda pela reconciliação e em cada suíte de testes. Dois
-  triggers postergados (deferred) que a imporiam foram medidos e não adotados, porque estendem o
-  lock da carteira a cada commit (`docs/audit/PERFORMANCE_COMPARISON.md`, experimento 1).
+  recusam mutação. A concordância entre cada saldo e seu ledger (desafio 6.2) é imposta por dois triggers de
+  restrição postergados até o `COMMIT`, na migração 12: `wallets_ledger_balance_check` e
+  `wallet_ledger_entries_balance_check`. O experimento de custo recomendou não adotá-los: mediana adicionada de até
+  1,8 ms sob contenção, com cauda não delimitada (`docs/audit/PERFORMANCE_COMPARISON.md`, experimento 1). Foram
+  adotados mesmo assim, para fechar a lacuna F-06, em que uma escrita direta no banco alterava o saldo sem lançamento.
+  A carga completa não foi medida de novo com os triggers. A reconciliação continua existindo, para detectar uma
+  divergência que o esquema não impede, como a desativação manual dos triggers.
 
 **Guardas de linha (migração 10).** Verificadas a cada atualização, cada uma lendo somente a linha sendo alterada, para que não
 acrescentem consultas dentro do lock da carteira (`docs/audit/PERFORMANCE_COMPARISON.md`, experimento 1b):

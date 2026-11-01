@@ -178,10 +178,13 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   ordering; arithmetic `CHECK` for CREDIT and DEBIT; `amount > 0`; a composite foreign
   key `(transaction_id, wallet_id)`, so an entry must belong to a transaction of the
   same wallet. Append-only: `BEFORE UPDATE OR DELETE` and `BEFORE TRUNCATE` triggers
-  refuse mutation. The agreement between each balance and its ledger (challenge 6.2) is not a
-  database constraint: it is verified on demand by reconciliation and in every test suite. Two
-  deferred triggers that would enforce it were measured and not adopted, because they extend the
-  wallet lock on every commit (`docs/audit/PERFORMANCE_COMPARISON.md`, experiment 1).
+  refuse mutation. The agreement between each balance and its ledger (challenge 6.2) is enforced by two
+  deferred constraint triggers that run at `COMMIT`, in migration 12: `wallets_ledger_balance_check` and
+  `wallet_ledger_entries_balance_check`. The cost experiment recommended not adopting them: a median
+  increase of up to 1.8 ms under contention, with an unbounded tail (`docs/audit/PERFORMANCE_COMPARISON.md`,
+  experiment 1). They were adopted anyway, to close gap F-06, in which a direct database write changed a
+  balance without a ledger entry. The full load was not measured again with the triggers. Reconciliation
+  still exists, to detect a divergence the schema does not prevent, such as manually disabled triggers.
 
 **Row guards (migration 10).** Checked on every update, each reading only the row being changed, so they add
 no lookup inside the wallet lock (`docs/audit/PERFORMANCE_COMPARISON.md`, experiment 1b):

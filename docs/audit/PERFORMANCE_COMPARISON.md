@@ -189,6 +189,8 @@ crescimento das tabelas, nem sobre um soak do consumidor de fila: isso não foi 
 
 ## Alterações descartadas
 
-| Alteração                                                   | Motivo do descarte                                                                                                                             |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Triggers de concordância saldo/ledger no caminho de escrita | Experimento 1: custo mediano de até 1,8 ms sob contenção, com cauda não delimitada, e a especificação não exige o esquema para essa invariante |
+Esta tabela registra a recomendação do experimento. A alteração foi adotada depois, na migração 12.
+
+| Alteração                                                   | Motivo do descarte                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Triggers de concordância saldo/ledger no caminho de escrita | Experimento 1: custo mediano de até 1,8 ms sob contenção, com cauda não delimitada, e a especificação não exige o esquema para essa invariante. **Revisão:** adotados na migração 12 para fechar F-06; a carga completa não foi medida de novo com eles. |

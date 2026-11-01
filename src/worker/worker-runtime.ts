@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { MikroORM } from '@mikro-orm/postgresql';
 import type { WorkerConfig } from '../config/worker-config';
-import type { FinancialUnitOfWork } from '../shared/application/ports/financial-unit-of-work.port';
-import { OutboxPublisher } from '../modules/messaging/application/outbox-publisher';
-import type { MessageQueue } from '../modules/messaging/application/message-queue.port';
-import type { OutboxStore } from '../modules/messaging/application/outbox-store.port';
-import { WagerCommandConsumer } from '../modules/messaging/application/wager-command-consumer';
+import type { FinancialUnitOfWork } from '../shared/application/ports/financial-unit-of-work';
+import { OutboxPublisher } from '../modules/messaging/application/outbound/outbox-publisher';
+import type { MessageQueue } from '../modules/messaging/application/ports/message-queue';
+import type { OutboxStore } from '../modules/messaging/application/ports/outbox-store';
+import { WagerCommandConsumer } from '../modules/messaging/application/inbound/wager-command-consumer';
 import { MikroOrmOutboxStore } from '../modules/messaging/infrastructure/mikro-orm-outbox.store';
 import {
   SqsEventTransport,

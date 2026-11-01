@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '../integration/support/test-database';
 import { createTestQueues, testSqsClient } from '../integration/support/sqs-test-queues';
-import { OutboxPublisher } from '../../src/modules/messaging/application/outbox-publisher';
+import { OutboxPublisher } from '../../src/modules/messaging/application/outbound/outbox-publisher';
 import { MikroOrmOutboxStore } from '../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { SqsEventTransport } from '../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../src/modules/messaging/infrastructure/sqs/sqs-queue';

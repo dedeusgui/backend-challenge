@@ -1,5 +1,5 @@
-import type { Money } from '../../../shared/domain/money';
-import type { WalletLedgerEntry } from '../domain/wallet-ledger-entry';
+import type { Money } from '../../../../shared/domain/money';
+import type { WalletLedgerEntry } from '../../domain/wallet-ledger-entry';
 
 export interface LedgerPageEntry {
   /** The database sequence of the entry. It orders the ledger and backs the pagination cursor. */

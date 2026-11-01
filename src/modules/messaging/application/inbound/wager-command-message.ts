@@ -1,15 +1,15 @@
-import type { ProcessWagerCommand } from '../../wagering/application/process-wager-transaction.use-case';
+import type { ProcessWagerCommand } from '../../../wagering/application/process-wager-transaction.use-case';
 import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
   parseWagerCommandFields,
   WAGER_COMMAND_FIELDS,
-} from '../../wagering/application/wager-command-fields';
+} from '../../../wagering/application/wager-command-fields';
 import {
   expectObject,
   expectOnlyKeys,
   requiredString,
   RequestValidationError,
-} from '../../../shared/validation/request-validation';
+} from '../../../../shared/validation/request-validation';
 
 const ENVELOPE_KEYS = ['messageId', 'type', 'occurredAt', 'data'];
 const DATA_KEYS = [...WAGER_COMMAND_FIELDS, 'idempotencyKey'];

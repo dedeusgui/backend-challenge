@@ -9,7 +9,7 @@ import {
   type ProcessWagerCommand,
   type ProcessWagerOutcome,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import { WagerCommandConsumer } from '../../../src/modules/messaging/application/wager-command-consumer';
+import { WagerCommandConsumer } from '../../../src/modules/messaging/application/inbound/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';

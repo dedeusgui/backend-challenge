@@ -3,8 +3,8 @@
  * worker at a precise point. They live here, not in production code: the production worker receives the
  * plain adapters, and these wrappers are composed only by the test entry points.
  */
-import type { MessageQueue } from '../../src/modules/messaging/application/message-queue.port';
-import type { FinancialUnitOfWork } from '../../src/shared/application/ports/financial-unit-of-work.port';
+import type { MessageQueue } from '../../src/modules/messaging/application/ports/message-queue';
+import type { FinancialUnitOfWork } from '../../src/shared/application/ports/financial-unit-of-work';
 
 /** Hard exit (code 137, like SIGKILL) at the first acknowledgement, after the commit and before the broker hears of it. */
 export function exitAtFirstAcknowledge(queue: MessageQueue): MessageQueue {

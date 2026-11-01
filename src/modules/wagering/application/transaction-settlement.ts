@@ -1,6 +1,6 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
-import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
-import type { ProcessedOutcomes } from './wager-transaction-repository.port';
+import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work';
+import type { ProcessedOutcomes } from './ports/wager-transaction-repository';
 import type { IntegrationEventContext } from '../../../shared/domain/integration-event';
 import { WalletBalanceChanged } from '../../wallet/domain/events/wallet-balance-changed.event';
 import type { Wallet } from '../../wallet/domain/wallet';

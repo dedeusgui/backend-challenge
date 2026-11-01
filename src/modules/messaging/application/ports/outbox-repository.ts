@@ -1,4 +1,4 @@
-import type { IntegrationEvent } from '../../../shared/domain/integration-event';
+import type { IntegrationEvent } from '../../../../shared/domain/integration-event';
 
 export interface OutboxRepository {
   /**

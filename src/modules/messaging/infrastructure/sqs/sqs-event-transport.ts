@@ -2,7 +2,7 @@ import type {
   OutboxTransport,
   OutboxTransportFailure,
   OutboxTransportMessage,
-} from '../../application/outbox-publisher';
+} from '../../application/ports/outbox-transport';
 
 /** The most entries one SendMessageBatch request accepts. */
 const BROKER_BATCH_LIMIT = 10;

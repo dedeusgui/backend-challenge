@@ -4,7 +4,7 @@ import type { SQSClient } from '@aws-sdk/client-sqs';
 import type {
   FinancialRepositories,
   FinancialUnitOfWork,
-} from '../../../src/shared/application/ports/financial-unit-of-work.port';
+} from '../../../src/shared/application/ports/financial-unit-of-work';
 import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
@@ -13,11 +13,9 @@ import {
   type ProcessWagerCommand,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
 import { ProcessPendingReferences } from '../../../src/modules/wagering/application/process-pending-references.use-case';
-import {
-  OutboxPublisher,
-  type OutboxTransport,
-} from '../../../src/modules/messaging/application/outbox-publisher';
-import type { OutboxStore } from '../../../src/modules/messaging/application/outbox-store.port';
+import { OutboxPublisher } from '../../../src/modules/messaging/application/outbound/outbox-publisher';
+import type { OutboxTransport } from '../../../src/modules/messaging/application/ports/outbox-transport';
+import type { OutboxStore } from '../../../src/modules/messaging/application/ports/outbox-store';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';

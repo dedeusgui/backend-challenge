@@ -2,17 +2,17 @@ import { createHash } from 'node:crypto';
 import type {
   ProcessWagerCommand,
   ProcessWagerOutcome,
-} from '../../wagering/application/process-wager-transaction.use-case';
-import type { MessageQueue, ReceivedMessage } from './message-queue.port';
-import { classifyCommandFailure } from '../../../shared/application/failure-classification';
+} from '../../../wagering/application/process-wager-transaction.use-case';
+import type { MessageQueue, ReceivedMessage } from '../ports/message-queue';
+import { classifyCommandFailure } from '../../../../shared/application/failure-classification';
 import { parseWagerCommandMessage } from './wager-command-message';
-import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
+import { NO_METRICS, type MetricsSink } from '../../../../shared/observability/metrics';
 import {
   describeError,
   SILENT_LOGGER,
   type ErrorFields,
   type OperationLogger,
-} from '../../../shared/observability/structured-log';
+} from '../../../../shared/observability/structured-log';
 
 export interface CommandProcessor {
   execute(command: ProcessWagerCommand): Promise<ProcessWagerOutcome>;

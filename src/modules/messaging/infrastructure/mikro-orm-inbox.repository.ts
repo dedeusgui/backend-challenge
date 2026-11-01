@@ -1,7 +1,7 @@
 import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ConcurrencyConflictError } from '../../../shared/application/application-errors';
-import type { InboxRepository } from '../application/inbox-repository.port';
+import type { InboxRepository } from '../application/ports/inbox-repository';
 import { InboxMessage } from '../domain/inbox-message';
 import { InboxMessageRecord } from './inbox.record';
 

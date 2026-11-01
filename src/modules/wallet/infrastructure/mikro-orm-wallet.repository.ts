@@ -8,7 +8,7 @@ import {
   WalletAlreadyExistsError,
 } from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
-import type { WalletRepository } from '../application/wallet-repository.port';
+import type { WalletRepository } from '../application/ports/wallet-repository';
 import { Wallet } from '../domain/wallet';
 import { WalletRecord } from './wallet.record';
 

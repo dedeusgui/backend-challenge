@@ -89,6 +89,22 @@ describe('architectural boundaries', () => {
     expect(violationsOf(files.filter(isApplicationFile), toAdapter)).toEqual([]);
   });
 
+  test('inbound application files do not import infrastructure', () => {
+    const toInfrastructure = (specifier: string) => specifier.includes('/infrastructure/');
+    const sample = importsIn("import { Adapter } from '../infrastructure/adapter';");
+    expect(sample.filter(toInfrastructure)).toEqual(['../infrastructure/adapter']);
+    const inbound = files.filter((file) => file.includes('/application/inbound/'));
+    expect(violationsOf(inbound, toInfrastructure)).toEqual([]);
+  });
+
+  test('outbound application files do not import HTTP', () => {
+    const toHttp = (specifier: string) => specifier.includes('/http/');
+    const sample = importsIn("import { Controller } from '../http/controller';");
+    expect(sample.filter(toHttp)).toEqual(['../http/controller']);
+    const outbound = files.filter((file) => file.includes('/application/outbound/'));
+    expect(violationsOf(outbound, toHttp)).toEqual([]);
+  });
+
   test('controllers parse and present, and never reach the database or the broker directly', () => {
     const controllers = files.filter(isController);
     expect(controllers.length).toBeGreaterThan(0);

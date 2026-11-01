@@ -8,7 +8,7 @@ import {
   ProcessWagerTransaction,
   type ProcessWagerCommand,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import { WagerCommandConsumer } from '../../../src/modules/messaging/application/wager-command-consumer';
+import { WagerCommandConsumer } from '../../../src/modules/messaging/application/inbound/wager-command-consumer';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';

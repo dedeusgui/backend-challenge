@@ -1,4 +1,4 @@
-import type { Wallet } from '../domain/wallet';
+import type { Wallet } from '../../domain/wallet';
 
 export interface WalletRepository {
   findById(walletId: string): Promise<Wallet | undefined>;

@@ -336,7 +336,7 @@ retornou. Uma queda nesse meio-tempo deixa a mensagem em voo (_in flight_), e a 
 da linha na inbox.
 
 ```ts
-// src/modules/messaging/application/wager-command-consumer.ts
+// src/modules/messaging/application/inbound/wager-command-consumer.ts
 if (disposition === 'APPLIED') {
   await faults.beforeAcknowledge(message); // test seam, a no-op in production
   await queue.acknowledge(message.receiptHandle);

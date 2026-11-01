@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { FinancialUnitOfWork } from '../../../src/shared/application/ports/financial-unit-of-work.port';
+import type { FinancialUnitOfWork } from '../../../src/shared/application/ports/financial-unit-of-work';
 import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';

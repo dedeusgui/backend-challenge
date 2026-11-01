@@ -1,9 +1,9 @@
-import type { DatabaseClock } from './database-clock.port';
-import type { InboxRepository } from '../../../modules/messaging/application/inbox-repository.port';
-import type { OutboxRepository } from '../../../modules/messaging/application/outbox-repository.port';
-import type { WalletLedgerRepository } from '../../../modules/wallet/application/wallet-ledger-repository.port';
-import type { WalletRepository } from '../../../modules/wallet/application/wallet-repository.port';
-import type { WagerTransactionRepository } from '../../../modules/wagering/application/wager-transaction-repository.port';
+import type { DatabaseClock } from './database-clock';
+import type { InboxRepository } from '../../../modules/messaging/application/ports/inbox-repository';
+import type { OutboxRepository } from '../../../modules/messaging/application/ports/outbox-repository';
+import type { WalletLedgerRepository } from '../../../modules/wallet/application/ports/wallet-ledger-repository';
+import type { WalletRepository } from '../../../modules/wallet/application/ports/wallet-repository';
+import type { WagerTransactionRepository } from '../../../modules/wagering/application/ports/wager-transaction-repository';
 
 export interface FinancialRepositories {
   wallets: WalletRepository;

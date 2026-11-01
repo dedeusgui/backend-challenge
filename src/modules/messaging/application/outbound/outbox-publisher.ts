@@ -1,32 +1,12 @@
-import type { OutboxMessage } from '../domain/outbox-message';
-import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
+import type { OutboxMessage } from '../../domain/outbox-message';
+import { NO_METRICS, type MetricsSink } from '../../../../shared/observability/metrics';
 import {
   describeError,
   SILENT_LOGGER,
   type OperationLogger,
-} from '../../../shared/observability/structured-log';
-import type { OutboxStore } from './outbox-store.port';
-
-/** The external system an event is published to. The SQS adapter is the only implementation. */
-export interface OutboxTransportMessage {
-  id: string;
-  aggregateId: string;
-  payload: unknown;
-}
-
-/** An event the transport did not send, and why. An event that is not listed was sent. */
-export interface OutboxTransportFailure {
-  id: string;
-  error: unknown;
-}
-
-export interface OutboxTransport {
-  /**
-   * Sends the events in the given order, in as few broker requests as the broker allows, and resolves
-   * with the events it did not send. A throw means that none of them was sent.
-   */
-  publish(messages: readonly OutboxTransportMessage[]): Promise<readonly OutboxTransportFailure[]>;
-}
+} from '../../../../shared/observability/structured-log';
+import type { OutboxStore } from '../ports/outbox-store';
+import type { OutboxTransport } from '../ports/outbox-transport';
 
 export interface OutboxPublisherOptions {
   store: OutboxStore;

@@ -1,4 +1,4 @@
-import type { OutboxMessage } from '../domain/outbox-message';
+import type { OutboxMessage } from '../../domain/outbox-message';
 
 /**
  * A claim names no time. Due events and lease expiry are decided by the database clock, which every publisher

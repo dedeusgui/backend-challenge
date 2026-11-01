@@ -1,7 +1,7 @@
 import { DomainError } from '../../../shared/domain/domain-error';
 import { hashApiKey, generateApiKey } from '../domain/api-key';
 import type { ApiClientRole } from '../domain/principal';
-import type { ApiClientRepository } from './api-client-repository.port';
+import type { ApiClientRepository } from './ports/api-client-repository';
 
 export interface CreateApiClientInput {
   name: string;

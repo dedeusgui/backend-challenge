@@ -1,5 +1,5 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
-import type { ApiClientRepository, NewApiClient } from '../application/api-client-repository.port';
+import type { ApiClientRepository, NewApiClient } from '../application/ports/api-client-repository';
 import { API_CLIENT_ROLES, type Principal } from '../domain/principal';
 import { ApiClientRecord } from './api-client.record';
 

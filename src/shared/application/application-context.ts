@@ -1,5 +1,5 @@
 import type { MetricsSink } from '../observability/metrics';
-import type { FinancialUnitOfWork } from './ports/financial-unit-of-work.port';
+import type { FinancialUnitOfWork } from './ports/financial-unit-of-work';
 
 /**
  * Collaborators every financial use case receives. Time and identifiers are injected

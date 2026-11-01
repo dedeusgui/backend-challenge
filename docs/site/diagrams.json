@@ -151,7 +151,7 @@
           "row": 0,
           "kind": "check",
           "summary": "Lê até 10 mensagens, com long poll de 1 s, e chama o mesmo caso de uso da HTTP.",
-          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-consumer.ts",
           "proof": "test/integration/messaging/wager-command-consumer.test.ts"
         },
         {
@@ -161,7 +161,7 @@
           "row": 0,
           "kind": "check",
           "summary": "Uma mensagem malformada, com identificador que não é UUID ou com chave inválida é falha permanente: vai direto à DLQ, sem efeito.",
-          "path": "src/modules/messaging/application/wager-command-message.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-message.ts",
           "proof": "test/unit/messaging/application/wager-command-message.test.ts"
         },
         {
@@ -171,7 +171,7 @@
           "row": 1,
           "kind": "queue",
           "summary": "Recebe as falhas permanentes e as mensagens que esgotaram as entregas. A cópia é deduplicada pelo corpo na janela de 5 minutos.",
-          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-consumer.ts",
           "proof": "test/unit/messaging/application/dead-letter-deduplication.test.ts"
         },
         {
@@ -191,7 +191,7 @@
           "row": 1,
           "kind": "store",
           "summary": "Os eventos do efeito são gravados junto com ele, e só são publicados depois do commit.",
-          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "path": "src/modules/messaging/application/outbound/outbox-publisher.ts",
           "proof": "test/integration/messaging/outbox-publisher.test.ts"
         },
         {
@@ -201,7 +201,7 @@
           "row": 0,
           "kind": "check",
           "summary": "Só com o commit feito a mensagem é apagada da fila. Um erro transitório não confirma a mensagem.",
-          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-consumer.ts",
           "proof": "test/integration/messaging/wager-command-consumer.test.ts"
         },
         {
@@ -211,7 +211,7 @@
           "row": 0,
           "kind": "outcome",
           "summary": "Confirmação depois do commit. Uma morte antes dela gera reentrega, e a inbox impede o segundo efeito.",
-          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-consumer.ts",
           "proof": "test/concurrency/process-crash-and-shutdown.test.ts"
         },
         {
@@ -221,7 +221,7 @@
           "row": 1,
           "kind": "outcome",
           "summary": "Erro transitório: a mensagem volta à fila depois de 2 s, 4 s, 8 s e assim por diante, com teto de 5 minutos.",
-          "path": "src/modules/messaging/application/wager-command-consumer.ts",
+          "path": "src/modules/messaging/application/inbound/wager-command-consumer.ts",
           "proof": "test/integration/messaging/wager-command-consumer.test.ts"
         },
         {
@@ -231,7 +231,7 @@
           "row": 2,
           "kind": "store",
           "summary": "Reserva um lote com lease e envia em requisições de até 10 entradas. O envio ocorre fora de qualquer transação.",
-          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "path": "src/modules/messaging/application/outbound/outbox-publisher.ts",
           "proof": "test/integration/messaging/partial-batch-order.test.ts"
         },
         {
@@ -350,7 +350,7 @@
           "row": 1,
           "kind": "queue",
           "summary": "WagerTransactionProcessed, WagerTransactionRejected, WalletBalanceChanged e WagerTransactionPendingReference, publicados depois do commit.",
-          "path": "src/modules/messaging/application/outbox-publisher.ts",
+          "path": "src/modules/messaging/application/outbound/outbox-publisher.ts",
           "proof": "test/integration/messaging/outbox-publisher.test.ts"
         },
         {

@@ -45,4 +45,6 @@ Lacuna honesta: não há teste que comprove "ROLLBACK chega antes do BET e é ap
 ## Registro da rodada
 
 - F0: baseline registrada e evidência verificada. Sem mudança de código.
-- Próximo: F1 (mapa de entradas e saídas em `ARCHITECTURE.md` §1).
+- F1: mapa de entradas e saídas em `ARCHITECTURE.md` §1, com par `.en.md`.
+- F2: portas movidas para `application/ports/` (sufixo `.port` removido, também em `shared`). Consumidor de fila em `messaging/application/inbound/`; publicador do outbox em `messaging/application/outbound/`. Dois testes de fronteira novos, cada um com amostra que prova o detector. Diagramas (`docs/site/diagrams.json`) e comentários de `DECISIONS` apontam para os caminhos novos. `check:all` verde: 486 unitários, 4 de infra, 235 de integração, 23 de concorrência e 100 e2e.
+- Próximo: F3 (harness Gherkin), a partir de `docs/audit/EDGE_CASE_MATRIX.md`.

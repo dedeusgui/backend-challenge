@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseWagerCommandMessage } from '../../../../src/modules/messaging/application/wager-command-message';
+import { parseWagerCommandMessage } from '../../../../src/modules/messaging/application/inbound/wager-command-message';
 import { RequestValidationError } from '../../../../src/shared/validation/request-validation';
 
 const VALID_WALLET_ID = '0192f291-27dd-7d3f-8071-5f8685deef37';

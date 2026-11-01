@@ -1,6 +1,6 @@
 import { hashApiKey, parseBearerToken } from '../domain/api-key';
 import type { Principal } from '../domain/principal';
-import type { ApiClientRepository } from './api-client-repository.port';
+import type { ApiClientRepository } from './ports/api-client-repository';
 
 export class AuthenticateApiKey {
   constructor(private readonly clients: ApiClientRepository) {}

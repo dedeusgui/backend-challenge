@@ -6,7 +6,7 @@ import type {
   LedgerPageEntry,
   LedgerSummary,
   WalletLedgerRepository,
-} from '../application/wallet-ledger-repository.port';
+} from '../application/ports/wallet-ledger-repository';
 import { WalletLedgerEntry } from '../domain/wallet-ledger-entry';
 import { WalletLedgerEntryRecord } from './wallet-ledger-entry.record';
 

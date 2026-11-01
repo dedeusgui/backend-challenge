@@ -6,7 +6,7 @@ import { nullableToOptional, oneOf } from '../../../shared/infrastructure/databa
 import type {
   ProcessedOutcomes,
   WagerTransactionRepository,
-} from '../application/wager-transaction-repository.port';
+} from '../application/ports/wager-transaction-repository';
 import { FAILURE_CODES } from '../domain/failure-code';
 import {
   WAGER_TRANSACTION_STATUSES,

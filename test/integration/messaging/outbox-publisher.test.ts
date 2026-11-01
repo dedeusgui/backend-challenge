@@ -5,12 +5,12 @@ import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
 import { ProcessWagerTransaction } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import {
-  OutboxPublisher,
-  type OutboxTransport,
-  type OutboxTransportFailure,
-  type OutboxTransportMessage,
-} from '../../../src/modules/messaging/application/outbox-publisher';
+import { OutboxPublisher } from '../../../src/modules/messaging/application/outbound/outbox-publisher';
+import type {
+  OutboxTransport,
+  OutboxTransportFailure,
+  OutboxTransportMessage,
+} from '../../../src/modules/messaging/application/ports/outbox-transport';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';

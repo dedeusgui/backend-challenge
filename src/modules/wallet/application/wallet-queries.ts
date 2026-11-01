@@ -2,7 +2,7 @@ import type { ApplicationContext } from '../../../shared/application/application
 import { WalletNotFoundError } from '../../../shared/application/application-errors';
 import { Money } from '../../../shared/domain/money';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
-import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
+import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work';
 import type { Wallet } from '../domain/wallet';
 import type { WalletLedgerEntry } from '../domain/wallet-ledger-entry';
 import { decodeLedgerCursor, encodeLedgerCursor } from './ledger-cursor';

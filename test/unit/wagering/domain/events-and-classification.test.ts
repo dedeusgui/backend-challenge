@@ -8,7 +8,7 @@ import {
   WalletNotFoundError,
 } from '../../../../src/shared/application/application-errors';
 import { classifyCommandFailure } from '../../../../src/shared/application/failure-classification';
-import { parseWagerCommandMessage } from '../../../../src/modules/messaging/application/wager-command-message';
+import { parseWagerCommandMessage } from '../../../../src/modules/messaging/application/inbound/wager-command-message';
 import { WagerTransactionFailed } from '../../../../src/modules/wagering/domain/events/wager-transaction-failed.event';
 import { WagerTransactionPendingReference } from '../../../../src/modules/wagering/domain/events/wager-transaction-pending-reference.event';
 import { WagerTransactionProcessed } from '../../../../src/modules/wagering/domain/events/wager-transaction-processed.event';

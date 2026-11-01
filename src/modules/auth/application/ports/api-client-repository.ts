@@ -1,4 +1,4 @@
-import type { ApiClientRole, Principal } from '../domain/principal';
+import type { ApiClientRole, Principal } from '../../domain/principal';
 
 export interface NewApiClient {
   id: string;

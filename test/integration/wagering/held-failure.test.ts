@@ -5,8 +5,8 @@ import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/
 import type {
   FinancialRepositories,
   FinancialUnitOfWork,
-} from '../../../src/shared/application/ports/financial-unit-of-work.port';
-import type { WalletRepository } from '../../../src/modules/wallet/application/wallet-repository.port';
+} from '../../../src/shared/application/ports/financial-unit-of-work';
+import type { WalletRepository } from '../../../src/modules/wallet/application/ports/wallet-repository';
 import { WalletNotFoundError } from '../../../src/shared/application/application-errors';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
 import {

@@ -13,7 +13,7 @@ import { CreateApiClient } from '../../../src/modules/auth/application/create-ap
 import type {
   ApiClientRepository,
   NewApiClient,
-} from '../../../src/modules/auth/application/api-client-repository.port';
+} from '../../../src/modules/auth/application/ports/api-client-repository';
 import { DomainError } from '../../../src/shared/domain/domain-error';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');

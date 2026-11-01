@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { deadLetterDeduplicationId } from '../../../../src/modules/messaging/application/wager-command-consumer';
+import { deadLetterDeduplicationId } from '../../../../src/modules/messaging/application/inbound/wager-command-consumer';
 
 describe('deadLetterDeduplicationId', () => {
   test('one body always gets one id, so a repeated send is recognised as the same copy', () => {

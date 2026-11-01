@@ -1,7 +1,7 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
 import { WalletNotFoundError } from '../../../shared/application/application-errors';
 import { classifyCommandFailure } from '../../../shared/application/failure-classification';
-import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
+import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import { WagerTransactionFailed } from '../domain/events/wager-transaction-failed.event';
 import { TransactionSettlement } from './transaction-settlement';

@@ -1,7 +1,7 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { IntegrationEnvelope } from '../../../shared/domain/integration-event';
 import { OutboxMessage, retryDelayMs } from '../domain/outbox-message';
-import type { ClaimRequest, OutboxStore } from '../application/outbox-store.port';
+import type { ClaimRequest, OutboxStore } from '../application/ports/outbox-store';
 
 interface OutboxRow {
   id: string;

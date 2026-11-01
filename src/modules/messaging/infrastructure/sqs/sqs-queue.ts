@@ -12,7 +12,7 @@ import type {
   MessageQueue,
   ReceiveOptions,
   ReceivedMessage,
-} from '../../application/message-queue.port';
+} from '../../application/ports/message-queue';
 
 export interface SendBatchEntry {
   id: string;

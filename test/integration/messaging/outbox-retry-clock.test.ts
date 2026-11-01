@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import {
-  OutboxPublisher,
-  type OutboxTransport,
-  type OutboxTransportFailure,
-  type OutboxTransportMessage,
-} from '../../../src/modules/messaging/application/outbox-publisher';
+import { OutboxPublisher } from '../../../src/modules/messaging/application/outbound/outbox-publisher';
+import type {
+  OutboxTransport,
+  OutboxTransportFailure,
+  OutboxTransportMessage,
+} from '../../../src/modules/messaging/application/ports/outbox-transport';
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';

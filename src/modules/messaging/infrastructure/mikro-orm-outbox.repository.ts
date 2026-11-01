@@ -1,6 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { IntegrationEvent } from '../../../shared/domain/integration-event';
-import type { OutboxRepository } from '../application/outbox-repository.port';
+import type { OutboxRepository } from '../application/ports/outbox-repository';
 import { OutboxMessage } from '../domain/outbox-message';
 import { OutboxMessageRecord } from './outbox.record';
 

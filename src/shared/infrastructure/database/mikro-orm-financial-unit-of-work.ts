@@ -8,7 +8,7 @@ import { MikroOrmWalletRepository } from '../../../modules/wallet/infrastructure
 import type {
   FinancialRepositories,
   FinancialUnitOfWork,
-} from '../../application/ports/financial-unit-of-work.port';
+} from '../../application/ports/financial-unit-of-work';
 
 /**
  * Runs financial work in one PostgreSQL transaction on a fresh EntityManager, so

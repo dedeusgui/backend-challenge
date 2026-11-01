@@ -338,7 +338,7 @@ has returned. A crash in between leaves the message in flight, and the redeliver
 of the inbox row.
 
 ```ts
-// src/modules/messaging/application/wager-command-consumer.ts
+// src/modules/messaging/application/inbound/wager-command-consumer.ts
 if (disposition === 'APPLIED') {
   await faults.beforeAcknowledge(message); // test seam, a no-op in production
   await queue.acknowledge(message.receiptHandle);

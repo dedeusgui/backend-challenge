@@ -11,7 +11,10 @@ export interface ReceiveOptions {
   visibilityTimeoutSeconds: number;
 }
 
-/** A FIFO queue as the application sees it. The SQS adapter is the only implementation. */
+/**
+ * Inbound: receive, acknowledge, changeVisibility and extendVisibility; outbound: send for events and DLQ.
+ * A FIFO queue as the application sees it. The SQS adapter is the only implementation.
+ */
 export interface MessageQueue {
   send(body: string, groupId: string, deduplicationId: string): Promise<void>;
   receive(options: ReceiveOptions): Promise<ReceivedMessage[]>;

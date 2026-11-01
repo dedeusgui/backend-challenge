@@ -1,5 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { DatabaseClock } from '../../application/ports/database-clock.port';
+import type { DatabaseClock } from '../../application/ports/database-clock';
 
 /**
  * Reads now() on the unit of work's own transaction, so every read in one unit of work gives the same instant.

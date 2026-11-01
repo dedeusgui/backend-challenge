@@ -5,7 +5,7 @@ import {
   MessagePayloadConflictError,
   WalletNotFoundError,
 } from '../../../shared/application/application-errors';
-import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work.port';
+import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work';
 import { DomainError } from '../../../shared/domain/domain-error';
 import type { Money } from '../../../shared/domain/money';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';

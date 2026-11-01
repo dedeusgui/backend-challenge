@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { OutboxMessage } from '../../../../src/modules/messaging/domain/outbox-message';
-import {
-  OutboxPublisher,
-  type OutboxTransport,
-  type OutboxTransportMessage,
-} from '../../../../src/modules/messaging/application/outbox-publisher';
-import type { OutboxStore } from '../../../../src/modules/messaging/application/outbox-store.port';
+import { OutboxPublisher } from '../../../../src/modules/messaging/application/outbound/outbox-publisher';
+import type {
+  OutboxTransport,
+  OutboxTransportMessage,
+} from '../../../../src/modules/messaging/application/ports/outbox-transport';
+import type { OutboxStore } from '../../../../src/modules/messaging/application/ports/outbox-store';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
 

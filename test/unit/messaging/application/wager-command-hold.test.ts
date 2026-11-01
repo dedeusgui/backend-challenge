@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import {
   WagerCommandConsumer,
   type CommandProcessor,
-} from '../../../../src/modules/messaging/application/wager-command-consumer';
+} from '../../../../src/modules/messaging/application/inbound/wager-command-consumer';
 import type {
   MessageQueue,
   ReceivedMessage,
   ReceiveOptions,
-} from '../../../../src/modules/messaging/application/message-queue.port';
+} from '../../../../src/modules/messaging/application/ports/message-queue';
 import { RequestValidationError } from '../../../../src/shared/validation/request-validation';
 import type { OperationLog } from '../../../../src/shared/observability/structured-log';
 

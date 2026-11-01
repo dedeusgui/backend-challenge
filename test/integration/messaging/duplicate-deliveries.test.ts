@@ -8,10 +8,7 @@ import {
   ProcessWagerTransaction,
   type ProcessWagerCommand,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import {
-  NO_FAULTS,
-  WagerCommandConsumer,
-} from '../../../src/modules/messaging/application/wager-command-consumer';
+import { WagerCommandConsumer } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
@@ -120,7 +117,6 @@ function consumer(): WagerCommandConsumer {
     deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
     process: processWager,
     visibilityTimeoutSeconds: 1,
-    faults: NO_FAULTS,
     metrics,
   });
 }

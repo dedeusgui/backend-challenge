@@ -9,10 +9,7 @@ import {
   type ProcessWagerCommand,
   type ProcessWagerOutcome,
 } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import {
-  NO_FAULTS,
-  WagerCommandConsumer,
-} from '../../../src/modules/messaging/application/wager-command-consumer';
+import { WagerCommandConsumer } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
@@ -116,7 +113,6 @@ describe('visibility of a batch that is still being processed', () => {
       deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
       process: slowProcess,
       visibilityTimeoutSeconds: VISIBILITY_SECONDS,
-      faults: NO_FAULTS,
       metrics,
     });
     const second = new WagerCommandConsumer({
@@ -125,7 +121,6 @@ describe('visibility of a batch that is still being processed', () => {
       deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
       process: fastProcess,
       visibilityTimeoutSeconds: VISIBILITY_SECONDS,
-      faults: NO_FAULTS,
       metrics,
     });
 

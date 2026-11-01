@@ -14,15 +14,6 @@ import {
   type OperationLogger,
 } from '../../../shared/observability/structured-log';
 
-/** Test-only seam at the point where a crash would hurt most. The production default does nothing. */
-export interface ConsumerFaults {
-  beforeAcknowledge(message: ReceivedMessage): Promise<void>;
-}
-
-export const NO_FAULTS: ConsumerFaults = {
-  beforeAcknowledge: async () => undefined,
-};
-
 export interface CommandProcessor {
   execute(command: ProcessWagerCommand): Promise<ProcessWagerOutcome>;
 }
@@ -33,7 +24,6 @@ export interface WagerCommandConsumerOptions {
   deadLetters: MessageQueue;
   process: CommandProcessor;
   visibilityTimeoutSeconds: number;
-  faults: ConsumerFaults;
   metrics?: MetricsSink;
   logger?: OperationLogger;
 }
@@ -97,14 +87,13 @@ export class WagerCommandConsumer {
   }
 
   private async settle(message: ReceivedMessage): Promise<boolean> {
-    const { queue, deadLetters, faults } = this.options;
+    const { queue, deadLetters } = this.options;
     const { disposition, messageId, failure } = await this.attempt(message);
     this.metrics.increment('commands_total', { result: disposition });
     this.logger({ operation: 'command.settle', status: disposition, messageId, ...failure });
 
     if (disposition === 'APPLIED') {
-      // Outside the attempt on purpose: a crash here must leave the message for redelivery.
-      await faults.beforeAcknowledge(message);
+      // Outside the attempt on purpose: a failure here must leave the message for redelivery.
       await queue.acknowledge(message.receiptHandle);
       return true;
     }

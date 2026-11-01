@@ -3,13 +3,14 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import type { WorkerConfig } from '../config/worker-config';
 import type { FinancialUnitOfWork } from '../shared/application/ports/financial-unit-of-work.port';
 import { OutboxPublisher } from '../modules/messaging/application/outbox-publisher';
-import {
-  NO_FAULTS,
-  WagerCommandConsumer,
-  type ConsumerFaults,
-} from '../modules/messaging/application/wager-command-consumer';
+import type { MessageQueue } from '../modules/messaging/application/message-queue.port';
+import type { OutboxStore } from '../modules/messaging/application/outbox-store.port';
+import { WagerCommandConsumer } from '../modules/messaging/application/wager-command-consumer';
 import { MikroOrmOutboxStore } from '../modules/messaging/infrastructure/mikro-orm-outbox.store';
-import { SqsEventTransport } from '../modules/messaging/infrastructure/sqs/sqs-event-transport';
+import {
+  SqsEventTransport,
+  type EventBatchSender,
+} from '../modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../modules/messaging/infrastructure/sqs/sqs-queue';
 import { ProcessWagerTransaction } from '../modules/wagering/application/process-wager-transaction.use-case';
 import { ProcessPendingReferences } from '../modules/wagering/application/process-pending-references.use-case';
@@ -31,32 +32,60 @@ export interface WorkerRuntime {
 }
 
 export interface WorkerRuntimeOptions {
-  /** Test-only seam. Production never passes it. */
-  faults?: ConsumerFaults;
-  /**
-   * Test-only seam: wraps the financial unit of work, so that a test process can stop inside a
-   * transaction. Production never passes it.
-   */
-  decorateUnitOfWork?: (unitOfWork: FinancialUnitOfWork) => FinancialUnitOfWork;
   logger?: OperationLogger;
   metrics?: MetricsRegistry;
 }
 
 /**
- * Builds the worker's collaborators. The same use case that HTTP uses is wired into
- * the consumer. The publisher writes to the events queue and records outcomes under lease.
+ * The external resources a worker uses. Production obtains them from `connectWorkerDependencies`. A test
+ * that needs a crash or a delay at a precise point wraps one of them and passes the result to
+ * `assembleWorker`, so that production code never carries a hook for that purpose.
  */
-export async function createWorkerRuntime(
-  config: WorkerConfig,
-  options: WorkerRuntimeOptions = {},
-): Promise<WorkerRuntime> {
+export interface WorkerDependencies {
+  unitOfWork: FinancialUnitOfWork;
+  outboxStore: OutboxStore;
+  commandQueue: MessageQueue;
+  deadLetters: MessageQueue;
+  eventsQueue: EventBatchSender;
+  close(): Promise<void>;
+}
+
+/** The tuning values the worker takes from its configuration. */
+export type WorkerTuning = Pick<
+  WorkerConfig,
+  'consumerVisibilitySeconds' | 'outboxBatchSize' | 'outboxLeaseMs' | 'outboxIdleDelayMs'
+>;
+
+/** Opens the database and the queues the worker uses, from its configuration. */
+export async function connectWorkerDependencies(config: WorkerConfig): Promise<WorkerDependencies> {
   const orm = await MikroORM.init(ormOptions(config.databaseUrl));
   const sqs = createSqsClient(config.sqs);
   const queues = await resolveQueues(sqs, config.sqs);
+  return {
+    unitOfWork: new MikroOrmFinancialUnitOfWork(orm),
+    outboxStore: new MikroOrmOutboxStore(orm),
+    commandQueue: new SqsQueue(sqs, queues.commandQueueUrl),
+    deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
+    eventsQueue: new SqsQueue(sqs, queues.eventsQueueUrl),
+    async close() {
+      await orm.close(true);
+      sqs.destroy();
+    },
+  };
+}
+
+/**
+ * Builds the worker's collaborators from the given dependencies. The same use case that HTTP uses is wired
+ * into the consumer. The publisher writes to the events queue and records outcomes under lease.
+ */
+export function assembleWorker(
+  dependencies: WorkerDependencies,
+  tuning: WorkerTuning,
+  options: WorkerRuntimeOptions = {},
+): WorkerRuntime {
   const metrics = options.metrics ?? new MetricsRegistry();
-  const financialUnitOfWork = new MikroOrmFinancialUnitOfWork(orm);
   const context = {
-    unitOfWork: options.decorateUnitOfWork?.(financialUnitOfWork) ?? financialUnitOfWork,
+    unitOfWork: dependencies.unitOfWork,
     clock: () => new Date(),
     newId: randomUUID,
     metrics,
@@ -64,21 +93,20 @@ export async function createWorkerRuntime(
 
   const consumer = new WagerCommandConsumer({
     consumerName: WAGER_CONSUMER_NAME,
-    queue: new SqsQueue(sqs, queues.commandQueueUrl),
-    deadLetters: new SqsQueue(sqs, queues.deadLetterQueueUrl),
+    queue: dependencies.commandQueue,
+    deadLetters: dependencies.deadLetters,
     process: new ProcessWagerTransaction(context),
-    visibilityTimeoutSeconds: config.consumerVisibilitySeconds,
-    faults: options.faults ?? NO_FAULTS,
+    visibilityTimeoutSeconds: tuning.consumerVisibilitySeconds,
     metrics,
     logger: options.logger,
   });
   const publisher = new OutboxPublisher({
-    store: new MikroOrmOutboxStore(orm),
-    transport: new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)),
+    store: dependencies.outboxStore,
+    transport: new SqsEventTransport(dependencies.eventsQueue),
     clock: context.clock,
     newLeaseToken: randomUUID,
-    leaseDurationMs: config.outboxLeaseMs,
-    batchSize: config.outboxBatchSize,
+    leaseDurationMs: tuning.outboxLeaseMs,
+    batchSize: tuning.outboxBatchSize,
     metrics,
     logger: options.logger,
   });
@@ -88,10 +116,15 @@ export async function createWorkerRuntime(
     consumer,
     publisher,
     pendingReferences: new ProcessPendingReferences(context),
-    idleDelayMs: config.outboxIdleDelayMs,
-    async close() {
-      await orm.close(true);
-      sqs.destroy();
-    },
+    idleDelayMs: tuning.outboxIdleDelayMs,
+    close: () => dependencies.close(),
   };
+}
+
+/** The production entry point: connects to the configured database and queues, then assembles the worker. */
+export async function createWorkerRuntime(
+  config: WorkerConfig,
+  options: WorkerRuntimeOptions = {},
+): Promise<WorkerRuntime> {
+  return assembleWorker(await connectWorkerDependencies(config), config, options);
 }

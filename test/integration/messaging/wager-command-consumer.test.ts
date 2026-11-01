@@ -6,11 +6,7 @@ import { Money } from '../../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
 import { ProcessWagerTransaction } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
-import {
-  WagerCommandConsumer,
-  NO_FAULTS,
-  type ConsumerFaults,
-} from '../../../src/modules/messaging/application/wager-command-consumer';
+import { WagerCommandConsumer } from '../../../src/modules/messaging/application/wager-command-consumer';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import type { MessageQueue } from '../../../src/modules/messaging/application/message-queue.port';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
@@ -47,7 +43,6 @@ afterAll(async () => {
 
 function consumerWith(
   options: {
-    faults?: ConsumerFaults;
     process?: Pick<ProcessWagerTransaction, 'execute'>;
     logger?: (entry: OperationLog) => void;
     queue?: MessageQueue;
@@ -60,7 +55,6 @@ function consumerWith(
     deadLetters: options.deadLetters ?? new SqsQueue(sqs, queues.deadLetterQueueUrl),
     process: options.process ?? processWager,
     visibilityTimeoutSeconds: 1,
-    faults: options.faults ?? NO_FAULTS,
     metrics,
     logger: options.logger,
   });
@@ -179,13 +173,26 @@ describe('WagerCommandConsumer', () => {
   test('a crash after commit and before the acknowledgement is recovered by redelivery, without a second effect', async () => {
     const wallet = await fundedWallet();
     await send(requestedMessage(wallet));
-    const crashing: ConsumerFaults = {
-      beforeAcknowledge: async () => {
-        throw new Error('simulated process crash after commit');
+    // The process dies after the commit and before the acknowledgement: the first acknowledge never reaches the broker.
+    let crashed = false;
+    const commands = new SqsQueue(sqs, queues.commandQueueUrl);
+    const crashingBeforeAcknowledge: MessageQueue = {
+      send: (body, group, deduplicationId) => commands.send(body, group, deduplicationId),
+      receive: (options) => commands.receive(options),
+      changeVisibility: (receiptHandle, seconds) =>
+        commands.changeVisibility(receiptHandle, seconds),
+      extendVisibility: (receiptHandles, seconds) =>
+        commands.extendVisibility(receiptHandles, seconds),
+      acknowledge: async (receiptHandle) => {
+        if (!crashed) {
+          crashed = true;
+          throw new Error('simulated process crash after commit');
+        }
+        await commands.acknowledge(receiptHandle);
       },
     };
 
-    await expect(consumerWith({ faults: crashing }).pollOnce()).rejects.toThrow(
+    await expect(consumerWith({ queue: crashingBeforeAcknowledge }).pollOnce()).rejects.toThrow(
       'simulated process crash',
     );
     expect(await debitsOf(wallet.walletId)).toBe(1);

@@ -469,22 +469,27 @@ Then<WorldData>(
 When<WorldData>('altero diretamente o saldo sem inserir lançamento', async function () {
   assertReady(this);
   assertWallet(this);
-  await this.database.orm.em
-    .getConnection()
-    .execute('UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?', [
-      this.walletId,
-    ]);
-});
-Then<WorldData>(
-  'a escrita é aceita pelo esquema e o invariante fica divergente',
-  async function () {
-    assertReady(this);
-    assert.equal(await currentBalance(this), '11.00');
+  state(this).errors = [];
+  try {
     await this.database.orm.em
       .getConnection()
-      .execute('UPDATE wallets SET balance = balance - 1, version = version + 1 WHERE id = ?', [
+      .execute('UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?', [
         this.walletId,
       ]);
+  } catch (error: unknown) {
+    state(this).errors?.push(error);
+  }
+});
+Then<WorldData>(
+  'a escrita é recusada pelo trigger de saldo e o saldo permanece {string}',
+  async function (amount) {
+    assertReady(this);
+    const error = state(this).errors?.[0];
+    assert.ok(error && typeof error === 'object');
+    assert.ok('code' in error && error.code === '23514');
+    assert.ok('message' in error && error.message === 'wallet balance does not match its ledger');
+    assert.equal(state(this).errors?.length, 1);
+    assert.equal(await currentBalance(this), amount);
   },
 );
 Given<WorldData>('uma wallet com saldo {string} e lançamentos no ledger', async function (amount) {
@@ -520,24 +525,19 @@ When<WorldData>(
     }
   },
 );
-Then<WorldData>('a reconciliação reporta a divergência do lançamento', async function () {
-  assertReady(this);
-  assertWallet(this);
-  assert.equal(state(this).errors?.length, 0);
-  const queries = new WalletQueries({
-    unitOfWork: new MikroOrmFinancialUnitOfWork(this.database.orm),
-    clock: () => new Date(),
-    newId: randomUUID,
-  });
-  const report = await queries.reconcile(this.walletId);
-  assert.equal(report.consistent, false);
-  assert.equal(report.difference.toString(), '1.00');
-  await this.database.orm.em
-    .getConnection()
-    .execute('UPDATE wallets SET balance = balance - 1, version = version + 1 WHERE id = ?', [
-      this.walletId,
-    ]);
-});
+Then<WorldData>(
+  'o lançamento é recusado pelo trigger de saldo e o saldo permanece {string}',
+  async function (amount) {
+    assertReady(this);
+    assertWallet(this);
+    const error = state(this).errors?.[0];
+    assert.ok(error && typeof error === 'object');
+    assert.ok('code' in error && error.code === '23514');
+    assert.ok('message' in error && error.message === 'wallet balance does not match its ledger');
+    assert.equal(state(this).errors?.length, 1);
+    assert.equal(await currentBalance(this), amount);
+  },
+);
 When<WorldData>('concluo o cenário sem alterar a wallet', async function () {
   assertReady(this);
   assertWallet(this);
@@ -581,11 +581,13 @@ Then<WorldData>('a versão aumenta em dois e o saldo é {string}', async functio
 Given<WorldData>('uma wallet com divergência entre saldo e ledger', async function () {
   assertReady(this);
   await openWallet(this, '100.00');
-  await this.database.orm.em
-    .getConnection()
-    .execute('UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?', [
-      this.walletId,
-    ]);
+  await this.database.orm.em.fork().transactional(async (em) => {
+    await em.execute("SET LOCAL session_replication_role = 'replica'");
+    await em.execute(
+      'UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?',
+      [this.walletId],
+    );
+  });
 });
 When<WorldData>('reconcilio a wallet', async function () {
   assertReady(this);
@@ -598,17 +600,21 @@ When<WorldData>('reconcilio a wallet', async function () {
   state(this).report = await queries.reconcile(this.walletId);
 });
 Then<WorldData>('a divergência é reportada e contada sem correção automática', async function () {
+  assertReady(this);
+  assertWallet(this);
+  const walletId = this.walletId;
   const report = state(this).report;
   assert.ok(report);
   assert.equal(report.consistent, false);
   assert.equal(report.difference.toString(), '1.00');
   assert.equal(await currentBalance(this), '101.00');
-  assertReady(this);
-  await this.database.orm.em
-    .getConnection()
-    .execute('UPDATE wallets SET balance = balance - 1, version = version + 1 WHERE id = ?', [
-      this.walletId,
-    ]);
+  await this.database.orm.em.fork().transactional(async (em) => {
+    await em.execute("SET LOCAL session_replication_role = 'replica'");
+    await em.execute(
+      'UPDATE wallets SET balance = balance - 1, version = version + 1 WHERE id = ?',
+      [walletId],
+    );
+  });
 });
 Given<WorldData>('uma wallet com saldo {string} e um débito em andamento', async function (amount) {
   await openWallet(this, amount);

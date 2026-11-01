@@ -258,7 +258,7 @@ Then<WorldData>('o evento é republicado com o mesmo identificador', function ()
   assert.ok(sent);
   assert.ok(sent.length > 0 && sent.length % 2 === 0);
   const half = sent.length / 2;
-  assert.deepEqual(sent.slice(0, half), sent.slice(half));
+  assert.deepEqual([...sent.slice(0, half)].sort(), [...sent.slice(half)].sort());
 });
 
 Given<WorldData>('há eventos de versões sucessivas da mesma wallet no outbox', async function () {

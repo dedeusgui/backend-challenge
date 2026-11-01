@@ -169,16 +169,16 @@ Feature: Financeiro
     Then o banco recusa o lançamento duplicado e o saldo permanece "10.00"
 
   @financeiro @edge:LG-04
-  Scenario: Escrita direta de saldo sem lançamento é aceita pelo esquema atual (lacuna F-06)
+  Scenario: Escrita direta de saldo sem lançamento é recusada no commit
     Given uma wallet com saldo "10.00"
     When altero diretamente o saldo sem inserir lançamento
-    Then a escrita é aceita pelo esquema e o invariante fica divergente
+    Then a escrita é recusada pelo trigger de saldo e o saldo permanece "10.00"
 
   @financeiro @edge:LG-05
-  Scenario: Lançamento que não continua a cadeia é aceito pelo esquema atual
+  Scenario: Lançamento que não mantém a soma do ledger é recusado no commit
     Given uma wallet com saldo "10.00" e lançamentos no ledger
     When tento inserir um lançamento com saldo inicial diferente do saldo final anterior
-    Then a reconciliação reporta a divergência do lançamento
+    Then o lançamento é recusado pelo trigger de saldo e o saldo permanece "10.00"
 
   @financeiro @edge:LG-06
   Scenario: Saldo da wallet é igual à soma do ledger ao final do cenário

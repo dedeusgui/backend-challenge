@@ -188,6 +188,17 @@ repositório com sucesso no commit `d65a1e7`.
 
 ---
 
+## F-13 — FAILED não é alcançável por nenhum caminho de produção
+
+**Evidência.** `WagerTransaction.fail` existe e tem testes, mas nenhum código de produção o chama. Uma falha permanente de
+infraestrutura vai para a DLQ, sem linha `FAILED`. A especificação (§6.3) define FAILED como "erro permanente de
+infraestrutura (terminal, auditável)".
+
+**Situação.** O valor está na tabela de status e nas guardas, para que a regra exista. Nenhuma transação é gravada
+como FAILED hoje. **Decisão do dono do desafio:** manter FAILED como auditoria da falha permanente, o que exige gravar a
+linha num caminho que hoje só manda para a DLQ, ou remover o valor do enum e a transição. A escolha de remover é mais simples,
+e a de gravar é a que a especificação descreve.
+
 ## Execução do demo
 
 `bun run demo:finance`, contra a pilha em execução com as imagens construídas a partir do código atual (inclusive a
@@ -210,7 +221,8 @@ igual ao saldo (75,00); reconciliação consistente.
 
 ## Decisões que precisam do dono do desafio
 
+5. **F-13:** FAILED, gravar a falha permanente de infraestrutura ou remover o valor.
 1. **F-03:** a resposta 404 uniforme para transação alheia (mudança de um status documentado).
-2. **F-06:** adotar ou não os triggers de concordância, pagando ~1,8 ms de lock sob contenção.
-3. **F-10:** a leitura de D4 para ROLLBACK após desfazer REFUND.
-4. **F-11:** D1, resultado sem referência, que não pode ser limitado a um por BET.
+1. **F-06:** adotar ou não os triggers de concordância, pagando ~1,8 ms de lock sob contenção.
+1. **F-10:** a leitura de D4 para ROLLBACK após desfazer REFUND.
+1. **F-11:** D1, resultado sem referência, que não pode ser limitado a um por BET.

@@ -132,10 +132,20 @@ async function runWorkload(database: TestDatabase): Promise<Record<string, numbe
   return samples;
 }
 
-async function measureVariant(withTriggers: boolean): Promise<Record<string, number[]>> {
+/**
+ * `--guards`: the variant is the current schema (migration 10, the row guards), and the baseline is the same
+ * schema with that migration reverted. Without the flag, the variant is the ledger-agreement triggers of the
+ * experiment, applied on top of the migrations.
+ */
+const GUARDS = process.argv.includes('--guards');
+
+async function measureVariant(withVariant: boolean): Promise<Record<string, number[]>> {
   const database = await createTestDatabase({ verifyLedgerInvariant: false });
   try {
-    if (withTriggers) {
+    if (GUARDS && !withVariant) {
+      await database.orm.migrator.down();
+    }
+    if (!GUARDS && withVariant) {
       await database.orm.em.getConnection().execute(await Bun.file(EXPERIMENT_SQL).text());
     }
     return await runWorkload(database);

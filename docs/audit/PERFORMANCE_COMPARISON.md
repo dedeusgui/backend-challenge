@@ -82,6 +82,43 @@ virar migration. A decisão é do dono do desafio.
 
 ---
 
+## Experimento 1b — guardas de linha (migration 10)
+
+**Hipótese.** As guardas que leem apenas a linha alterada (imutabilidade de identidade e payload, transições de
+status copiadas da tabela de domínio, linha terminal congelada, contador de tentativas monotônico, e a regra
+de versão da wallet) não fazem nenhuma consulta. Devem custar praticamente nada no caminho crítico, diferente
+dos triggers do experimento 1, que consultam o ledger.
+
+**Método.** `bun run test/perf/ledger-trigger-cost.ts 6 --guards`. A variante é o esquema atual. A linha de base é o
+mesmo esquema sem a migration 10 (`migrator.down()`). A carga é a mesma do experimento 1, com seis rodadas que
+alternam a ordem. Os dados brutos estão em `docs/audit/perf/row-guards.json`.
+
+| Carga                   | Quantil | Sem guardas (mediana de 6) | Com guardas (mediana de 6) |        Diferença |
+| ----------------------- | ------- | -------------------------: | -------------------------: | ---------------: |
+| uma wallet, sequencial  | p50     |                    6,05 ms |                    6,14 ms | +0,09 ms (+1,6%) |
+| uma wallet, sequencial  | p95     |                    8,20 ms |                    8,51 ms | +0,31 ms (+3,8%) |
+| uma wallet, sequencial  | p99     |                   10,02 ms |                    9,83 ms | −0,19 ms (−1,8%) |
+| 120 wallets, sequencial | p50     |                    6,18 ms |                    6,17 ms | −0,01 ms (−0,2%) |
+| 120 wallets, sequencial | p95     |                    8,29 ms |                    8,37 ms | +0,08 ms (+0,9%) |
+| 120 wallets, sequencial | p99     |                    9,59 ms |                   10,12 ms | +0,54 ms (+5,6%) |
+| uma wallet, 8 workers   | p50     |                   40,39 ms |                   40,14 ms | −0,25 ms (−0,6%) |
+| uma wallet, 8 workers   | p95     |                   53,70 ms |                   54,86 ms | +1,16 ms (+2,2%) |
+| uma wallet, 8 workers   | p99     |                   68,48 ms |                   72,34 ms | +3,85 ms (+5,6%) |
+
+**Resultado.** Nas medianas, a diferença fica entre −0,6% e +1,6%. Nas caudas, as diferenças (até +5,6%) estão
+dentro da variação entre execuções medida no experimento 1, de até 8 ms no p99 do cenário concorrente. Em seis
+rodadas, nenhuma escrita da aplicação foi recusada, o que também é uma prova de que as guardas aceitam o que o
+sistema escreve.
+
+**Decisão: adotar.** O custo não é mensurável no mediano, a regra é local e não exige lock extra, e cada guarda
+corresponde a uma exigência do desafio (identidade e payload, ciclo de vida das transições, versão da wallet).
+
+**Limite.** Guardas de linha não verificam a concordância entre o saldo e o ledger, porque isso exige ler outras
+linhas. Essa parte continua na reconciliação, e a suíte mostra que uma divergência com versão consistente
+passa pela guarda e é reportada pela reconciliação.
+
+---
+
 ## Experimento 2 — custo da extensão de visibilidade por mensagem
 
 **Hipótese.** Renovar a visibilidade das mensagens que ainda esperam sua vez custa uma chamada

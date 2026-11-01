@@ -155,6 +155,19 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   database constraint: it is verified on demand by reconciliation and in every test suite. Two
   deferred triggers that would enforce it were measured and not adopted, because they extend the
   wallet lock on every commit (`docs/audit/PERFORMANCE_COMPARISON.md`, experiment 1).
+
+**Row guards (migration 10).** Checked on every update, each reading only the row being changed, so they add
+no lookup inside the wallet lock (`docs/audit/PERFORMANCE_COMPARISON.md`, experiment 1b):
+
+- `wager_transactions`: identity, payload, kind, amount and creation never change. A status changes only along
+  the lifecycle table of `src/modules/wagering/domain/wager-lifecycle.ts`, which the trigger copies. A terminal
+  transaction does not change. The reference attempt count only grows.
+- `wallets`: identity, player, currency and creation never change. The version moves exactly when the balance
+  moves, and by one (section 6.2).
+
+`test/integration/schema/row-guards.test.ts` checks every pair of statuses against the table, so a change in
+either place alone fails the suite.
+
 - `wager_transactions`: `UNIQUE (provider_id, external_transaction_id)`;
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
   `ROLLBACK` must carry a reference, a `BET` or `OPENING` must not, and a `WIN` or `LOSS` may carry one (migration 6, challenge 6.3). Status

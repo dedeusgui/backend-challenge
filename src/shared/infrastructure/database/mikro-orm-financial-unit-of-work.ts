@@ -1,4 +1,5 @@
 import type { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { MikroOrmDatabaseClock } from './mikro-orm-database-clock';
 import { MikroOrmInboxRepository } from '../../../modules/messaging/infrastructure/mikro-orm-inbox.repository';
 import { MikroOrmOutboxRepository } from '../../../modules/messaging/infrastructure/mikro-orm-outbox.repository';
 import { MikroOrmWagerTransactionRepository } from '../../../modules/wagering/infrastructure/mikro-orm-wager-transaction.repository';
@@ -28,5 +29,6 @@ function repositoriesOn(em: EntityManager): FinancialRepositories {
     wagers: new MikroOrmWagerTransactionRepository(em),
     inbox: new MikroOrmInboxRepository(em),
     outbox: new MikroOrmOutboxRepository(em),
+    databaseClock: new MikroOrmDatabaseClock(em),
   };
 }

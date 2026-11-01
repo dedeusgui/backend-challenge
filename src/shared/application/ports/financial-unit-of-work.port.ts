@@ -1,3 +1,4 @@
+import type { DatabaseClock } from './database-clock.port';
 import type { InboxRepository } from '../../../modules/messaging/application/inbox-repository.port';
 import type { OutboxRepository } from '../../../modules/messaging/application/outbox-repository.port';
 import type { WalletLedgerRepository } from '../../../modules/wallet/application/wallet-ledger-repository.port';
@@ -10,6 +11,8 @@ export interface FinancialRepositories {
   wagers: WagerTransactionRepository;
   inbox: InboxRepository;
   outbox: OutboxRepository;
+  /** The database's clock, for every time that decides when held work is due. */
+  databaseClock: DatabaseClock;
 }
 
 /**

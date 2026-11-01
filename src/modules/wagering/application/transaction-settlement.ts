@@ -190,9 +190,10 @@ export class TransactionSettlement {
     wallet: Wallet,
     options: SettlementOptions,
   ): Promise<SettlementOutcome> {
+    const now = await repositories.databaseClock.now();
     if (!options.existing) {
       transaction.markPendingReference(
-        new Date(this.context.clock().getTime() + referenceRetryDelayMs(0)),
+        new Date(now.getTime() + referenceRetryDelayMs(0)),
         wallet.balance,
       );
       await repositories.wagers.insert(transaction);
@@ -202,7 +203,7 @@ export class TransactionSettlement {
       return { transaction, balance: wallet.balance, idempotentReplay: false };
     }
 
-    const { exhausted } = transaction.recordReferenceMiss(this.context.clock());
+    const { exhausted } = transaction.recordReferenceMiss(now);
     if (exhausted) {
       this.metrics.increment('reference_exhausted_total');
       return this.reject(repositories, transaction, wallet, 'REFERENCE_NOT_FOUND', options);

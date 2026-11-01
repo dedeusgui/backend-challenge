@@ -22,6 +22,7 @@ import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructu
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { advanceOutboxClock } from '../support/outbox-clock';
+import { advanceReferenceClock } from '../support/reference-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 import { ConcurrencyConflictError } from '../../../src/shared/application/application-errors';
@@ -295,14 +296,14 @@ describe('fault injection', () => {
         externalTransactionId: 'bet-held',
       }),
     );
-    const later = new Date(NOW.getTime() + 3_600_000);
+    await advanceReferenceClock(database, 3_600_000);
     const crashing = new CrashBeforeCommit(real);
     crashing.armed = true;
 
     await expect(
       new ProcessPendingReferences({
         unitOfWork: crashing,
-        clock: () => later,
+        clock: () => new Date(),
         newId: randomUUID,
       }).runOnce(),
     ).rejects.toThrow('injected crash before commit');
@@ -317,7 +318,7 @@ describe('fault injection', () => {
 
     await new ProcessPendingReferences({
       unitOfWork: real,
-      clock: () => later,
+      clock: () => new Date(),
       newId: randomUUID,
     }).runOnce();
 

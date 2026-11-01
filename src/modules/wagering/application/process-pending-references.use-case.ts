@@ -9,7 +9,8 @@ const BATCH_SIZE = 20;
 /**
  * Re-examines held transactions whose next reference lookup is due. Each one is resolved
  * under its wallet lock and re-read there, so two workers never apply the same transaction
- * twice. The schedule lives in the database, so a restarted worker continues it.
+ * twice. The schedule lives in the database, and both the due check and the next lookup are
+ * timed on the database clock, so a worker whose own clock is skewed decides nothing by it.
  */
 export class ProcessPendingReferences {
   private readonly settlement: TransactionSettlement;
@@ -22,8 +23,11 @@ export class ProcessPendingReferences {
 
   /** Returns how many due transactions were examined in this pass. */
   async runOnce(): Promise<number> {
-    const due = await this.context.unitOfWork.run((repositories) =>
-      repositories.wagers.findDueForReferenceLookup(this.context.clock(), BATCH_SIZE),
+    const due = await this.context.unitOfWork.run(async (repositories) =>
+      repositories.wagers.findDueForReferenceLookup(
+        await repositories.databaseClock.now(),
+        BATCH_SIZE,
+      ),
     );
 
     let examined = 0;
@@ -45,7 +49,8 @@ export class ProcessPendingReferences {
       throw new WalletNotFoundError(walletId);
     }
     const transaction = await repositories.wagers.findById(transactionId);
-    if (transaction === undefined || !transaction.isDueForReferenceLookup(this.context.clock())) {
+    const now = await repositories.databaseClock.now();
+    if (transaction === undefined || !transaction.isDueForReferenceLookup(now)) {
       return 0;
     }
 

@@ -10,22 +10,27 @@ import {
 import { ProcessPendingReferences } from '../../../src/modules/wagering/application/process-pending-references.use-case';
 import { MAX_REFERENCE_ATTEMPTS } from '../../../src/modules/wagering/domain/reference-retry-policy';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
+import { advanceReferenceClock } from '../support/reference-clock';
 import { required } from '../../support/required';
 
-const T0 = new Date('2026-07-29T15:00:00.000Z');
+/**
+ * Time in these tests is the database's. A held transaction is due when its schedule, which the database
+ * wrote, has passed on the database clock. Moving time forward therefore means moving the held schedules back,
+ * with advanceReferenceClock, and not passing a clock to the workers. Assertions are about each transaction's own
+ * row, because other tests in this database leave held transactions behind.
+ */
+
 const HOUR_MS = 3_600_000;
 
 let database: TestDatabase;
-let now: Date;
+let unitOfWork: MikroOrmFinancialUnitOfWork;
 let processWager: ProcessWagerTransaction;
 let openWallet: OpenWallet;
-let unitOfWork: MikroOrmFinancialUnitOfWork;
 
 beforeAll(async () => {
   database = await createTestDatabase();
   unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
-  now = T0;
-  const dependencies = { unitOfWork, clock: () => now, newId: randomUUID };
+  const dependencies = { unitOfWork, clock: () => new Date(), newId: randomUUID };
   processWager = new ProcessWagerTransaction(dependencies);
   openWallet = new OpenWallet(dependencies);
 });
@@ -36,7 +41,7 @@ afterAll(async () => {
 
 /** A new worker instance: nothing is kept in memory, so restarts are simulated by creating one. */
 function worker(): ProcessPendingReferences {
-  return new ProcessPendingReferences({ unitOfWork, clock: () => now, newId: randomUUID });
+  return new ProcessPendingReferences({ unitOfWork, clock: () => new Date(), newId: randomUUID });
 }
 
 function command(
@@ -70,13 +75,12 @@ async function fundedWallet(amount: string): Promise<{ walletId: string; playerI
 
 async function row(externalTransactionId: string): Promise<Record<string, string | null>> {
   const rows = (await database.orm.em.getConnection().execute(
-    `SELECT status, failure_code, reference_attempts::text AS attempts, reference_next_attempt_at::text AS next_at, id::text AS id
+    `SELECT status, failure_code, reference_attempts::text AS attempts, id::text AS id,
+            EXTRACT(EPOCH FROM (reference_next_attempt_at - now()))::text AS seconds_until_next
        FROM wager_transactions WHERE provider_id = 'provider-a' AND external_transaction_id = ?`,
     [externalTransactionId],
   )) as Array<Record<string, string | null>>;
-  const found = rows[0];
-  if (!found) throw new Error(`no transaction ${externalTransactionId}`);
-  return found;
+  return required(rows[0], `the transaction ${externalTransactionId}`);
 }
 
 async function balanceOf(walletId: string): Promise<string> {
@@ -128,10 +132,9 @@ describe('pending references', () => {
       }),
     );
 
-    now = new Date(T0.getTime() + HOUR_MS);
-    const resolved = await worker().runOnce();
+    await advanceReferenceClock(database, HOUR_MS);
+    await worker().runOnce();
 
-    expect(resolved).toBe(1);
     expect((await row(refundId)).status).toBe('PROCESSED');
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
     expect(await eventsOf(held.transaction.id)).toEqual([
@@ -168,7 +171,6 @@ describe('pending references', () => {
   });
 
   test('a redelivered or resent held REFUND, and a restarted process, answer the balance it was held with', async () => {
-    now = T0;
     const wallet = await fundedWallet('100.00');
     const betId = `bet-${randomUUID()}`;
     const refund = command(wallet.playerId, wallet.walletId, {
@@ -197,7 +199,7 @@ describe('pending references', () => {
     const resent = await processWager.execute(delivery('msg-second'));
     const restarted = await new ProcessWagerTransaction({
       unitOfWork,
-      clock: () => now,
+      clock: () => new Date(),
       newId: randomUUID,
     }).execute(refund);
     for (const answer of [redelivered, resent, restarted]) {
@@ -206,7 +208,7 @@ describe('pending references', () => {
       expect(answer.balance.toString()).toBe('100.00');
     }
 
-    now = new Date(T0.getTime() + HOUR_MS);
+    await advanceReferenceClock(database, HOUR_MS);
     await worker().runOnce();
     expect((await row(refund.externalTransactionId)).status).toBe('PROCESSED');
     expect(await balanceOf(wallet.walletId)).toBe('100.00');
@@ -227,7 +229,6 @@ describe('pending references', () => {
   test('retries are scheduled with backoff and are not attempted before they are due', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;
-    now = T0;
     await processWager.execute(
       command(wallet.playerId, wallet.walletId, {
         kind: 'REFUND',
@@ -237,22 +238,25 @@ describe('pending references', () => {
       }),
     );
 
-    now = new Date(T0.getTime() + 1);
-    expect(await worker().runOnce()).toBe(0);
+    // Its first lookup is an hour away on the database clock, so a pass does not attempt it.
+    await advanceReferenceClock(database, -HOUR_MS);
+    await worker().runOnce();
     expect((await row(refundId)).attempts).toBe('0');
 
-    now = new Date(T0.getTime() + 60_000);
-    expect(await worker().runOnce()).toBe(1);
+    await advanceReferenceClock(database, 2 * HOUR_MS);
+    await worker().runOnce();
     expect((await row(refundId)).attempts).toBe('1');
-    expect(
-      new Date(String(required((await row(refundId)).next_at, 'the next attempt time'))).getTime(),
-    ).toBeGreaterThan(now.getTime());
+    // The next lookup is scheduled after the miss, on the database clock.
+    const secondsUntilNext = Number(
+      required((await row(refundId)).seconds_until_next, 'the schedule'),
+    );
+    expect(secondsUntilNext).toBeGreaterThan(0);
+    expect(secondsUntilNext).toBeLessThanOrEqual(3);
   });
 
   test('after the attempt limit the transaction is REJECTED with REFERENCE_NOT_FOUND and announced, with no balance effect', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;
-    now = T0;
     const held = await processWager.execute(
       command(wallet.playerId, wallet.walletId, {
         kind: 'REFUND',
@@ -263,7 +267,7 @@ describe('pending references', () => {
     );
 
     for (let step = 0; step < MAX_REFERENCE_ATTEMPTS + 2; step += 1) {
-      now = new Date(now.getTime() + HOUR_MS);
+      await advanceReferenceClock(database, HOUR_MS);
       await worker().runOnce();
     }
 
@@ -277,7 +281,6 @@ describe('pending references', () => {
   test('a restarted worker continues the persisted schedule instead of starting over', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;
-    now = T0;
     await processWager.execute(
       command(wallet.playerId, wallet.walletId, {
         kind: 'REFUND',
@@ -286,11 +289,11 @@ describe('pending references', () => {
         referenceExternalTransactionId: 'bet-restart',
       }),
     );
-    now = new Date(T0.getTime() + HOUR_MS);
+    await advanceReferenceClock(database, HOUR_MS);
     await worker().runOnce();
     expect((await row(refundId)).attempts).toBe('1');
 
-    now = new Date(T0.getTime() + 2 * HOUR_MS);
+    await advanceReferenceClock(database, HOUR_MS);
     await worker().runOnce();
 
     expect((await row(refundId)).attempts).toBe('2');
@@ -299,7 +302,6 @@ describe('pending references', () => {
   test('two workers resolving the same held transaction apply its effect once', async () => {
     const wallet = await fundedWallet('100.00');
     const refundId = `refund-${randomUUID()}`;
-    now = T0;
     await processWager.execute(
       command(wallet.playerId, wallet.walletId, {
         kind: 'REFUND',
@@ -316,7 +318,7 @@ describe('pending references', () => {
       }),
     );
 
-    now = new Date(T0.getTime() + HOUR_MS);
+    await advanceReferenceClock(database, HOUR_MS);
     await Promise.all([worker().runOnce(), worker().runOnce()]);
 
     expect((await row(refundId)).status).toBe('PROCESSED');
@@ -327,7 +329,6 @@ describe('pending references', () => {
   test('six workers racing over six held refunds of one wallet apply each refund exactly once', async () => {
     const wallet = await fundedWallet('100.00');
     const refunds = Array.from({ length: 6 }, (_, index) => `refund-load-${index}-${randomUUID()}`);
-    now = T0;
     for (const [index, refundId] of refunds.entries()) {
       await processWager.execute(
         command(wallet.playerId, wallet.walletId, {
@@ -348,7 +349,7 @@ describe('pending references', () => {
       );
     }
 
-    now = new Date(T0.getTime() + HOUR_MS);
+    await advanceReferenceClock(database, HOUR_MS);
     await Promise.all(Array.from({ length: 6 }, () => worker().runOnce()));
 
     for (const refundId of refunds) {

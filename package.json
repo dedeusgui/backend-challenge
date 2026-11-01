@@ -32,6 +32,9 @@
     "edge:check": "bun run edge:up && bun run test:edge; status=$?; bun run edge:down; exit $status",
     "test:infra": "bun test test/infra",
     "site:build": "bun run scripts/build-site.ts",
+    "docs:catalogos": "bun run scripts/build-catalogos.ts",
+    "graficos:build": "bun run scripts/build-graficos.ts",
+    "gate:registrar": "bun run scripts/record-gate.ts",
     "diagrams:export": "bun run scripts/export-diagrams.ts",
     "test:features": "bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'"
   },

@@ -1,6 +1,6 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { IntegrationEnvelope } from '../../../shared/domain/integration-event';
-import { OutboxMessage } from '../domain/outbox-message';
+import { OutboxMessage, retryDelayMs } from '../domain/outbox-message';
 import type { ClaimRequest, OutboxStore } from '../application/outbox-store.port';
 
 interface OutboxRow {
@@ -67,10 +67,11 @@ export class MikroOrmOutboxStore implements OutboxStore {
   async reschedule(message: OutboxMessage, token: string): Promise<boolean> {
     const rows = (await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
-          SET attempts = ?, next_attempt_at = ?, lease_token = NULL, lease_expires_at = NULL
+          SET attempts = ?, next_attempt_at = now() + make_interval(secs => ?),
+              lease_token = NULL, lease_expires_at = NULL
         WHERE id = ? AND lease_token = ?
        RETURNING id`,
-      [message.attempts, message.nextAttemptAt, message.id, token],
+      [message.attempts, retryDelayMs(message.attempts) / 1000, message.id, token],
     )) as Array<{ id: string }>;
     return rows.length === 1;
   }

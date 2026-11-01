@@ -70,9 +70,18 @@ describe('OutboxMessage due and publication', () => {
     expect(pendingOutbox().isDue(NOW)).toBe(true);
   });
 
-  test('a message scheduled in the future is not due yet', () => {
-    const outbox = pendingOutbox();
-    outbox.scheduleRetry(NOW);
+  test('a message whose next attempt is in the future is not due yet', () => {
+    const pending = pendingOutbox();
+    const outbox = OutboxMessage.rehydrate({
+      id: pending.id,
+      aggregateId: pending.aggregateId,
+      eventType: pending.eventType,
+      payload: pending.payload,
+      occurredAt: pending.occurredAt,
+      attempts: 1,
+      nextAttemptAt: new Date(NOW.getTime() + 1_000),
+      publishedAt: undefined,
+    });
 
     expect(outbox.isDue(new Date(NOW.getTime() + 500))).toBe(false);
     expect(outbox.isDue(new Date(NOW.getTime() + 1_000))).toBe(true);
@@ -99,7 +108,7 @@ describe('OutboxMessage due and publication', () => {
     const outbox = pendingOutbox();
     outbox.markPublished(NOW);
 
-    expect(domainErrorCodeOf(() => outbox.scheduleRetry(NOW))).toBe('INVALID_OUTBOX_TRANSITION');
+    expect(domainErrorCodeOf(() => outbox.recordFailedAttempt())).toBe('INVALID_OUTBOX_TRANSITION');
   });
 });
 
@@ -116,17 +125,16 @@ describe('retryDelayMs', () => {
   });
 });
 
-describe('OutboxMessage.scheduleRetry', () => {
-  test('increments attempts and postpones the next attempt by the backoff delay', () => {
+describe('OutboxMessage.recordFailedAttempt', () => {
+  test('counts each failed send, and leaves the next attempt time to the database clock', () => {
     const outbox = pendingOutbox();
+    const before = outbox.nextAttemptAt;
 
-    outbox.scheduleRetry(NOW);
-    expect(outbox.attempts).toBe(1);
-    expect(outbox.nextAttemptAt).toEqual(new Date(NOW.getTime() + 1_000));
+    outbox.recordFailedAttempt();
+    outbox.recordFailedAttempt();
 
-    outbox.scheduleRetry(NOW);
     expect(outbox.attempts).toBe(2);
-    expect(outbox.nextAttemptAt).toEqual(new Date(NOW.getTime() + 2_000));
+    expect(outbox.nextAttemptAt).toEqual(before);
   });
 });
 

@@ -108,7 +108,8 @@ export class OutboxPublisher {
         messageId: message.id,
         ...describeError(failures.get(message.id)),
       });
-      message.scheduleRetry(attemptAt);
+      // The store writes the next attempt from the database clock, so this publisher's clock does not set it.
+      message.recordFailedAttempt();
       await this.options.store.reschedule(message, token);
     }
     return published;

@@ -93,10 +93,13 @@ export class OutboxMessage {
   }
 
   /** Records a failed publication and postpones the next attempt with exponential backoff. */
-  scheduleRetry(now: Date): void {
+  /**
+   * Counts a failed send. The next attempt time is not set here: the store writes it from the database clock, as
+   * now() plus retryDelayMs(attempts), under the lease. So `nextAttemptAt` is the time as it was last read.
+   */
+  recordFailedAttempt(): void {
     this.assertPending();
     this.currentAttempts += 1;
-    this.currentNextAttemptAt = new Date(now.getTime() + retryDelayMs(this.currentAttempts));
   }
 
   private assertPending(): void {

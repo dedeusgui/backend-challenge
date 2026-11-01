@@ -1,4 +1,4 @@
-Gerado por scripts/build-catalogos.ts a partir do commit c8320ea. Não edite à mão; rode `bun run docs:catalogos`.
+Gerado por scripts/build-catalogos.ts a partir do commit d2bb451. Não edite à mão; rode `bun run docs:catalogos`.
 
 # Catálogo de configuração
 
@@ -29,7 +29,7 @@ Origem: varredura estática de `src/`. Total: 20 leituras encontradas.
 | `OUTBOX_MAX_ATTEMPTS`         | `10`                          | inteiro positivo                       | `src/config/worker-config.ts:35` |
 | `OUTBOX_RETENTION_DAYS`       | `7`                           | inteiro positivo                       | `src/config/worker-config.ts:39` |
 | `DATABASE_URL`                | -                             | obrigatória                            | `src/migrate.ts:9`               |
-| `DATABASE_URL`                | -                             | obrigatória                            | `src/auth.ts:24`                 |
+| `DATABASE_URL`                | -                             | obrigatória                            | `src/auth.ts:72`                 |
 
 ## Variáveis do Compose (`docker-compose.yml`)
 

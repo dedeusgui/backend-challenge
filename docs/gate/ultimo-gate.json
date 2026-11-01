@@ -1,14 +1,14 @@
 {
-  "recordedAt": "2026-11-01T20:40:46.191Z",
+  "recordedAt": "2026-11-01T22:17:42.145Z",
   "exitCode": 0,
   "passed": true,
   "suites": [
     {
       "key": "unit",
       "name": "Unitária",
-      "passed": 490,
+      "passed": 516,
       "failed": 0,
-      "total": 490
+      "total": 516
     },
     {
       "key": "infra",
@@ -34,9 +34,9 @@
     {
       "key": "e2e",
       "name": "E2E",
-      "passed": 100,
+      "passed": 101,
       "failed": 0,
-      "total": 100
+      "total": 101
     },
     {
       "key": "features",

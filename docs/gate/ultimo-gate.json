@@ -1,0 +1,62 @@
+{
+  "recordedAt": "2026-11-01T20:40:46.191Z",
+  "exitCode": 0,
+  "passed": true,
+  "suites": [
+    {
+      "key": "unit",
+      "name": "Unitária",
+      "passed": 490,
+      "failed": 0,
+      "total": 490
+    },
+    {
+      "key": "infra",
+      "name": "Infraestrutura",
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    {
+      "key": "integration",
+      "name": "Integração",
+      "passed": 247,
+      "failed": 0,
+      "total": 247
+    },
+    {
+      "key": "concurrency",
+      "name": "Concorrência",
+      "passed": 23,
+      "failed": 0,
+      "total": 23
+    },
+    {
+      "key": "e2e",
+      "name": "E2E",
+      "passed": 100,
+      "failed": 0,
+      "total": 100
+    },
+    {
+      "key": "features",
+      "name": "Cenários Gherkin",
+      "passed": 73,
+      "failed": 0,
+      "total": 73
+    }
+  ],
+  "cucumber": {
+    "scenarios": {
+      "total": 73,
+      "passed": 73,
+      "failed": 0
+    },
+    "steps": {
+      "total": 365,
+      "passed": 365,
+      "failed": 0,
+      "skipped": 0
+    }
+  }
+}

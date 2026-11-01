@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="384" viewBox="0 0 780 384" role="img" aria-label="Gate aprovado · exit code 0" font-family="Arial, Helvetica, sans-serif">
+<rect x="0.5" y="0.5" width="779" height="383" rx="10" fill="#ffffff" stroke="#687066"/>
+<text x="24" y="34" font-size="20" font-weight="700" fill="#1d1f1c">Gate aprovado · exit code 0</text>
+<text x="210.0" y="64.0" text-anchor="start" font-size="12" fill="#1d1f1c">Testes por suíte (total)</text>
+<path d="M 210 90 H 700 M 210 90 V 342" fill="none" stroke="#596158" stroke-width="1.2"/>
+<text x="24.0" y="116.0" text-anchor="start" font-size="12" fill="#1d1f1c">Unitária</text>
+<rect x="210" y="104" width="490" height="16" fill="#3973a5"/>
+<text x="706.0" y="116.0" text-anchor="start" font-size="11" fill="#1d1f1c">490 passou · 0 falhou</text>
+<text x="24.0" y="158.0" text-anchor="start" font-size="12" fill="#1d1f1c">Infraestrutura</text>
+<rect x="210" y="146" width="4" height="16" fill="#3973a5"/>
+<text x="220.0" y="158.0" text-anchor="start" font-size="11" fill="#1d1f1c">4 passou · 0 falhou</text>
+<text x="24.0" y="200.0" text-anchor="start" font-size="12" fill="#1d1f1c">Integração</text>
+<rect x="210" y="188" width="247" height="16" fill="#3973a5"/>
+<text x="463.0" y="200.0" text-anchor="start" font-size="11" fill="#1d1f1c">247 passou · 0 falhou</text>
+<text x="24.0" y="242.0" text-anchor="start" font-size="12" fill="#1d1f1c">Concorrência</text>
+<rect x="210" y="230" width="23" height="16" fill="#3973a5"/>
+<text x="239.0" y="242.0" text-anchor="start" font-size="11" fill="#1d1f1c">23 passou · 0 falhou</text>
+<text x="24.0" y="284.0" text-anchor="start" font-size="12" fill="#1d1f1c">E2E</text>
+<rect x="210" y="272" width="100" height="16" fill="#3973a5"/>
+<text x="316.0" y="284.0" text-anchor="start" font-size="11" fill="#1d1f1c">100 passou · 0 falhou</text>
+<text x="24.0" y="326.0" text-anchor="start" font-size="12" fill="#1d1f1c">Cenários Gherkin</text>
+<rect x="210" y="314" width="73" height="16" fill="#3973a5"/>
+<text x="289.0" y="326.0" text-anchor="start" font-size="11" fill="#1d1f1c">73 passou · 0 falhou</text>
+</svg>

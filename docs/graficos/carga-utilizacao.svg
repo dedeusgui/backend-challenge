@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="620" viewBox="0 0 920 620" role="img" aria-label="Utilização de CPU por cenário" font-family="Arial, Helvetica, sans-serif">
+<rect x="0.5" y="0.5" width="919" height="619" rx="10" fill="#ffffff" stroke="#687066"/>
+<text x="24" y="34" font-size="20" font-weight="700" fill="#1d1f1c">Utilização de CPU por cenário</text>
+<text x="330.0" y="60.0" text-anchor="start" font-size="12" fill="#1d1f1c">CPU utilizada (%)</text>
+<path d="M 330 82 H 886 M 330 82 V 576" fill="none" stroke="#596158" stroke-width="1.2"/>
+<path d="M 886.0 82 V 576" stroke="#bd5728" stroke-dasharray="5 4"/>
+<text x="886.0" y="74.0" text-anchor="middle" font-size="11" fill="#bd5728">100%</text>
+<text x="24.0" y="108.0" text-anchor="start" font-size="12" fill="#1d1f1c">1 API · 2 workers · 1 CPU</text>
+<rect x="330" y="97" width="396.23538608352646" height="14" fill="#28734b"/>
+<text x="731.2" y="108.0" text-anchor="start" font-size="11" fill="#1d1f1c">71.3%</text>
+<text x="24.0" y="146.0" text-anchor="start" font-size="12" fill="#1d1f1c">1 API · 2 workers · 2 CPU</text>
+<rect x="330" y="135" width="438.51392370683243" height="14" fill="#28734b"/>
+<text x="773.5" y="146.0" text-anchor="start" font-size="11" fill="#1d1f1c">78.9%</text>
+<text x="24.0" y="184.0" text-anchor="start" font-size="12" fill="#1d1f1c">1 API · 2 workers · 4 CPU</text>
+<rect x="330" y="173" width="291.3726411113453" height="14" fill="#28734b"/>
+<text x="626.4" y="184.0" text-anchor="start" font-size="11" fill="#1d1f1c">52.4%</text>
+<text x="24.0" y="222.0" text-anchor="start" font-size="12" fill="#1d1f1c">1 API · 2 workers · 8 CPU</text>
+<rect x="330" y="211" width="163.74317391212355" height="14" fill="#28734b"/>
+<text x="498.7" y="222.0" text-anchor="start" font-size="11" fill="#1d1f1c">29.5%</text>
+<text x="24.0" y="260.0" text-anchor="start" font-size="12" fill="#1d1f1c">2 API · 2 workers · 1 CPU</text>
+<rect x="330" y="249" width="462.5897748153086" height="14" fill="#28734b"/>
+<text x="797.6" y="260.0" text-anchor="start" font-size="11" fill="#1d1f1c">83.2%</text>
+<text x="24.0" y="298.0" text-anchor="start" font-size="12" fill="#1d1f1c">2 API · 2 workers · 2 CPU</text>
+<rect x="330" y="287" width="511.320345068247" height="14" fill="#28734b"/>
+<text x="846.3" y="298.0" text-anchor="start" font-size="11" fill="#1d1f1c">92.0%</text>
+<text x="24.0" y="336.0" text-anchor="start" font-size="12" fill="#1d1f1c">2 API · 2 workers · 4 CPU</text>
+<rect x="330" y="325" width="433.3745918600388" height="14" fill="#28734b"/>
+<text x="768.4" y="336.0" text-anchor="start" font-size="11" fill="#1d1f1c">77.9%</text>
+<text x="24.0" y="374.0" text-anchor="start" font-size="12" fill="#1d1f1c">2 API · 2 workers · 8 CPU</text>
+<rect x="330" y="363" width="228.09520815563155" height="14" fill="#28734b"/>
+<text x="563.1" y="374.0" text-anchor="start" font-size="11" fill="#1d1f1c">41.0%</text>
+<text x="24.0" y="412.0" text-anchor="start" font-size="12" fill="#1d1f1c">3 API · 1 workers · 2 CPU</text>
+<rect x="330" y="401" width="366.3777318566571" height="14" fill="#28734b"/>
+<text x="701.4" y="412.0" text-anchor="start" font-size="11" fill="#1d1f1c">65.9%</text>
+<text x="24.0" y="450.0" text-anchor="start" font-size="12" fill="#1d1f1c">3 API · 2 workers · 1 CPU</text>
+<rect x="330" y="439" width="451.9401273022254" height="14" fill="#28734b"/>
+<text x="786.9" y="450.0" text-anchor="start" font-size="11" fill="#1d1f1c">81.3%</text>
+<text x="24.0" y="488.0" text-anchor="start" font-size="12" fill="#1d1f1c">3 API · 2 workers · 2 CPU</text>
+<rect x="330" y="477" width="376.02164435224336" height="14" fill="#28734b"/>
+<text x="711.0" y="488.0" text-anchor="start" font-size="11" fill="#1d1f1c">67.6%</text>
+<text x="24.0" y="526.0" text-anchor="start" font-size="12" fill="#1d1f1c">3 API · 2 workers · 4 CPU</text>
+<rect x="330" y="515" width="468.371170413158" height="14" fill="#28734b"/>
+<text x="803.4" y="526.0" text-anchor="start" font-size="11" fill="#1d1f1c">84.2%</text>
+<text x="24.0" y="564.0" text-anchor="start" font-size="12" fill="#1d1f1c">3 API · 2 workers · 8 CPU</text>
+<rect x="330" y="553" width="349.60546409417543" height="14" fill="#28734b"/>
+<text x="684.6" y="564.0" text-anchor="start" font-size="11" fill="#1d1f1c">62.9%</text>
+</svg>

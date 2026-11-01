@@ -1,9 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "src/main.ts",
-    "src/migrate.ts",
-    "src/auth.ts",
     "src/worker.ts",
     "scripts/*.ts",
     "test/**/*.test.ts",
@@ -20,7 +17,6 @@
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"],
   "bun": true,
   "cucumber": true,
-  "ignoreDependencies": ["@mikro-orm/decorators", "@mikro-orm/nestjs"],
   "ignoreIssues": {
     "test/concurrency/support/process-cluster.ts": ["exports"],
     "test/integration/support/test-database.ts": ["exports"],

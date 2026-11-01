@@ -1,5 +1,22 @@
 import type { LedgerPage, ReconciliationReport } from '../application/wallet-queries';
 import type { Wallet } from '../domain/wallet';
+import type { OpenWalletOutcome } from '../application/open-wallet.use-case';
+
+export interface WalletResponse {
+  id: string;
+  playerId: string;
+  balance: { amount: string; currency: string };
+  version: number;
+}
+
+export function presentOpenedWallet(outcome: OpenWalletOutcome, playerId: string): WalletResponse {
+  return {
+    id: outcome.walletId,
+    playerId,
+    balance: outcome.balance.toJSON(),
+    version: outcome.version,
+  };
+}
 
 export function presentWallet(wallet: Wallet) {
   return {

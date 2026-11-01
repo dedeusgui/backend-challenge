@@ -4,15 +4,14 @@ import { parseLedgerLimit } from './ledger-query.request';
 import { OpenWallet } from '../application/open-wallet.use-case';
 import { WalletQueries, DEFAULT_LEDGER_PAGE, MAX_LEDGER_PAGE } from '../application/wallet-queries';
 import { parseOpenWalletRequest } from './open-wallet.request';
-import { presentLedgerPage, presentReconciliation, presentWallet } from './wallet.presenters';
+import {
+  presentLedgerPage,
+  presentOpenedWallet,
+  presentReconciliation,
+  presentWallet,
+  type WalletResponse,
+} from './wallet.presenters';
 import { expectUuid } from '../../../shared/validation/request-validation';
-
-export interface WalletResponse {
-  id: string;
-  playerId: string;
-  balance: { amount: string; currency: string };
-  version: number;
-}
 
 @OperatorOnly()
 @Controller('wallets')
@@ -29,12 +28,7 @@ export class WalletController {
       playerId: request.playerId,
       initialBalance: request.initialBalance,
     });
-    return {
-      id: outcome.walletId,
-      playerId: request.playerId,
-      balance: outcome.balance.toJSON(),
-      version: outcome.version,
-    };
+    return presentOpenedWallet(outcome, request.playerId);
   }
 
   @Get(':walletId')

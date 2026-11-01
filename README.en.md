@@ -523,13 +523,14 @@ The full list is in [ARCHITECTURE.en.md](ARCHITECTURE.en.md). The most important
 - **The image was not built inside the repository in this sandbox.** The sandbox's TLS proxy blocks `bun install` during
   the build. The image was built from a copy of the Dockerfile that only adds the sandbox CA, and the stack was run from
   it. See [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
-- **Interpretations of the specification that depend on the owner's confirmation** are in
+- **Interpretations of the specification confirmed on 2026-11-01** are in
   [ARCHITECTURE.en.md](ARCHITECTURE.en.md). The most consequential: an unnamed WIN does not block the REFUND of its BET.
 - **Win re-sent under a new external id.** If a provider re-sends a `WIN` with a different external id, without naming the
   BET, the balance receives a second credit. The rule and the limitation are in [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
-- **Owner decisions still open:** findings F-03, F-10 and F-13 of the adversarial audit, and decisions D1 to D5: results
-  without a reference, ROLLBACK in any state of the bet, REFUND only for a bet without a result, at most one reversal per
-  reference, and authentication by static key. See [docs/AUDITORIA_FINAL.en.md](docs/AUDITORIA_FINAL.en.md). F-06 (direct
+- **Decisions confirmed on 2026-11-01:** F-03, F-10 (D4), F-13 and D1 to D4: uniform 404 for another provider and
+  missing transactions, auditable `FAILED` and an additional event, optional result references, individual ROLLBACK with no
+  cascade, REFUND only for a PROCESSED BET with no result, and one effective reversal per reference (an additional
+  interpretation). Only D5 remains open. See [docs/AUDITORIA_FINAL.en.md](docs/AUDITORIA_FINAL.en.md). F-06 (direct
   balance write) was closed by migration 12.
 - **Grafana: not adopted in this delivery.** The Prometheus text format is already served at `GET /metrics/prometheus`,
   with no new dependency. A Grafana dashboard would require one more service, which §12 makes optional.

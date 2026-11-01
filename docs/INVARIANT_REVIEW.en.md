@@ -2,7 +2,7 @@
 
 > English reference copy. The main version, in Portuguese, is [INVARIANT_REVIEW.md](INVARIANT_REVIEW.md).
 
-> **Appendix.** The owner's review of every invariant and constraint. The decisions it asks the owner to confirm are
+> **Appendix.** The owner's review of every invariant and constraint. The decisions confirmed on 2026-11-01 are
 > listed in [ARCHITECTURE.md](../ARCHITECTURE.en.md) section 13.
 
 Reviewed before the push of this branch to `main`. The review covers every invariant of the
@@ -67,16 +67,16 @@ reasoning, which is why the full gate ran before each commit.
 These are interpretations, not facts from the specification. Each is written into ARCHITECTURE
 section 13, and each changes behaviour that a provider sees.
 
-| #   | Decision                                                                                                                         | Why                                                                                                                    | Risk if the owner disagrees                                                                                                                                            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | WIN and LOSS may name the BET they settle. The specification makes that reference optional (6.3, 7), and migration 6 follows it. | A result that names no BET cannot be checked against a REFUND or a second result.                                      | An unnamed WIN can pay a BET that was already refunded or won, and a REFUND can follow it, so both credits stay. The owner must accept that, or require the reference. |
-| D2  | ROLLBACK applies in every state of the transaction it reverses, with or without a result.                                        | The owner's decision. A ROLLBACK is the general reversal.                                                              | After a WIN, a ROLLBACK of the BET returns the stake and the WIN stays credited. A round is cancelled only when the WIN is rolled back too.                            |
-| D3  | REFUND only for a BET with no result (owner's decision).                                                                         | The owner's decision.                                                                                                  | A REFUND that arrives after a WIN is refused. A provider must send a ROLLBACK of the WIN instead.                                                                      |
-| D4  | A reference is reversed at most once, whatever the kind. Specification rule 4 says "pelo mesmo tipo de operação".                | Rule 4 read literally allows REFUND and then ROLLBACK of one BET, which credits the stake twice.                       | If the owner reads rule 4 literally, the double credit returns. It is blocked by `wager_one_processed_reversal_per_reference`.                                         |
-| D5  | Authentication is API keys with two roles, not an external identity provider. The specification expects an IdP (section 2).      | ADR 0007: a simple scheme that the project needs. A keycloak or zitadel container was judged too heavy for this build. | Keys do not expire, rotate on a schedule, or travel over TLS in this build. A production deployment needs the IdP the specification suggests.                          |
-| D6  | A currency or player mismatch is a persisted REJECTED row, checked only by the domain.                                           | Auditability (ARCHITECTURE section 13). A foreign key would refuse the row.                                            | A writer that bypasses the domain could store a mismatched row without a rejection code. No such writer exists in the code.                                            |
+| #   | Decision                                                                                                                                        | Why                                                                                                                              | Risk if the owner disagrees                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | WIN and LOSS may omit a reference; if they name a BET, they validate the full context. The specification makes the reference optional (6.3, 7). | Association is not inferred from roundId or a heuristic. An unreferenced WIN does not demonstrate settlement uniqueness per BET. | Confirmed on 2026-11-01. An unreferenced WIN cannot be linked to the BET or prove settlement uniqueness per BET.                                                                            |
+| D2  | ROLLBACK applies in every state of the transaction it reverses, with or without a result.                                                       | Confirmed on 2026-11-01: ROLLBACK is an individual transaction reversal.                                                         | After a WIN, a ROLLBACK of the BET returns the stake and the WIN stays credited. This economic effect was accepted on 2026-11-01; the WIN needs its own ROLLBACK, with no implicit cascade. |
+| D3  | REFUND only for a PROCESSED BET with no result; refused after WIN, LOSS or conflicting reversal. BET does not reopen after reversing REFUND.    | Confirmed on 2026-11-01.                                                                                                         | A provider sends a ROLLBACK of the WIN instead.                                                                                                                                             |
+| D4  | A reference admits at most one effective reversal, whatever its kind. Specification rule 4 says "pelo mesmo tipo de operação".                  | Rule 4 read literally allows REFUND and then ROLLBACK of one BET, which credits the stake twice.                                 | If the owner reads rule 4 literally, the double credit returns. It is blocked by `wager_one_processed_reversal_per_reference`.                                                              |
+| D5  | Authentication is API keys with two roles, not an external identity provider. The specification expects an IdP (section 2).                     | ADR 0007: a simple scheme that the project needs. A keycloak or zitadel container was judged too heavy for this build.           | Keys do not expire, rotate on a schedule, or travel over TLS in this build. A production deployment needs the IdP the specification suggests.                                               |
+| D6  | A currency or player mismatch is a persisted REJECTED row, checked only by the domain.                                                          | Auditability (ARCHITECTURE section 13). A foreign key would refuse the row.                                                      | A writer that bypasses the domain could store a mismatched row without a rejection code. No such writer exists in the code.                                                                 |
 
-**Re-evaluation of D2, D3 and D4 (this review).** Each one was checked against the code and the tests,
+**Re-evaluation of D2, D3 and D4 (this review).** Each one was checked against the code and tests and confirmed on 2026-11-01,
 and against the global invariant that no credit is duplicated.
 
 - **D4, once per reference.** Kept. Read literally, rule 4 allows a REFUND and then a ROLLBACK of one
@@ -87,12 +87,10 @@ and against the global invariant that no credit is duplicated.
 - **D3, a REFUND only for a BET with no result.** Kept, and now enforced by the database as well
   (migration 8). A refund and a result cannot both be processed for one BET, in either order. The
   reverse order (a WIN after a refund) is refused by the reversal rule.
-- **D2, a ROLLBACK in every state.** Kept as recorded, but its economic effect needs the owner's
-  decision. After a WIN, rolling back the BET returns the stake and keeps the win, so the player keeps
+- **D2, a ROLLBACK in every state.** Kept as recorded, and its economic effect was accepted on 2026-11-01. After a WIN, rolling back the BET returns the stake and keeps the win, so the player keeps
   both. No credit is duplicated by identity or by amount: the stake returns once (D4), and the win is
   credited once. The alternative is to refuse a ROLLBACK of a BET that has a processed WIN, so that the
-  provider rolls back the WIN first, as D3 does for refunds. That changes behaviour, so it was not made
-  without the owner.
+  provider rolls back the WIN first, as D3 does for refunds. The 2026-11-01 confirmation accepts this effect: an individual reversal, with no implicit cascade.
 
 The duplicate-credit paths that remain are the unnamed WIN (D1): a WIN that names no BET can be
 credited again when the provider resends it under a new external id. That is by design, because each
@@ -239,22 +237,22 @@ Not enforced by the database, and why:
 
 ## 5. Decisions
 
-| Decision                                                                  | Where                | Status                                                                       |
-| ------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------- |
-| ADR 0001: pessimistic row lock on the wallet                              | `docs/adr/0001`      | Implemented. Tested by the hot-wallet suites                                 |
-| ADR 0002: money as a decimal string, `NUMERIC(20,2)`                      | `docs/adr/0002`      | Implemented. `Money` is precision 40                                         |
-| ADR 0003: idempotency scope and payload hash                              | `docs/adr/0003`      | Implemented. Golden hash test                                                |
-| ADR 0004: outbox with claim and lease, at-least-once                      | `docs/adr/0004`      | Implemented. Tested by the outbox and three-process suites                   |
-| ADR 0005: hold for missing references, with bounded retries               | `docs/adr/0005`      | Implemented. Six attempts; delay capped at five minutes (tested)             |
-| ADR 0006: authentication deferred                                         | `docs/adr/0006`      | Superseded by ADR 0007                                                       |
-| ADR 0007: API keys, two roles, provider scope                             | `docs/adr/0007`      | Implemented. Decision D5 is open for the owner                               |
-| ARCHITECTURE section 13: one reversal per reference (D4)                  | `ARCHITECTURE.md`    | Implemented. Stricter than spec rule 4. Owner to confirm                     |
-| Section 13: WIN and LOSS may name their BET (D1)                          | `ARCHITECTURE.md`    | Implemented as the specification says. Owner to confirm the unnamed-WIN risk |
-| Section 13: one result per BET, REFUND only without a result (D3)         | `ARCHITECTURE.md`    | Implemented. Owner's decision                                                |
-| Section 13: ROLLBACK in every state (D2)                                  | `ARCHITECTURE.md`    | Implemented. Owner's decision. Economic effect to confirm                    |
-| Section 13: player and currency mismatch is a persisted REJECTED row (D6) | `ARCHITECTURE.md`    | Implemented                                                                  |
-| Section 13: OPENING under the internal provider id `system`               | `ARCHITECTURE.md`    | Implemented                                                                  |
-| Compose restarts api and worker (not covered by a test)                   | `docker-compose.yml` | Configuration only. Checked with `docker compose config`                     |
+| Decision                                                                  | Where                | Status                                                                                            |
+| ------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| ADR 0001: pessimistic row lock on the wallet                              | `docs/adr/0001`      | Implemented. Tested by the hot-wallet suites                                                      |
+| ADR 0002: money as a decimal string, `NUMERIC(20,2)`                      | `docs/adr/0002`      | Implemented. `Money` is precision 40                                                              |
+| ADR 0003: idempotency scope and payload hash                              | `docs/adr/0003`      | Implemented. Golden hash test                                                                     |
+| ADR 0004: outbox with claim and lease, at-least-once                      | `docs/adr/0004`      | Implemented. Tested by the outbox and three-process suites                                        |
+| ADR 0005: hold for missing references, with bounded retries               | `docs/adr/0005`      | Implemented. Six attempts; delay capped at five minutes (tested)                                  |
+| ADR 0006: authentication deferred                                         | `docs/adr/0006`      | Superseded by ADR 0007                                                                            |
+| ADR 0007: API keys, two roles, provider scope                             | `docs/adr/0007`      | Implemented. Decision D5 is open for the owner                                                    |
+| ARCHITECTURE section 13: one reversal per reference (D4)                  | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01; additional interpretation to rule 4                         |
+| Section 13: WIN and LOSS may name their BET (D1)                          | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01; an unreferenced WIN does not demonstrate uniqueness per BET |
+| Section 13: one result per BET, REFUND only without a result (D3)         | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01                                                              |
+| Section 13: ROLLBACK in every state (D2)                                  | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01. Economic effect to confirm                                  |
+| Section 13: player and currency mismatch is a persisted REJECTED row (D6) | `ARCHITECTURE.md`    | Implemented                                                                                       |
+| Section 13: OPENING under the internal provider id `system`               | `ARCHITECTURE.md`    | Implemented                                                                                       |
+| Compose restarts api and worker (not covered by a test)                   | `docker-compose.yml` | Configuration only. Checked with `docker compose config`                                          |
 
 ## 6. Gaps that remain, and what they mean
 

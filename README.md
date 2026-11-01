@@ -517,13 +517,14 @@ A lista completa está em [ARCHITECTURE.md](ARCHITECTURE.md). As mais importante
 - **A imagem não foi construída dentro do repositório nesta sandbox.** O proxy TLS da sandbox impede o `bun install`
   no build. A imagem foi construída a partir de uma cópia do Dockerfile que só acrescenta a CA da sandbox, e a stack foi
   executada a partir dela. Ver [ARCHITECTURE.md](ARCHITECTURE.md).
-- **Interpretações do enunciado que dependem de confirmação do dono** estão em [ARCHITECTURE.md](ARCHITECTURE.md). A mais
+- **Interpretações do enunciado confirmadas em 2026-11-01** estão em [ARCHITECTURE.md](ARCHITECTURE.md). A mais
   consequente: um `WIN` sem referência não bloqueia o `REFUND` da sua `BET`.
 - **Ganho reenviado sob outro id externo.** Se o provedor reenvia um `WIN` com outro id externo, sem nomear a BET, o
   saldo recebe um segundo crédito. A regra e a limitação estão em [ARCHITECTURE.md](ARCHITECTURE.md).
-- **Decisões em aberto, de responsabilidade do dono do desafio:** os achados F-03, F-10 e F-13 da auditoria adversarial,
-  e as decisões D1 a D5: resultados sem referência, ROLLBACK em qualquer estado da aposta, REFUND só para aposta sem
-  resultado, uma reversão no máximo por referência e autenticação por chave estática. Ver
+- **Decisões confirmadas em 2026-11-01:** F-03, F-10 (D4), F-13 e D1 a D4: 404 uniforme para transação de outro provedor e
+  transação inexistente, `FAILED` auditável e evento adicional, resultados com referência opcional, ROLLBACK individual sem
+  cascata, REFUND só para BET PROCESSED sem resultado e uma reversão efetiva por referência (interpretação adicional).
+  Apenas D5 permanece aberta. Ver
   [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md). O F-06 (escrita direta de saldo) foi fechado pela migração 12.
 - **Grafana: não adotado nesta entrega.** O formato texto do Prometheus já está em `GET /metrics/prometheus`, sem
   dependência nova. Um painel Grafana exigiria um serviço a mais, que a §12 torna opcional.

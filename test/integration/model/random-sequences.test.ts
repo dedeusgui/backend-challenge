@@ -135,14 +135,14 @@ function sequenceFor(
   return commands;
 }
 
-async function openWallets(count: number, initial: string): Promise<Wallet[]> {
+async function openWallets(howMany: number, initial: string): Promise<Wallet[]> {
   const opener = new OpenWallet({
     unitOfWork: new MikroOrmFinancialUnitOfWork(database.orm),
     clock: () => clock,
     newId: randomUUID,
   });
   const opened: Wallet[] = [];
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < howMany; index += 1) {
     const playerId = `player-${randomUUID()}`;
     const { walletId } = await opener.execute({
       playerId,

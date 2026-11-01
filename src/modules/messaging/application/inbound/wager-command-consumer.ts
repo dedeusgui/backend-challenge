@@ -199,6 +199,6 @@ export function deadLetterDeduplicationId(body: string): string {
 }
 
 /** Exponential backoff for redelivery: 2 s, 4 s, 8 s, ... capped at 5 minutes. */
-export function retryDelaySeconds(receiveCount: number): number {
+function retryDelaySeconds(receiveCount: number): number {
   return Math.min(2 ** receiveCount, MAX_RETRY_DELAY_SECONDS);
 }

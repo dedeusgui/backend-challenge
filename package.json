@@ -12,7 +12,7 @@
     "test:unit": "bun test test/unit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit",
+    "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit && bun run arch:check",
     "infra:up": "docker compose up -d --wait postgres localstack",
     "test:integration": "bun test test/integration",
     "check:all": "bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features",
@@ -36,7 +36,9 @@
     "graficos:build": "bun run scripts/build-graficos.ts",
     "gate:registrar": "bun run scripts/record-gate.ts",
     "diagrams:export": "bun run scripts/export-diagrams.ts",
-    "test:features": "bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'"
+    "test:features": "bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs src",
+    "deadcode:check": "knip"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1125.0",
@@ -56,6 +58,8 @@
     "@cucumber/cucumber": "^13.3.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^24.0.0",
+    "dependency-cruiser": "^18.7.0",
+    "knip": "^6.44.1",
     "oxlint": "^1.90.0",
     "prettier": "^3.6.2",
     "typescript": "^6.0.2"

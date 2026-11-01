@@ -38,6 +38,18 @@ Distributed Wagering Processor. Read `ARCHITECTURE.md` before changing financial
 - Do not rewrite history that has been pushed. Amending your own unpushed commit is fine.
 - Never commit `.env`, credentials or generated snapshots.
 
+## Delegation (Orca)
+
+- Implementation, review and fork reading run as Codex workers through Orca (`gpt-6-luna`), not
+  as Claude subagents. Claude's budget is the scarce one. Check the commands with the `orca-cli`
+  and `orchestration` skills before each use.
+- A parallel worker gets its own worktree and branch. The coordinator integrates its commit, runs
+  `bun run check:all` and only then accepts it. Workers do not push.
+- When a worker has reported and its result is integrated, close its terminal. Confirm first with
+  `orca worktree ps --json`: the agent's `state` must be `done`. Then run
+  `orca terminal close --terminal <handle> --json`, one terminal at a time. Never close a terminal
+  whose agent is `working`, nor the coordinator's own terminal.
+
 ## Known constraints
 
 - The sandbox TLS proxy blocks package downloads during a Docker build. Verify the image with

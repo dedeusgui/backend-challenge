@@ -84,4 +84,28 @@ describe('worker HTTP surface', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('content-type')).toContain('application/json');
   });
+
+  test('a failure inside the surface is a 500 with a generic body, and the reason stays out of the response', async () => {
+    const failing = new MetricsRegistry();
+    failing.snapshot = () => {
+      throw new Error('internal detail that must not leak');
+    };
+    const { baseUrl } = start(failing);
+
+    const reply = await fetch(`${baseUrl}/metrics`);
+    const text = await reply.text();
+
+    expect(reply.status).toBe(500);
+    expect(JSON.parse(text)).toEqual({
+      error: { code: 'INTERNAL_ERROR', message: 'Unexpected failure' },
+    });
+    expect(text).not.toContain('internal detail');
+  });
+
+  test('a HEAD request answers the same status as a GET, with no body', async () => {
+    const { baseUrl } = start();
+    const reply = await fetch(`${baseUrl}/health/live`, { method: 'HEAD' });
+    expect(reply.status).toBe(200);
+    expect(await reply.text()).toBe('');
+  });
 });

@@ -67,6 +67,23 @@ As migrações são versionadas e reversíveis: as 12 têm `up` e `down`, e o te
 
 ## Por onde começar (avaliador)
 
+A tabela segue os critérios do enunciado (§14). Cada área aponta para a prova e para o comando que a reproduz.
+
+| Área (pontos)                 | Onde a solução responde                                                              | Como verificar                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Correção financeira (20)      | `Money` em decimal, saldo versionado, ledger imutável, reconciliação                 | `bun run demo:finance`; [Garantias](#garantias)                                             |
+| Concorrência (20)             | trava de linha por carteira, versão como guarda, processos reais                     | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`           |
+| Idempotência (15)             | chave única por provedor no banco, replay pelo estado persistido                     | `test/integration/messaging/duplicate-deliveries.test.ts`                                   |
+| Mensageria e falhas (15)      | outbox na mesma transação, inbox, DLQ, lease, morte de processo                      | `test/concurrency/process-crash-and-shutdown.test.ts`, `test/integration/faults`            |
+| Modelagem e arquitetura (10)  | domínio sem NestJS, MikroORM nem AWS; invariantes nas entidades                      | [ARCHITECTURE.md](ARCHITECTURE.md), §1 e §2                                                 |
+| Testes (10)                   | PostgreSQL e LocalStack reais, sem mock de banco nem de fila                         | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), `bun run check:all`                         |
+| Observabilidade (5)           | logs JSON com `correlationId`, `/metrics` por processo, saúde de vida e de prontidão | [ARCHITECTURE.md §11](ARCHITECTURE.md), `GET /health/ready`                                 |
+| Documentação (5)              | este README, ARCHITECTURE, DECISIONS e o guia do avaliador                           | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md)                                            |
+| Autenticação (não pontua, §2) | chaves de API com papéis e escopo de provedor; a escolha está documentada            | [ARCHITECTURE.md §12](ARCHITECTURE.md), [ADR 0007](docs/adr/0007-api-key-authentication.md) |
+| Diferencial: teste de carga   | duas campanhas, em dois ambientes, com correção e latência                           | [Evidências de desempenho](#evidências-de-desempenho)                                       |
+
+Depois, nesta ordem:
+
 1. **Rode a stack** (seção seguinte) e faça a demonstração financeira: `bun run demo:finance`.
 2. **Leia o guia do avaliador:** [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), com o caminho de leitura de
    aproximadamente 40 minutos, o que cada teste prova e o que não prova.
@@ -157,6 +174,28 @@ Além de provar a integridade financeira sob concorrência, o projeto mede desem
 **carga aberta, limites explícitos e reconciliação de todas as carteiras**. Os resultados
 abaixo são de execuções registradas, não de uma estimativa de capacidade em produção.
 
+### Dois baselines, dois ambientes
+
+Eu, Guilherme de Deus, medi o baseline local na minha máquina. A nuvem foi medida em uma VM do ambiente de nuvem do
+Claude Code, por um agente. As versões de software são as mesmas (Bun 1.4.4, PostgreSQL 17 e LocalStack 4.14), mas as
+máquinas não são. Por isso os números servem para ler a tendência dentro de cada ambiente, não para dizer que um é
+melhor que o outro.
+
+| Item          | Baseline local (minha máquina)                                   | Baseline de nuvem (VM do Claude Code)                        |
+| ------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| Quem mediu    | Guilherme de Deus, na própria máquina                            | Um agente do Claude Code, no ambiente de nuvem               |
+| Processador   | AMD Ryzen 7 7735HS, 8 núcleos e 16 threads (SMT)                 | Intel Xeon @ 2,10 GHz, 4 vCPUs                               |
+| Memória       | 22 GiB                                                           | 15,7 GiB                                                     |
+| Sistema       | Linux 7.2.6                                                      | Linux 6.18.44                                                |
+| Docker        | 29.9.2                                                           | não registrado no relatório                                  |
+| Topologia     | 1 a 3 APIs, 1 ou 2 workers                                       | 3 APIs, 2 workers                                            |
+| CPUs da stack | 1, 2, 4 e 8                                                      | 1, 2 e 4                                                     |
+| Gerador       | nas CPUs livres; as CPUs `n` e `n+1` são threads do mesmo núcleo | nas CPUs livres; com 4 CPUs na stack, divide as CPUs com ela |
+| Registros     | [docs/load/local/](docs/load/local/)                             | [docs/load/results/](docs/load/results/)                     |
+| Relatório     | [LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md)              | [LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)            |
+
+### Baseline de nuvem: 1, 2 e 4 CPUs
+
 | CPUs destinadas à stack | Maior taxa que passou todos os limites | Próximo degrau                             |
 | ----------------------: | -------------------------------------: | ------------------------------------------ |
 |                       1 |                              100 req/s | 125 req/s: falhou por latência             |
@@ -174,7 +213,9 @@ o p99 caiu de **120/134 ms** (duas execuções da versão inicial) para **31/32 
 não isola o efeito de uma única mudança, mas os arquivos permitem auditar os dois
 estados e repetir o experimento.
 
-**Baseline local, com 13 cenários.** Medido nesta máquina, com a stack em 1, 2, 4 ou 8 CPUs, de 1 a 3 APIs e 1 ou 2
+### Baseline local: 13 cenários
+
+Medido na minha máquina, com a stack em 1, 2, 4 ou 8 CPUs, de 1 a 3 APIs e 1 ou 2
 workers. Cada cenário é uma pasta em `docs/load/local/`. A taxa acordada é a maior que passou todos os limites; a
 primeira falha é o primeiro degrau da rampa que não passou. O p99 é do passo acordado, e a utilização é a CPU líquida
 da stack dividida pelas CPUs destinadas a ela.
@@ -212,6 +253,21 @@ não é melhoria, porque as máquinas são diferentes. Método, leitura e limite
 [histórico dos experimentos pareados](docs/LOAD_TEST_HISTORY.md) e
 [registros JSON das execuções](docs/load/). São medições com LocalStack, não AWS SQS;
 não há soak test prolongado nem SLO de produção validado.
+
+## Referências consultadas
+
+Três implementações públicas do mesmo desafio foram lidas. As suítes delas não foram executadas. A comparação completa
+está em [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md).
+
+- **Adotado:** lease no outbox com `FOR UPDATE SKIP LOCKED`, com o envio fora da transação de reivindicação
+  (paulovitorlr); trava pessimista por carteira (as três).
+- **Não adotado:** enviar à fila dentro da transação do outbox, que segura uma conexão e uma trava de linha durante a
+  chamada ao broker (AndreLopes30); Keycloak e painéis de Prometheus e Grafana (eriksonwilliam). O desafio sugere
+  Keycloak; esta solução usa chaves de API, por decisão registrada no [ADR 0007](docs/adr/0007-api-key-authentication.md).
+- **Diferente:** dinheiro como `decimal.js` com `NUMERIC(20,2)`. Duas referências usam inteiros de unidades fracionárias
+  (`bigint`) no domínio. O [ADR 0002](docs/adr/0002-money-representation.md) explica a escolha.
+- **Além das referências:** dois workers disputando uma carteira, com um deles encerrado no meio da disputa
+  (`test/concurrency/distributed-contention.test.ts`).
 
 ## Testes
 
@@ -289,6 +345,10 @@ A lista completa está em [ARCHITECTURE.md §14](ARCHITECTURE.md). As mais impor
 - **Interpretações do enunciado que dependem de confirmação do dono** estão em
   [ARCHITECTURE.md §13](ARCHITECTURE.md). A mais consequente: um `WIN` sem referência não bloqueia o `REFUND` da
   sua `BET`.
+- **Ganho reenviado sob outro id externo.** Se o provedor reenvia um `WIN` com outro id externo, sem nomear a BET, o
+  saldo recebe um segundo crédito. A regra e a limitação estão em [ARCHITECTURE.md §7 e §14](ARCHITECTURE.md).
+- **Decisões do dono pendentes:** os achados F-03, F-06, F-10 e F-13 da auditoria adversarial.
+  Ver [AUDITORIA_FINAL.md §4](docs/AUDITORIA_FINAL.md).
 
 ## Estrutura do repositório
 
@@ -325,11 +385,14 @@ docs/                     guias, matriz, ADRs, contrato OpenAPI, relatórios de 
 - [ARCHITECTURE.md](ARCHITECTURE.md): arquitetura técnica atual, decisões, limitações.
 - [DECISIONS.md](DECISIONS.md): cada decisão com seus casos e evidências.
 - [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md): requisito a teste.
-- [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): auditoria desta rodada, com o que foi validado e o que ficou de fora.
+- [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): auditoria final, com a situação de cada item e as decisões do dono.
+- [docs/audit/README.md](docs/audit/README.md): auditoria adversarial, com 15 achados e a prova de cada garantia.
+- [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md): comparação com três implementações públicas do mesmo desafio.
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): o que cada suíte prova e o que não substitui.
 - [docs/openapi.json](docs/openapi.json): contrato HTTP.
 - [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), [docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md) e [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.
 - [docs/DOMAIN_GLOSSARY.md](docs/DOMAIN_GLOSSARY.md): glossário do domínio.
 - [docs/adr/README.md](docs/adr/README.md): índice das decisões registradas.
 - [docs/CHALLENGE.md](docs/CHALLENGE.md): o enunciado, sem alterações.
-- Vitrine estática: `bun run site:build` gera `site/`, uma página que não depende de serviço. A publicação no GitHub Pages está preparada em `.github/workflows/pages.yml`, e depende de uma configuração do repositório; ver [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md).
+- Vitrine estática publicada em https://dedeusgui.github.io/backend-challenge/ (HTTP 200, verificado em 2026-11-01).
+  Ela é gerada por `bun run site:build` a partir dos arquivos do repositório, e não depende de serviço.

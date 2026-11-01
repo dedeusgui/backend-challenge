@@ -15,6 +15,10 @@ A demonstração abre uma carteira com 100.00, faz uma aposta, um ganho, outra a
 rollback do ganho. Ela confere cada saldo, recusa um segundo rollback, repete uma aposta como replay, e compara a soma
 do ledger com o saldo e com a reconciliação. Cada passo imprime o que foi observado. Ela não simula nada: chama a API.
 
+Se `docker compose up --build` falhar num ambiente com proxy TLS que bloqueia o download de pacotes durante o build,
+o problema é do ambiente, não da aplicação. A imagem também é construída pelo CI (execução `41251559996`), e
+[ARCHITECTURE.md §14](../ARCHITECTURE.md) descreve o contorno usado na sandbox.
+
 ## 2. Ler a arquitetura, pela tabela de decisões (5 min)
 
 [ARCHITECTURE.md](../ARCHITECTURE.md), a tabela no início. Cada decisão tem o motivo, o custo aceito, o teste que a
@@ -30,7 +34,8 @@ bun run check:all
 
 `check:all` roda tipos, lint, formato, os testes unitários, o teste de infraestrutura, a integração, a concorrência e
 o e2e, contra PostgreSQL 17 e LocalStack reais. Os números de cada suíte mudam conforme você adiciona testes; o gate
-exige que todos passem.
+exige que todos passem. Neste ambiente, as suítes levaram cerca de 100 s: unitários 6 s, integração 61 s, concorrência
+26 s e e2e 3 s, sem contar a subida da infraestrutura.
 
 ## 4. Os três testes que mais importam (5 min)
 
@@ -41,7 +46,7 @@ exige que todos passem.
 | Worker morto depois do commit e antes do ACK     | `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"` | a reentrega aplica uma vez; saldo e ledger batem       |
 
 Para ver que os testes de concorrência não estão vazios, veja as mutações registradas em
-[REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md): removendo a trava ou a guarda de versão, o teste falha.
+[TEST_STRATEGY.md](TEST_STRATEGY.md), na seção "Evidência de mutação": removendo a trava ou a guarda de versão, o teste falha.
 
 Para qualquer outra garantia, o índice [audit/README.md](audit/README.md) aponta o teste que a prova.
 
@@ -100,15 +105,16 @@ Desde esta rodada, o lease e o reagendamento do outbox são decididos pelo reló
   dão.
 - **Comparação com as referências públicas.** Não reexecutada nesta sessão. Os números em `docs/LOAD_TEST_RESULTS.md`
   são de execuções anteriores, em uma VM de quatro vCPUs, e não devem ser comparados com outra máquina sem aviso.
-- **Medição local.** A linha de base em `docs/LOAD_TEST_BASELINE.md` mede 13 cenários nesta máquina, com as taxas
+- **Medição local.** A linha de base em `docs/LOAD_TEST_BASELINE.md` mede 13 cenários na minha máquina, com as taxas
   acordadas e a correção em cada passo. Não deve ser lida como melhoria em relação à nuvem: são máquinas diferentes.
 
 ## 10. Limites conhecidos
 
 A lista completa está em [ARCHITECTURE.md §14](../ARCHITECTURE.md). Os que mais pesam numa decisão de produção:
 chaves de API sem rotação nem login; HTTP simples atrás de TLS a ser colocado; ausência de limite de taxa no modo
-padrão; um `WIN` sem referência que não bloqueia o `REFUND` da sua aposta; um `REFUND` que não é deduplicado entre
-chaves diferentes com ids diferentes.
+padrão; um `WIN` sem referência que não bloqueia o `REFUND` da sua aposta; um `WIN` reenviado sob outro id externo, sem
+nomear a BET, é contado como segundo crédito. Uma segunda liquidação da mesma BET é recusada com
+`REFERENCE_ALREADY_SETTLED`.
 
 - Uma mensagem em voo que roda além de 300 s é liberada, e dois consumidores podem processar o mesmo comando ao mesmo
   tempo. A identidade da transação mantém o efeito em um (`slow-message-hold.test.ts`).

@@ -56,6 +56,23 @@ The migrations are versioned and reversible: all 12 have `up` and `down`, and th
 
 ## Reading order
 
+The table follows the evaluation criteria of the specification (§14). Each area points to its proof and to the command that reproduces it.
+
+| Area (points)                   | Where the solution answers                                                              | How to check                                                                                                 |
+| ------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Financial correctness (20)      | `Money` as decimal, versioned balance, immutable ledger, reconciliation                 | `bun run demo:finance`; `test/unit/shared/domain/money.test.ts`                                              |
+| Concurrency (20)                | per-wallet row lock, version as guard, real processes                                   | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`                            |
+| Idempotency (15)                | one key per provider in the database, replay from persisted state                       | `test/integration/messaging/duplicate-deliveries.test.ts`                                                    |
+| Messaging and failures (15)     | outbox in the same transaction, inbox, DLQ, lease, process death                        | `test/concurrency/process-crash-and-shutdown.test.ts`, `test/integration/faults`                             |
+| Modelling and architecture (10) | domain without NestJS, MikroORM or AWS; invariants in the entities                      | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), sections 1 and 2                                                   |
+| Tests (10)                      | real PostgreSQL and LocalStack, no mock of the database or the queue                    | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.en.md), `bun run check:all`                                       |
+| Observability (5)               | JSON logs with `correlationId`, `/metrics` per process, separate liveness and readiness | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), section 11; `GET /health/ready`                                    |
+| Documentation (5)               | this README, ARCHITECTURE, DECISIONS and the reviewer guide                             | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) (Portuguese)                                                |
+| Authentication (not scored, §2) | API keys with roles and provider scope; the choice is documented                        | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), section 12; [ADR 0007](docs/adr/0007-api-key-authentication.en.md) |
+| Differentiator: load test       | two campaigns, in two environments, with correctness and latency                        | [Test](#test)                                                                                                |
+
+Then, in this order:
+
 1. **This README**: how to run and test the service.
 2. **[ARCHITECTURE.md](ARCHITECTURE.en.md)**: the flow, the main decisions (the table at its start
    gives each one with its reason and its evidence), and the limitations in section 14.
@@ -149,9 +166,51 @@ The load test pins the stack to a number of CPUs and ramps the request rate in s
 results are in `docs/LOAD_TEST_RESULTS.md`, and the local baseline with 13 scenarios is in
 `docs/LOAD_TEST_BASELINE.en.md`. The numbers describe the machine that ran them.
 
+### Two baselines, two environments
+
+I, Guilherme de Deus, measured the local baseline on my own machine. The cloud runs were measured on a VM of the Claude
+Code cloud environment, by an agent. The software versions are the same (Bun 1.4.4, PostgreSQL 17 and LocalStack 4.14),
+but the machines are not. So the numbers show the trend within each environment, not that one is better than the other.
+
+| Item        | Local baseline (my machine)                                       | Cloud baseline (Claude Code VM)                                        |
+| ----------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Measured by | Guilherme de Deus, on his own machine                             | An agent of Claude Code, in the cloud environment                      |
+| Processor   | AMD Ryzen 7 7735HS, 8 cores and 16 threads (SMT)                  | Intel Xeon @ 2.10 GHz, 4 vCPUs                                         |
+| Memory      | 22 GiB                                                            | 15.7 GiB                                                               |
+| System      | Linux 7.2.6                                                       | Linux 6.18.44                                                          |
+| Docker      | 29.9.2                                                            | not recorded in the report                                             |
+| Topology    | 1 to 3 APIs, 1 or 2 workers                                       | 3 APIs, 2 workers                                                      |
+| Stack CPUs  | 1, 2, 4 and 8                                                     | 1, 2 and 4                                                             |
+| Generator   | on the free CPUs; CPUs `n` and `n+1` are threads of the same core | on the free CPUs; with 4 stack CPUs, it shares the CPUs with the stack |
+| Records     | [docs/load/local/](docs/load/local/)                              | [docs/load/results/](docs/load/results/)                               |
+| Report      | [LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md)         | [LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)                      |
+
+### Cloud VM results: 1, 2 and 4 CPUs
+
+The project measures performance with an open load, explicit limits and reconciliation of every wallet, beyond
+proving financial integrity under concurrency. The results below come from recorded runs, not from a production
+capacity estimate.
+
+| CPUs given to the stack | Highest rate that passed every limit | Next step                                 |
+| ----------------------: | -----------------------------------: | ----------------------------------------- |
+|                       1 |                            100 req/s | 125 req/s: failed on latency              |
+|                       2 |                            200 req/s | 300 req/s: failed on latency              |
+|                       4 |                            400 req/s | Not measured: the ramp ended at 400 req/s |
+
+Each step lasted 20 seconds. To pass, a step had to meet, at the same time, p95 ≤ 500 ms, p99 ≤ 1,000 ms, zero lost
+requests, an error rate ≤ 0.1%, the outbox drained, and the financial invariants. With four CPUs, **400 req/s was the
+limit of the test, not the capacity limit of the system**.
+
+There was also a paired experiment on the same host, with two CPUs: at 100 req/s, p99 fell from **120/134 ms** (two
+runs of the initial version) to **31/32 ms** (two runs after changes to the query and the lock path). The comparison
+does not isolate the effect of a single change, but the files let you audit both states and repeat the experiment.
+
+Full report: [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md). Paired runs:
+[docs/LOAD_TEST_HISTORY.en.md](docs/LOAD_TEST_HISTORY.en.md).
+
 ### Local baseline: 13 scenarios
 
-Measured on this machine, with the stack at 1, 2, 4 or 8 CPUs, 1 to 3 APIs and 1 or 2 workers. Each scenario is a
+Measured on my own machine, with the stack at 1, 2, 4 or 8 CPUs, 1 to 3 APIs and 1 or 2 workers. Each scenario is a
 folder in `docs/load/local/`. The agreed rate is the highest that passed every limit; the first failing rate is the
 first step of the ramp that did not pass. The p99 is at the agreed step, and utilisation is the stack's net CPU
 divided by the CPUs assigned to it.
@@ -198,6 +257,21 @@ numbers is not an improvement, because the machines are different. Method, readi
 | `bun run edge:up` and `bun run edge:down`                              | starts and stops protected mode                                          |
 | `bun run edge:check`                                                   | starts protected mode, runs `test:edge`, and stops it                    |
 | `bun run bench:edge`                                                   | measures the edge overhead (`test/edge/overhead.ts`)                     |
+
+## References consulted
+
+Three public implementations of the same challenge were read. Their test suites were not run. The full comparison is in
+[docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md) (Portuguese).
+
+- **Adopted:** an outbox lease with `FOR UPDATE SKIP LOCKED`, and sending outside the claim transaction (paulovitorlr); a
+  pessimistic lock per wallet (all three).
+- **Not adopted:** sending to the queue inside the outbox transaction, which holds a connection and a row lock during the
+  broker call (AndreLopes30); Keycloak and Prometheus/Grafana dashboards (eriksonwilliam). The challenge suggests
+  Keycloak; this project uses API keys, as recorded in [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
+- **Different:** money as `decimal.js` with `NUMERIC(20,2)`. Two of the references use integer minor units (`bigint`) in
+  the domain. [ADR 0002](docs/adr/0002-money-representation.en.md) explains the choice.
+- **Beyond the references:** two workers contending on one wallet, with one worker killed in the middle of the contention
+  (`test/concurrency/distributed-contention.test.ts`).
 
 ## Demonstrations
 
@@ -273,6 +347,11 @@ The full list is in `ARCHITECTURE.md` section 14. The most important:
   sandbox CA.
 - **Interpretations that need the owner's confirmation** are listed in `ARCHITECTURE.md` section 13 and
   `docs/INVARIANT_REVIEW.md`. The most consequential is that an unnamed WIN does not block a REFUND of its BET.
+- **Win re-sent under a new external id.** If a provider re-sends a `WIN` with a different external id, without naming
+  the BET, the balance receives a second credit. The rule and the limitation are in [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
+  sections 7 and 14.
+- **Owner decisions pending:** findings F-03, F-06, F-10 and F-13 of the adversarial audit. See
+  [AUDITORIA_FINAL.md §4](docs/AUDITORIA_FINAL.md) (Portuguese).
 
 ## Repository layout
 

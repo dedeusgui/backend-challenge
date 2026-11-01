@@ -16,7 +16,7 @@ export class StopSignal {
 /** The three passes the worker repeats. The runtime satisfies it; a test can supply a stub. */
 export interface WorkerLoops {
   consumer: { pollOnce(isStopping?: () => boolean): Promise<unknown> };
-  publisher: { publishOnce(): Promise<number> };
+  publisher: { publishOnce(): Promise<number>; cleanRetainedEvents?(): Promise<number> };
   pendingReferences: { runOnce(): Promise<number> };
   idleDelayMs: number;
 }
@@ -29,6 +29,7 @@ export interface RunWorkerOptions {
 
 const DEFAULT_ERROR_DELAY_MS = 1_000;
 const REFERENCE_IDLE_DELAY_MS = 1_000;
+const OUTBOX_RETENTION_INTERVAL_MS = 60 * 60 * 1_000;
 
 interface LoopContext {
   stop: StopSignal;
@@ -70,12 +71,28 @@ async function consumeUntilStopped(loops: WorkerLoops, context: LoopContext): Pr
 }
 
 async function publishUntilStopped(loops: WorkerLoops, context: LoopContext): Promise<void> {
+  let nextRetentionAt = Date.now() + OUTBOX_RETENTION_INTERVAL_MS;
+  let retentionWork: Promise<void> | undefined;
   while (!context.stop.isRequested()) {
     const published = await runPass(context, 'worker.publish', () => loops.publisher.publishOnce());
+    if (Date.now() >= nextRetentionAt && loops.publisher.cleanRetainedEvents !== undefined) {
+      nextRetentionAt = Date.now() + OUTBOX_RETENTION_INTERVAL_MS;
+      retentionWork = loops.publisher
+        .cleanRetainedEvents()
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          context.logger({
+            operation: 'worker.outbox_retention',
+            status: 'failed',
+            ...describeError(error),
+          });
+        });
+    }
     if (!published) {
       await sleep(loops.idleDelayMs);
     }
   }
+  await retentionWork;
 }
 
 async function resolveReferencesUntilStopped(

@@ -97,6 +97,33 @@ export class MikroOrmOutboxStore implements OutboxStore {
     )) as Array<{ id: string }>;
     return rows.length === 1;
   }
+
+  async deletePublishedBefore(cutoff: Date, limit: number): Promise<number> {
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new Error('Outbox retention batch size must be a positive integer');
+    }
+    let deleted = 0;
+    while (true) {
+      const rows = (await this.orm.em.getConnection().execute(
+        `WITH expired AS (
+           SELECT id FROM outbox_messages
+            WHERE status = 'PUBLISHED' AND published_at IS NOT NULL AND published_at < ?
+            ORDER BY published_at, id
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+         )
+         DELETE FROM outbox_messages AS messages
+          USING expired
+          WHERE messages.id = expired.id
+         RETURNING messages.id`,
+        [cutoff, limit],
+      )) as Array<{ id: string }>;
+      deleted += rows.length;
+      if (rows.length < limit) {
+        return deleted;
+      }
+    }
+  }
 }
 
 function toDomain(row: OutboxRow): OutboxMessage {

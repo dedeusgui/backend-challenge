@@ -7,7 +7,7 @@ import {
 } from '../../../../shared/observability/structured-log';
 import type { OutboxStore } from '../ports/outbox-store';
 import type { OutboxTransport } from '../ports/outbox-transport';
-import { readOutboxMaxAttempts } from '../../../../config/worker-config';
+import { readOutboxMaxAttempts, readOutboxRetentionDays } from '../../../../config/worker-config';
 
 export interface OutboxPublisherOptions {
   store: OutboxStore;
@@ -17,6 +17,7 @@ export interface OutboxPublisherOptions {
   leaseDurationMs: number;
   batchSize: number;
   maxAttempts?: number;
+  retentionDays?: number;
   metrics?: MetricsSink;
   logger?: OperationLogger;
 }
@@ -32,11 +33,28 @@ export class OutboxPublisher {
   private readonly metrics: MetricsSink;
   private readonly logger: OperationLogger;
   private readonly maxAttempts: number;
+  private readonly retentionDays: number;
 
   constructor(private readonly options: OutboxPublisherOptions) {
     this.metrics = options.metrics ?? NO_METRICS;
     this.logger = options.logger ?? SILENT_LOGGER;
     this.maxAttempts = options.maxAttempts ?? readOutboxMaxAttempts(process.env);
+    this.retentionDays = options.retentionDays ?? readOutboxRetentionDays(process.env);
+  }
+
+  /** Deletes expired published events, logging only the aggregate count. */
+  async cleanRetainedEvents(): Promise<number> {
+    const deleteBatch = this.options.store.deletePublishedBefore;
+    if (deleteBatch === undefined) {
+      return 0;
+    }
+    const cutoff = new Date(this.options.clock().getTime() - this.retentionDays * 86_400_000);
+    const deleted = await deleteBatch.call(this.options.store, cutoff, this.options.batchSize);
+    this.logger({
+      operation: 'outbox.retention',
+      status: `deleted_${deleted}`,
+    });
+    return deleted;
   }
 
   /** Returns how many events were published successfully in this pass. */

@@ -53,7 +53,11 @@ export interface WorkerDependencies {
 /** The tuning values the worker takes from its configuration. */
 export type WorkerTuning = Pick<
   WorkerConfig,
-  'consumerVisibilitySeconds' | 'outboxBatchSize' | 'outboxLeaseMs' | 'outboxIdleDelayMs'
+  | 'consumerVisibilitySeconds'
+  | 'outboxBatchSize'
+  | 'outboxLeaseMs'
+  | 'outboxIdleDelayMs'
+  | 'outboxRetentionDays'
 >;
 
 /** Opens the database and the queues the worker uses, from its configuration. */
@@ -107,6 +111,7 @@ export function assembleWorker(
     newLeaseToken: randomUUID,
     leaseDurationMs: tuning.outboxLeaseMs,
     batchSize: tuning.outboxBatchSize,
+    retentionDays: tuning.outboxRetentionDays,
     metrics,
     logger: options.logger,
   });

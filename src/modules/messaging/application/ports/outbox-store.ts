@@ -24,4 +24,6 @@ export interface OutboxStore {
   complete(messages: readonly OutboxMessage[], token: string, at: Date): Promise<readonly string[]>;
   /** Stores the new attempt count and next attempt time, only under this lease. */
   reschedule(message: OutboxMessage, token: string, maxAttempts?: number): Promise<boolean>;
+  /** Deletes published rows older than the cutoff in batches no larger than `limit`. */
+  deletePublishedBefore?(cutoff: Date, limit: number): Promise<number>;
 }

@@ -15,7 +15,7 @@ export class StopSignal {
 
 /** The three passes the worker repeats. The runtime satisfies it; a test can supply a stub. */
 export interface WorkerLoops {
-  consumer: { pollOnce(): Promise<unknown> };
+  consumer: { pollOnce(isStopping?: () => boolean): Promise<unknown> };
   publisher: { publishOnce(): Promise<number> };
   pendingReferences: { runOnce(): Promise<number> };
   idleDelayMs: number;
@@ -63,7 +63,9 @@ export async function runWorker(
 
 async function consumeUntilStopped(loops: WorkerLoops, context: LoopContext): Promise<void> {
   while (!context.stop.isRequested()) {
-    await runPass(context, 'worker.consume', () => loops.consumer.pollOnce());
+    await runPass(context, 'worker.consume', () =>
+      loops.consumer.pollOnce(() => context.stop.isRequested()),
+    );
   }
 }
 

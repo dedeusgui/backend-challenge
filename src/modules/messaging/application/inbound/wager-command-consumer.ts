@@ -63,7 +63,7 @@ export class WagerCommandConsumer {
   }
 
   /** Returns how many messages left the command queue (applied or dead-lettered). */
-  async pollOnce(): Promise<number> {
+  async pollOnce(isStopping: () => boolean = () => false): Promise<number> {
     const { queue, visibilityTimeoutSeconds } = this.options;
     const messages = await queue.receive({
       maxMessages: BATCH_SIZE,
@@ -73,6 +73,10 @@ export class WagerCommandConsumer {
 
     let removed = 0;
     for (const [index, message] of messages.entries()) {
+      if (isStopping()) {
+        await this.releaseUnattempted(messages.slice(index));
+        break;
+      }
       // The first message starts inside the window that receive set. Each later one may wait behind the
       // messages before it, so every message still waiting gets a full window again, from now.
       if (index > 0) {
@@ -89,6 +93,13 @@ export class WagerCommandConsumer {
     return this.options.queue.extendVisibility(
       waiting.map((message) => message.receiptHandle),
       this.options.visibilityTimeoutSeconds,
+    );
+  }
+
+  private releaseUnattempted(waiting: readonly ReceivedMessage[]): Promise<void> {
+    return this.options.queue.extendVisibility(
+      waiting.map((message) => message.receiptHandle),
+      0,
     );
   }
 

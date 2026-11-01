@@ -683,6 +683,9 @@ commit order` demonstra isso. Consumidores ordenam por `walletVersion`, logo nen
   o degrau mais alto, 400 req/s, foi aprovado. O gerador compartilhava essas quatro CPUs com a stack, portanto o valor para 4 CPUs é um
   limite inferior. As execuções emparelhadas antes e depois de cada alteração estão em `docs/LOAD_TEST_HISTORY.md`. As execuções
   em VM de nuvem foram substituídas e permanecem no histórico do git.
+  Uma baseline local, em outra máquina (8 núcleos com SMT), com 13 cenários de 1 a 3 APIs e de 1 a 8 CPUs, está em
+  `docs/LOAD_TEST_BASELINE.md`. Ela registra também erro, respostas incorretas, violações, duplicatas, conflitos e
+  espera por lock, p50, p95 e p99, e a drenagem do outbox no passo acordado. Não substitui o relatório fixado.
 - **Tamanho de módulos.** `wager-transaction.ts` tem 389 linhas com seus tipos. Ele foi revisado: seus
   membros são o ciclo de vida e as regras de referência do agregado. A avaliação de referências é
   uma função pura, e poderia ser movida para seu próprio arquivo caso a classe cresça.

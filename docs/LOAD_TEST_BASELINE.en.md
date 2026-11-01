@@ -81,6 +81,38 @@ Legend:
   floor for the actual peak.
 - **First failing and Why it failed:** the first step that broke a constraint, with the reason.
 
+### Correctness, latency and concurrency at the agreed step
+
+Same scenarios, at each one's agreed step. The headers follow the consolidator, which is in English.
+
+| Scenario             | Error rate (%) | Lost | 5xx | Violations | Duplicates | Incorrect answers | Concurrency conflicts (whole run) | Lock waiters mean / max | Outbox drain (s) | Events created | p50 (ms) | p95 (ms) | p99 (ms) | Generator lag p99 (ms) |
+| -------------------- | -------------: | ---: | --: | ---------: | ---------: | ----------------: | --------------------------------: | ----------------------: | ---------------: | -------------: | -------: | -------: | -------: | ---------------------: |
+| apis1-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.1 / 1 |              0.0 |           4461 |      8.2 |     93.5 |    145.8 |                    1.1 |
+| apis1-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.5 / 4 |              0.0 |           8933 |     20.7 |    165.7 |    245.1 |                    1.2 |
+| apis1-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.2 / 3 |              0.0 |          12092 |      9.2 |     25.3 |     49.6 |                    1.3 |
+| apis1-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 5 |              0.0 |          14939 |      8.2 |     74.4 |    109.3 |                    1.1 |
+| apis2-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 4 |              0.0 |           4457 |     23.7 |    117.0 |    160.8 |                    1.1 |
+| apis2-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                5.1 / 11 |              0.2 |           8945 |     72.6 |    328.6 |    538.7 |                    1.6 |
+| apis2-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.5 / 7 |              0.0 |          15042 |     11.5 |     40.1 |     74.3 |                    1.1 |
+| apis2-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 6 |              0.0 |          18080 |      7.4 |     17.5 |     64.8 |                    1.3 |
+| apis3-workers1-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 7 |              0.0 |           6020 |      7.7 |    103.8 |    307.5 |                    1.5 |
+| apis3-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                1.8 / 12 |              0.0 |           3770 |     31.3 |    341.7 |    658.8 |                    1.2 |
+| apis3-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                0.7 / 14 |              0.0 |           5940 |      8.9 |    135.8 |    339.1 |                    1.8 |
+| apis3-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                6.7 / 22 |              0.0 |          14873 |     17.3 |    391.6 |    602.7 |                    1.1 |
+| apis3-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                6.0 / 22 |              0.0 |          23898 |     11.3 |    277.0 |    602.7 |                    1.4 |
+
+Legend for this table:
+
+- **Error rate:** lost requests or 5xx answers, over the requests sent, at the agreed step.
+- **Violations and Duplicates:** balance and ledger violations, and duplicates by provider and external id or by
+  idempotency key, checked after the step.
+- **Incorrect answers:** answers the contract does not allow for the request that received them.
+- **Concurrency conflicts (whole run):** version conflicts counted by `concurrency_conflicts_total`, over the whole run.
+- **Lock waiters mean / max:** PostgreSQL sessions waiting for a lock, sampled every 200 ms at the agreed step.
+- **Outbox drain (s):** time until the outbox drained after the step. The limit is 60 s.
+- **p50, p95, p99 (ms):** latency of answered requests, measured from the scheduled send time.
+- **Generator lag p99 (ms):** lag of the generator behind its schedule. Above 50 ms, the step fails.
+
 ## Reading the results
 
 - **One API alone approaches one whole core.** With 1 API and 8 CPUs, the API process uses 94% of one core
@@ -98,6 +130,14 @@ Legend:
   req/s was 56 ms. This may be noise or contention on the same CPU. This run does not distinguish between the two hypotheses.
 - **Local CPU per request is between 4713 and 6764 µs.** In the cloud, the same scenarios with 3 APIs are between 6764 and
   8320 µs. The difference is due to the machine, and there is no evidence of application improvement. See the comparison section.
+- **Correctness at the agreed step.** In all 13 runs, the error rate was 0.000%, with no losses, no 5xx, no violations, no
+  duplicates and no incorrect answers. The generator lag stayed between 1.1 and 1.8 ms (p99), so the generator did not limit
+  the agreed steps. The steps passed the latency constraints: p95 up to 500 ms and p99 up to 1000 ms.
+- **Concurrency: zero version conflicts, with lock waits.** The conflict counter was zero in all 13 runs. This is what the
+  design predicts: the wallet read takes `PESSIMISTIC_WRITE`, and the version check fires only if the lock fails. The
+  contention shows up as lock waits: on average up to 6.7 sessions and at the peak 22, in the 3-API runs with 4 and 8 CPUs.
+  Waits are not separated by wallet, so they cannot be attributed to the hot wallet.
+- **Outbox drain.** It was 0.0 s in 12 runs and 0.2 s in one (2 APIs, 2 CPUs), within the 60 s limit.
 
 ## Limitations
 

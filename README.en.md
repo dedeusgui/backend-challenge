@@ -67,7 +67,8 @@ The migrations are versioned and reversible: all 12 have `up` and `down`, and th
    [DECISIONS.md](DECISIONS.en.md), every decision with its evidence; the reviews in
    [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md) and [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.en.md);
    [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.en.md); the load reports in
-   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.en.md);
+   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), the local baseline with 13 scenarios, correctness and
+   concurrency in [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md), and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.en.md);
    the [implementation log](docs/IMPLEMENTATION_PLAN.en.md); and the [specification](docs/CHALLENGE.md), kept verbatim.
 
 ## Run
@@ -123,28 +124,30 @@ bun run infra:up              # the integration, concurrency and e2e suites need
 bun run check:all             # the final gate: typecheck, lint, format, and every suite
 ```
 
-| Command                    | Purpose                                                                    |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure             |
-| `bun run test:unit`        | domain and pure-logic tests                                                |
-| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults          |
-| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped      |
-| `bun run test:e2e`         | the HTTP application, with API keys                                        |
-| `bun run check:all`        | everything above. This is the gate, and CI runs it                         |
-| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)                 |
-| `bun run test:edge`        | protected mode: the edge's limits and isolation, against the running stack |
-| `bun run edge:check`       | starts the protected stack, runs `test:edge`, and stops the stack          |
-| `bun run demo:finance`     | demonstration 1: the financial flow, against the running API               |
-| `bun run db:migrate`       | apply pending migrations and exit                                          |
-| `bun run auth:create`      | create an API client and print its key once                                |
-| `bun run auth:revoke`      | revoke an API client by id                                                 |
+| Command                    | Purpose                                                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure                                                                    |
+| `bun run test:unit`        | domain and pure-logic tests                                                                                                       |
+| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults                                                                 |
+| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped                                                             |
+| `bun run test:e2e`         | the HTTP application, with API keys                                                                                               |
+| `bun run check:all`        | everything above. This is the gate, and CI runs it                                                                                |
+| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)                                                                        |
+| `bun run load:consolidate` | consolidated table of the load scenarios in `docs/load/local`; see [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md) |
+| `bun run test:edge`        | protected mode: the edge's limits and isolation, against the running stack                                                        |
+| `bun run edge:check`       | starts the protected stack, runs `test:edge`, and stops the stack                                                                 |
+| `bun run demo:finance`     | demonstration 1: the financial flow, against the running API                                                                      |
+| `bun run db:migrate`       | apply pending migrations and exit                                                                                                 |
+| `bun run auth:create`      | create an API client and print its key once                                                                                       |
+| `bun run auth:revoke`      | revoke an API client by id                                                                                                        |
 
 No suite replaces PostgreSQL or the queue with a mock. Each concurrency test asserts that exactly one
 operation has the effect and that the others are replays, conflicts or rejections.
 `docs/TEST_STRATEGY.md` maps each specification requirement to its suite.
 
 The load test pins the stack to a number of CPUs and ramps the request rate in steps. Its method and
-results are in `docs/LOAD_TEST_RESULTS.md`. The numbers describe the machine that ran them.
+results are in `docs/LOAD_TEST_RESULTS.md`, and the local baseline with 13 scenarios is in
+`docs/LOAD_TEST_BASELINE.en.md`. The numbers describe the machine that ran them.
 
 ### Other commands
 

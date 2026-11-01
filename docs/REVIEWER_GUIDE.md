@@ -98,9 +98,10 @@ Desde esta rodada, o lease e o reagendamento do outbox são decididos pelo reló
   agregador exigiria coleta por instância, e isso ainda não está provado em execução.
 - **Testes de propriedade (`fast-check`).** Não adicionados: a biblioteca não traria prova que os testes existentes não
   dão.
-- **Comparação com as referências públicas e nova medição de carga.** Não reexecutadas nesta sessão. Os números em
-  `docs/LOAD_TEST_RESULTS.md` são de execuções anteriores, em uma VM de quatro vCPUs, e não devem ser comparados com
-  outra máquina sem aviso.
+- **Comparação com as referências públicas.** Não reexecutada nesta sessão. Os números em `docs/LOAD_TEST_RESULTS.md`
+  são de execuções anteriores, em uma VM de quatro vCPUs, e não devem ser comparados com outra máquina sem aviso.
+- **Medição local.** A linha de base em `docs/LOAD_TEST_BASELINE.md` mede 13 cenários nesta máquina, com as taxas
+  acordadas e a correção em cada passo. Não deve ser lida como melhoria em relação à nuvem: são máquinas diferentes.
 
 ## 10. Limites conhecidos
 

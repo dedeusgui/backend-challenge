@@ -175,22 +175,24 @@ não isola o efeito de uma única mudança, mas os arquivos permitem auditar os 
 estados e repetir o experimento.
 
 **Fontes, ambiente e ressalvas:** [relatório com metodologia e critérios](docs/LOAD_TEST_RESULTS.md),
+[baseline local, com 13 cenários, correção e concorrência](docs/LOAD_TEST_BASELINE.md),
 [histórico dos experimentos pareados](docs/LOAD_TEST_HISTORY.md) e
 [registros JSON das execuções](docs/load/). São medições com LocalStack, não AWS SQS;
 não há soak test prolongado nem SLO de produção validado.
 
 ## Testes
 
-| Comando                    | Para que serve                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `bun run check:fast`       | tipos, lint, formato e testes unitários, sem infraestrutura                                             |
-| `bun run check:all`        | o gate completo: tudo acima, mais infraestrutura, integração, concorrência e e2e. É o que o CI roda     |
-| `bun run test:integration` | PostgreSQL e LocalStack reais: esquema, persistência, mensageria, falhas                                |
-| `bun run test:concurrency` | conexões paralelas, três processos da API, worker morto ou parado                                       |
-| `bun run test:e2e`         | a aplicação HTTP, com chaves de API                                                                     |
-| `bun run test:infra`       | a configuração do Compose, lida pelo próprio `docker compose config`                                    |
-| `bun run test:edge`        | modo protegido, contra a stack em execução                                                              |
-| `bun run test:load`        | teste de carga opcional, por número de CPUs; ver [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) |
+| Comando                    | Para que serve                                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `bun run check:fast`       | tipos, lint, formato e testes unitários, sem infraestrutura                                                                 |
+| `bun run check:all`        | o gate completo: tudo acima, mais infraestrutura, integração, concorrência e e2e. É o que o CI roda                         |
+| `bun run test:integration` | PostgreSQL e LocalStack reais: esquema, persistência, mensageria, falhas                                                    |
+| `bun run test:concurrency` | conexões paralelas, três processos da API, worker morto ou parado                                                           |
+| `bun run test:e2e`         | a aplicação HTTP, com chaves de API                                                                                         |
+| `bun run test:infra`       | a configuração do Compose, lida pelo próprio `docker compose config`                                                        |
+| `bun run test:edge`        | modo protegido, contra a stack em execução                                                                                  |
+| `bun run test:load`        | teste de carga opcional, por número de CPUs; ver [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)                     |
+| `bun run load:consolidate` | tabela consolidada dos cenários de carga em `docs/load/local`; ver [docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md) |
 
 Nenhum teste de integração, concorrência ou e2e substitui PostgreSQL ou a fila por mock. Cada teste de concorrência
 verifica que exatamente uma operação tem o efeito, e que as outras são replays, conflitos ou rejeições.
@@ -293,7 +295,7 @@ docs/                     guias, matriz, ADRs, contrato OpenAPI, relatórios de 
 - [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): auditoria desta rodada, com o que foi validado e o que ficou de fora.
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): o que cada suíte prova e o que não substitui.
 - [docs/openapi.json](docs/openapi.json): contrato HTTP.
-- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) e [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.
+- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), [docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md) e [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.
 - [docs/DOMAIN_GLOSSARY.md](docs/DOMAIN_GLOSSARY.md): glossário do domínio.
 - [docs/adr/README.md](docs/adr/README.md): índice das decisões registradas.
 - [docs/CHALLENGE.md](docs/CHALLENGE.md): o enunciado, sem alterações.

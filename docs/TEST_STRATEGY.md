@@ -16,7 +16,8 @@ o que as evidências de mutação dizem sobre se elas podem falhar.
 | `bun run test:integration` | `test/integration`: esquema e migrações, persistência, casos de uso, mensageria, falhas, a tabela de autenticação                                                                                                           | PostgreSQL e LocalStack         |
 | `bun run test:concurrency` | `test/concurrency`: conexões paralelas, três processos de API e dois workers, crashes, encerramento                                                                                                                         | PostgreSQL e LocalStack         |
 | `bun run test:e2e`         | `test/e2e`: a aplicação Nest via HTTP, com chaves de API e o contrato de entrada (entrada malformada é 400)                                                                                                                 | PostgreSQL e LocalStack         |
-| `bun run test:load`        | `test/load`: execução opcional de carga por contagem de CPUs; grava em `docs/load/results` e `docs/LOAD_TEST_RESULTS.md`                                                                                                    | PostgreSQL e LocalStack         |
+| `bun run test:load`        | `test/load`: execução opcional de carga por contagem de CPUs; grava em `docs/load/results` e `docs/LOAD_TEST_RESULTS.md`, ou em `LOAD_RESULTS_DIR` e `LOAD_REPORT_PATH` quando definidos                                    | PostgreSQL e LocalStack         |
+| `bun run load:consolidate` | `test/load/consolidate.ts`: tabela consolidada dos cenários locais em `docs/load/local`, com capacidade e correção no passo acordado                                                                                        | nenhuma                         |
 | `bun run check:fast`       | typecheck, lint, format, unit                                                                                                                                                                                               | nenhuma                         |
 | `bun run test:edge`        | `test/edge`: modo protegido. A API não possui porta, limites por endereço, 429 como JSON, cabeçalhos forjados, isolamento, flood de conexões, o resultado financeiro através da borda. Requer a stack protegida (`edge:up`) | a stack protegida               |
 | `bun run edge:check`       | inicia a stack protegida, executa `test:edge`, depois para a stack e relata seu código de saída                                                                                                                             | Docker                          |
@@ -190,7 +191,7 @@ O planejador e os analisadores são testados unitariamente em `test/unit/load/`,
 verificados sem um servidor. O executor é verificado por suas execuções.
 
 **Resultados.** Os resultados fixados estão em `docs/load/results/cpus-<N>.json`, um por contagem de CPUs, e o relatório que
-os lê é `docs/LOAD_TEST_RESULTS.md`. No host de sandbox usado para esta revisão (quatro vCPUs), as taxas acordadas
+os lê é `docs/LOAD_TEST_RESULTS.md`. Os cenários locais (1 a 3 APIs, 1 a 2 workers) estão em `docs/load/local/`, com a linha de base em `docs/LOAD_TEST_BASELINE.md`. No host de sandbox usado para esta revisão (quatro vCPUs), as taxas acordadas
 foram:
 
 | CPUs da stack | Taxa acordada | Primeira taxa com falha | O que falhou na primeira taxa com falha        |

@@ -81,6 +81,38 @@ Legenda:
   piso do pico real.
 - **First failing e Why it failed:** o primeiro passo que quebrou uma restrição, com o motivo.
 
+### Correção, latência e concorrência no passo acordado
+
+Mesmos cenários, no passo acordado de cada um. Os cabeçalhos seguem o consolidador, em inglês.
+
+| Scenario             | Error rate (%) | Lost | 5xx | Violations | Duplicates | Incorrect answers | Concurrency conflicts (whole run) | Lock waiters mean / max | Outbox drain (s) | Events created | p50 (ms) | p95 (ms) | p99 (ms) | Generator lag p99 (ms) |
+| -------------------- | -------------: | ---: | --: | ---------: | ---------: | ----------------: | --------------------------------: | ----------------------: | ---------------: | -------------: | -------: | -------: | -------: | ---------------------: |
+| apis1-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.1 / 1 |              0.0 |           4461 |      8.2 |     93.5 |    145.8 |                    1.1 |
+| apis1-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.5 / 4 |              0.0 |           8933 |     20.7 |    165.7 |    245.1 |                    1.2 |
+| apis1-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.2 / 3 |              0.0 |          12092 |      9.2 |     25.3 |     49.6 |                    1.3 |
+| apis1-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 5 |              0.0 |          14939 |      8.2 |     74.4 |    109.3 |                    1.1 |
+| apis2-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 4 |              0.0 |           4457 |     23.7 |    117.0 |    160.8 |                    1.1 |
+| apis2-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                5.1 / 11 |              0.2 |           8945 |     72.6 |    328.6 |    538.7 |                    1.6 |
+| apis2-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.5 / 7 |              0.0 |          15042 |     11.5 |     40.1 |     74.3 |                    1.1 |
+| apis2-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 6 |              0.0 |          18080 |      7.4 |     17.5 |     64.8 |                    1.3 |
+| apis3-workers1-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                 0.3 / 7 |              0.0 |           6020 |      7.7 |    103.8 |    307.5 |                    1.5 |
+| apis3-workers2-cpus1 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                1.8 / 12 |              0.0 |           3770 |     31.3 |    341.7 |    658.8 |                    1.2 |
+| apis3-workers2-cpus2 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                0.7 / 14 |              0.0 |           5940 |      8.9 |    135.8 |    339.1 |                    1.8 |
+| apis3-workers2-cpus4 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                6.7 / 22 |              0.0 |          14873 |     17.3 |    391.6 |    602.7 |                    1.1 |
+| apis3-workers2-cpus8 |          0.000 |    0 |   0 |          0 |          0 |                 0 |                                 0 |                6.0 / 22 |              0.0 |          23898 |     11.3 |    277.0 |    602.7 |                    1.4 |
+
+Legenda desta tabela:
+
+- **Error rate:** requisições perdidas ou com 5xx, sobre as enviadas, no passo acordado.
+- **Violations e Duplicates:** violações de saldo e de ledger, e duplicatas por provedor e identificador externo ou por
+  chave de idempotência, verificadas após o passo.
+- **Incorrect answers:** respostas que o contrato não permite para a requisição que as recebeu.
+- **Concurrency conflicts (whole run):** conflitos de versão do contador `concurrency_conflicts_total`, em toda a execução.
+- **Lock waiters mean / max:** sessões do PostgreSQL aguardando um lock, amostradas a cada 200 ms no passo acordado.
+- **Outbox drain (s):** tempo até o outbox drenar depois do passo. O limite é de 60 s.
+- **p50, p95, p99 (ms):** latência das requisições respondidas, medida a partir do horário programado do envio.
+- **Generator lag p99 (ms):** atraso do gerador em relação ao cronograma. Acima de 50 ms, o passo é reprovado.
+
 ## Leitura
 
 - **Uma API sozinha chega perto de um núcleo inteiro.** Com 1 API e 8 CPUs, o processo de API usa 94% de um núcleo
@@ -98,6 +130,14 @@ Legenda:
   req/s deu 56 ms. Pode ser ruído ou contenção pela mesma CPU. Esta execução não separa as duas hipóteses.
 - **CPU por requisição local está entre 4713 e 6764 µs.** Na nuvem, os mesmos cenários de 3 APIs ficam entre 6764 e
   8320 µs. A diferença é de máquina, e não há evidência de melhoria da aplicação. Veja a seção de comparação.
+- **Correção no passo acordado.** Nas 13 execuções, o erro foi de 0.000%, sem perdas, sem 5xx, sem violações, sem
+  duplicatas e sem respostas incorretas. O atraso do gerador ficou entre 1.1 e 1.8 ms (p99), então o gerador não
+  limitou os passos acordados. Os passos foram aprovados nas restrições de latência: p95 até 500 ms e p99 até 1000 ms.
+- **Concorrência: zero conflito de versão, com espera por lock.** O contador de conflitos ficou em zero nas 13
+  execuções. Isso é o esperado pelo desenho: a leitura da carteira usa `PESSIMISTIC_WRITE`, e a checagem de versão
+  só dispara se o lock falhar. A contenção aparece como espera por lock: em média até 6.7 sessões e no pico 22, nas
+  execuções de 3 APIs com 4 e 8 CPUs. A espera não é separada por carteira, então não dá para atribuí-la ao hot wallet.
+- **Drenagem do outbox.** Foi de 0.0 s em 12 execuções e de 0.2 s em uma (2 APIs, 2 CPUs), dentro do limite de 60 s.
 
 ## Limitações
 

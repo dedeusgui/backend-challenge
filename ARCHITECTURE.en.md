@@ -685,6 +685,9 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
   the top step, 400 req/s, passed. The generator shared those four CPUs with the stack, so the 4-CPU figure is a
   lower bound. The paired runs before and after each change are in `docs/LOAD_TEST_HISTORY.md`. The cloud-VM
   runs are superseded and stay in git history.
+  A local baseline, on another machine (8 cores with SMT), with 13 scenarios of 1 to 3 APIs and 1 to 8 CPUs, is in
+  `docs/LOAD_TEST_BASELINE.en.md`. It also records errors, incorrect answers, violations, duplicates, conflicts and lock
+  waits, p50, p95 and p99, and the outbox drain at the agreed step. It does not replace the pinned report.
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its
   members are the lifecycle and reference rules of the aggregate. Reference evaluation is
   a pure function, and it could move to its own file if the class grows.

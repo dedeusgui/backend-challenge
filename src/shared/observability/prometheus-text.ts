@@ -23,10 +23,14 @@ function splitSeriesKey(key: string): SeriesKey {
  * Emits `# TYPE` declarations and groups metric series by base name.
  */
 export function toPrometheusText(snapshot: MetricsSnapshot): string {
-  const lines: string[] = [];
+  const lines = [...formatCounters(snapshot.counters), ...formatSummaries(snapshot.summaries)];
+  return assemblePrometheusText(lines);
+}
 
+function formatCounters(counters: MetricsSnapshot['counters']): string[] {
+  const lines: string[] = [];
   const counterGroups = new Map<string, Array<{ key: string; value: number }>>();
-  for (const [key, value] of Object.entries(snapshot.counters)) {
+  for (const [key, value] of Object.entries(counters)) {
     const { name } = splitSeriesKey(key);
     const existing = counterGroups.get(name);
     if (existing !== undefined) {
@@ -42,12 +46,16 @@ export function toPrometheusText(snapshot: MetricsSnapshot): string {
       lines.push(`${item.key} ${item.value}`);
     }
   }
+  return lines;
+}
 
+function formatSummaries(summaries: MetricsSnapshot['summaries']): string[] {
+  const lines: string[] = [];
   const summaryGroups = new Map<
     string,
     Array<{ labels: string; summary: { count: number; sum: number; max: number } }>
   >();
-  for (const [key, summary] of Object.entries(snapshot.summaries)) {
+  for (const [key, summary] of Object.entries(summaries)) {
     const { name, labels } = splitSeriesKey(key);
     const existing = summaryGroups.get(name);
     if (existing !== undefined) {
@@ -64,10 +72,12 @@ export function toPrometheusText(snapshot: MetricsSnapshot): string {
       lines.push(`${name}_count${item.labels} ${item.summary.count}`);
     }
   }
+  return lines;
+}
 
+function assemblePrometheusText(lines: readonly string[]): string {
   if (lines.length === 0) {
     return '';
   }
-
   return `${lines.join('\n')}\n`;
 }

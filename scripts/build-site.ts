@@ -323,7 +323,7 @@ function boxExit(direction: { x: number; y: number }): { x: number; y: number } 
   return { x: direction.x * t, y: direction.y * t };
 }
 
-function wrapLabel(label: string, width = 24): string[] {
+export function wrapLabel(label: string, width = 24): string[] {
   const lines: string[] = [];
   let current = '';
   for (const word of label.split(' ')) {
@@ -595,7 +595,7 @@ function commitItem(line: string): string {
   return `<li><a href="${REPO}/commit/${encodeURIComponent(full)}"><code>${escapeHtml(short)}</code></a> ${escapeHtml(subject.join('\t'))}</li>`;
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')

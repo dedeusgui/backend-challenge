@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderDiagram, validateDiagrams } from '../../../scripts/build-site';
+import { renderStaticSvg } from '../../../scripts/export-diagrams';
 
 /**
  * The interactive diagrams of the showcase. The validator refuses a diagram that would point at nothing: a
@@ -167,5 +168,45 @@ describe('the renderer draws both orientations from the same data', () => {
     const targetLeft = 16 + 1 * 230;
     expect(endX).toBeLessThanOrEqual(targetLeft);
     expect(endX).toBeGreaterThan(targetLeft - 10);
+  });
+});
+
+describe('the static SVG files that the README shows on GitHub', () => {
+  const [parsed] = validateDiagrams(
+    diagrams(
+      [node('a', 0, 0), node('b', 1, 0, { label: 'Texto com <script>' })],
+      [{ from: 'a', to: 'b', label: 'sim' }],
+    ),
+    everything,
+  );
+  if (parsed === undefined) throw new Error('the fixture must validate to one diagram');
+  const diagram = parsed;
+
+  test('the drawing has its own light canvas and no stylesheet, so GitHub dark mode cannot erase it', () => {
+    const svg = renderStaticSvg(diagram);
+    expect(svg).toContain('fill="#ffffff"');
+    expect(svg).not.toContain('class="');
+    expect(svg).not.toContain('<style');
+  });
+
+  test('each edge is drawn once, with its arrow and its label', () => {
+    const svg = renderStaticSvg(diagram);
+    expect(svg.match(/marker-end="url\(#arrow\)"/g)?.length).toBe(1);
+    expect(svg).toContain('>sim<');
+  });
+
+  test('the text of a node is escaped, so a label cannot add markup', () => {
+    const svg = renderStaticSvg(diagram);
+    expect(svg).not.toContain('<script>');
+    expect(svg).toContain('Texto com &lt;script&gt;');
+  });
+
+  test('the shipped SVG files are the export of the spec, so they cannot drift', async () => {
+    const data: unknown = JSON.parse(await readFile(join(ROOT, 'docs/site/diagrams.json'), 'utf8'));
+    const shipped = validateDiagrams(data, (path) => Bun.file(join(ROOT, path)).size > 0);
+    for (const item of shipped) {
+      const file = await readFile(join(ROOT, 'docs/diagrams', `${item.id}.svg`), 'utf8');
+      expect(file).toBe(`${renderStaticSvg(item)}\n`);
+    }
   });
 });

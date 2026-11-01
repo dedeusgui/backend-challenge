@@ -10,7 +10,7 @@ import {
   parseExperiment1Table,
   parseLoadScenario,
 } from '../../../scripts/build-graficos';
-import { parseCheckAllLog, recordGate } from '../../../scripts/record-gate';
+import { parseCheckAllLog } from '../../../scripts/record-gate';
 
 const ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
@@ -212,13 +212,7 @@ describe('Gráficos e Gate', () => {
 
   describe('Geração de SVG a partir do repositório real', () => {
     test('gera os arquivos SVG no repositório com tamanho > 0 e sem <script', async () => {
-      // Grava o último gate a partir da amostra real caso não exista
-      const gateLogCandidate =
-        '/tmp/claude-1000/-home-dedeusgui-orca-backend-challenge/998cd47b-97e8-4f94-ae9c-a820097a0847/scratchpad/checkall-final-c8320ea.out';
-      if (existsSync(gateLogCandidate)) {
-        await recordGate(gateLogCandidate, join(ROOT, 'docs/gate/ultimo-gate.json'));
-      }
-
+      // Usa o docs/gate/ultimo-gate.json versionado. Não o regrava: o gate é gravado por gate:registrar.
       await buildAllGraficos({ repoRoot: ROOT });
 
       const files = [

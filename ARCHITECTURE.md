@@ -521,7 +521,7 @@ decision and its alternatives. Each client sends `Authorization: Bearer <key>`:
 
 - A **PROVIDER** key acts for one provider id. It submits and reads that provider's operations.
   Another provider's id is `403 FORBIDDEN`, before anything is written. A transaction id that
-  belongs to another provider is also `403`.
+  belongs to another provider is `404 TRANSACTION_NOT_FOUND`, the same answer as a missing id.
 - An **OPERATOR** key opens, reads and reconciles wallets, reads metrics, and acts for any
   provider.
 - `GET /health/live` and `GET /health/ready` are public. Every other route needs a valid key.
@@ -531,13 +531,13 @@ decision and its alternatives. Each client sends `Authorization: Bearer <key>`:
 - Wallets, the ledger, reconciliation and metrics are checked before the record is read, so a provider
   gets the same `403` for an existing wallet and a missing one.
 
-**Decision on existence of another provider's transaction.** `GET /wagering/transactions/:id` reads the
-record and then checks its provider, so a provider that asks for another provider's transaction id gets
-`403`, and a missing id gets `404`. The difference reveals that the id exists. It is kept on purpose: the
-contract and its test (`test/e2e/auth-http.test.ts`) state it, and the body of the `403` carries no field of
-the transaction (`test/e2e/authorization-adversarial.test.ts`). Transaction ids are UUIDv7, so the random
-part must be guessed to probe one. Answering `404` for both would close the oracle; it is one line in the
-query (scope in the `WHERE`), and it is the owner's decision because it changes a documented status.
+**Existence of another provider's transaction is not revealed.** `GET /wagering/transactions/:id` answers
+`404 TRANSACTION_NOT_FOUND` both for a missing id and for an id that belongs to another provider. The two
+responses differ only in the id that was asked for (`test/e2e/authorization-adversarial.test.ts`). Before
+this change the second answer was `403`, which revealed that the id existed. The change alters a documented
+status, so it is listed for the owner in `docs/audit/FINDINGS.md`. The by-provider route
+(`/providers/:providerId/...`) still answers `403` for a provider path that is not the caller's, because that
+answer depends on the path and not on the existence of any transaction.
 
 The table `api_clients` stores the SHA-256 hash of each key, never the key. Keys are created
 and revoked with `bun run auth:create` and `bun run auth:revoke`. The key is printed once.

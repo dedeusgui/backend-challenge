@@ -170,9 +170,12 @@ describe('API key authentication', () => {
     expect(
       (await call('GET', `/wagering/transactions/${transactionId}`, { key: providerAKey })).status,
     ).toBe(200);
-    expect(
-      (await call('GET', `/wagering/transactions/${transactionId}`, { key: providerBKey })).status,
-    ).toBe(403);
+    // By id, another provider gets the answer of a missing transaction (see the adversarial suite).
+    const otherProvider = await call('GET', `/wagering/transactions/${transactionId}`, {
+      key: providerBKey,
+    });
+    expect(otherProvider.status).toBe(404);
+    expect(otherProvider.body).toMatchObject({ error: { code: 'TRANSACTION_NOT_FOUND' } });
     expect(
       (
         await call('GET', `/providers/provider-a/wagering/transactions/${externalTransactionId}`, {

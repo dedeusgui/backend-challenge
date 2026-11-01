@@ -877,24 +877,8 @@
               }
             }
           },
-          "403": {
-            "description": "A chave não pode agir neste recurso: provedor diferente, ou rota só para operador.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": {
-                    "code": "FORBIDDEN",
-                    "message": "..."
-                  }
-                }
-              }
-            }
-          },
           "404": {
-            "description": "Transação inexistente.",
+            "description": "Transação inexistente, ou pertencente a outro provedor (mesma resposta).",
             "content": {
               "application/json": {
                 "schema": {
@@ -910,7 +894,7 @@
             }
           }
         },
-        "description": "Uma chave PROVIDER que pede transação de outro provedor recebe 403, sem nenhum campo da transação. Decisão registrada em ARCHITECTURE §12: o 403 revela a existência do id.",
+        "description": "Uma chave PROVIDER que pede transação de outro provedor recebe 404, a mesma resposta de um id inexistente, para que o id não possa ser sondado. Decisão registrada em ARCHITECTURE §12.",
         "parameters": [
           {
             "name": "transactionId",

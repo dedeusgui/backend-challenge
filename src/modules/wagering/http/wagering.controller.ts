@@ -14,7 +14,8 @@ import { expectCorrelationId, expectUuid } from '../../../shared/validation/requ
 import { WagerQueries } from '../application/wager-queries';
 import { presentTransaction } from './transaction.presenter';
 import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
-import type { Principal } from '../../auth/domain/principal';
+import { canOperateFor, type Principal } from '../../auth/domain/principal';
+import { TransactionNotFoundError } from '../../../shared/application/application-errors';
 
 /** The subset of the Express response this controller needs. Keeps the controller independent of Express types. */
 interface StatusSetter {
@@ -44,7 +45,11 @@ export class WageringController {
     @Param('transactionId') transactionId: string,
   ) {
     const transaction = await this.queries.getById(expectUuid(transactionId, 'transactionId'));
-    requireProviderScope(principal, transaction.providerId);
+    // A transaction of another provider answers exactly like a missing one. A 403 here would tell a
+    // provider that the id exists in someone else's data.
+    if (!canOperateFor(principal, transaction.providerId)) {
+      throw new TransactionNotFoundError(transactionId);
+    }
     return presentTransaction(transaction);
   }
 

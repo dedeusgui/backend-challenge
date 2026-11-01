@@ -49,8 +49,9 @@ Para ver que os testes de concorrência não estão vazios, veja as mutações r
 - `test/e2e/authorization-adversarial.test.ts`: 28 tentativas de contornar a regra, por caminho, por cabeçalho,
   por identificador e por chave revogada.
 - A decisão que você deve questionar: uma chave de provedor que pede a transação de **outro** provedor, pelo id
-  interno, recebe `403` (não `404`). Isso revela que o id existe. A decisão e a mudança de uma linha que a
-  corrige estão em [ARCHITECTURE.md §12](../ARCHITECTURE.md).
+  interno, recebe `404`, a mesma resposta de um id inexistente. Antes isso era `403`, o que revelava que o id
+  existia. A mudança altera um status documentado e aguarda confirmação do dono do desafio; ver
+  [ARCHITECTURE.md §12](../ARCHITECTURE.md) e `docs/audit/FINDINGS.md`.
 
 ## 6. Contrato HTTP (5 min)
 

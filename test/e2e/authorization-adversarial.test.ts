@@ -181,18 +181,27 @@ describe('adversarial authorization', () => {
   });
 
   describe('transactions of another provider', () => {
-    test('another provider gets 403 for the id, and the body carries none of the transaction', async () => {
-      const reply = await send('GET', `/wagering/transactions/${transactionOfA}`, {
+    test('another provider gets the same 404 as for a missing id, so the id cannot be probed', async () => {
+      const missingId = randomUUID();
+      const other = await send('GET', `/wagering/transactions/${transactionOfA}`, {
+        authorization: bearer(providerBKey),
+      });
+      const missing = await send('GET', `/wagering/transactions/${missingId}`, {
         authorization: bearer(providerBKey),
       });
 
-      expect(reply.status).toBe(403);
+      expect(other.status).toBe(404);
+      expect(missing.status).toBe(404);
+      // The only difference between the two answers is the id that was asked for.
+      expect(other.text.replaceAll(transactionOfA, '<id>')).toBe(
+        missing.text.replaceAll(missingId, '<id>'),
+      );
       for (const leaked of [externalIdOfA, 'provider-a', walletId, playerId, 'PROCESSED', 'BET']) {
-        expect(reply.text).not.toContain(leaked);
+        expect(other.text).not.toContain(leaked);
       }
     });
 
-    test('a missing transaction id is 404 for a provider, which is the only other answer it can get', async () => {
+    test('a missing transaction id is 404 for a provider', async () => {
       const reply = await send('GET', `/wagering/transactions/${randomUUID()}`, {
         authorization: bearer(providerBKey),
       });
@@ -320,7 +329,8 @@ describe('adversarial authorization', () => {
       const before = await send('GET', `/wagering/transactions/${transactionOfA}`, {
         authorization: bearer(created.apiKey),
       });
-      expect(before.status).toBe(403);
+      // Authenticated, but another provider's transaction: answered as missing, never as a 401.
+      expect(before.status).toBe(404);
 
       await app.revokeApiClient(created.clientId);
       const after = await send('GET', `/wagering/transactions/${transactionOfA}`, {

@@ -22,7 +22,8 @@ client has one of two roles:
 
 - Health probes are public. Every other route needs a valid key.
 - A PROVIDER request for another provider id is refused with `403 FORBIDDEN`, before anything
-  is written. A transaction read by id that belongs to another provider is also `403`.
+  is written. A transaction read by id that belongs to another provider is `404 TRANSACTION_NOT_FOUND`,
+  the answer of a missing id, so the id cannot be probed (see ARCHITECTURE §12).
 - The key is 256 random bits with the prefix `wgr_`. Only its SHA-256 hash is stored in
   `api_clients`. The hash is enough: the key cannot be searched from it, and a password hash
   would only slow down a lookup made on every request.

@@ -678,12 +678,12 @@ commit order` demonstra isso. Consumidores ordenam por `walletVersion`, logo nen
 - **Duplicatas na dead-letter queue após a janela de deduplicação.** Um crash entre um envio para a dead-letter queue e sua
   confirmação deixa uma cópia. Uma reentrega mais de cinco minutos depois adiciona outra. Um consumidor
   da dead-letter queue ainda deve deduplicar pelo corpo da mensagem (`deadLetterDeduplicationId`).
-- **A carga foi medida em uma VM de sandbox de 4 vCPUs, com a stack fixada em 1, 2 e 4 CPUs.** O relatório fixado
+- **A carga da nuvem foi medida em uma VM de 4 vCPUs do ambiente de nuvem do Claude Code, com a stack fixada em 1, 2 e 4 CPUs.** O relatório fixado
   (`docs/LOAD_TEST_RESULTS.md`) sustentou 100, 200 e 400 req/s, e falhou em 125 e 300 em 1 e 2 CPUs. Em 4 CPUs
   o degrau mais alto, 400 req/s, foi aprovado. O gerador compartilhava essas quatro CPUs com a stack, portanto o valor para 4 CPUs é um
   limite inferior. As execuções emparelhadas antes e depois de cada alteração estão em `docs/LOAD_TEST_HISTORY.md`. As execuções
   em VM de nuvem foram substituídas e permanecem no histórico do git.
-  Uma baseline local, em outra máquina (8 núcleos com SMT), com 13 cenários de 1 a 3 APIs e de 1 a 8 CPUs, está em
+  Uma baseline local, medida pelo autor na própria máquina (Ryzen 7 7735HS, 8 núcleos com SMT), com 13 cenários de 1 a 3 APIs e de 1 a 8 CPUs, está em
   `docs/LOAD_TEST_BASELINE.md`. Ela registra também erro, respostas incorretas, violações, duplicatas, conflitos e
   espera por lock, p50, p95 e p99, e a drenagem do outbox no passo acordado. Não substitui o relatório fixado.
 - **Tamanho de módulos.** `wager-transaction.ts` tem 389 linhas com seus tipos. Ele foi revisado: seus

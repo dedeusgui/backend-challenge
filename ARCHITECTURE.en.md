@@ -680,12 +680,12 @@ commit order` shows it. Consumers order by `walletVersion`, so no order is promi
 - **Dead-letter duplicates after the deduplication window.** A crash between a dead-letter send and its
   acknowledgement leaves one copy. A redelivery more than five minutes later adds another. A dead-letter
   consumer must still deduplicate by the message body (`deadLetterDeduplicationId`).
-- **Load was measured on a four-vCPU sandbox VM, with the stack pinned to 1, 2 and 4 CPUs.** The pinned report
+- **Cloud load was measured on a four-vCPU VM of the Claude Code cloud environment, with the stack pinned to 1, 2 and 4 CPUs.** The pinned report
   (`docs/LOAD_TEST_RESULTS.md`) agreed 100, 200 and 400 req/s, and failed at 125 and 300 on 1 and 2 CPUs. On 4 CPUs
   the top step, 400 req/s, passed. The generator shared those four CPUs with the stack, so the 4-CPU figure is a
   lower bound. The paired runs before and after each change are in `docs/LOAD_TEST_HISTORY.md`. The cloud-VM
   runs are superseded and stay in git history.
-  A local baseline, on another machine (8 cores with SMT), with 13 scenarios of 1 to 3 APIs and 1 to 8 CPUs, is in
+  A local baseline, measured by the author on his own machine (Ryzen 7 7735HS, 8 cores with SMT), with 13 scenarios of 1 to 3 APIs and 1 to 8 CPUs, is in
   `docs/LOAD_TEST_BASELINE.en.md`. It also records errors, incorrect answers, violations, duplicates, conflicts and lock
   waits, p50, p95 and p99, and the outbox drain at the agreed step. It does not replace the pinned report.
 - **Module size.** `wager-transaction.ts` is 389 lines with its types. It was reviewed: its

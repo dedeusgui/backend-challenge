@@ -2,7 +2,7 @@
 
 > English reference copy. The Portuguese main version is [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md).
 > Methodology and criteria for each step are in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md), the automatically generated
-> report of the measurement made in the cloud. This page measures the same suite on another machine, with 13 scenarios.
+> report of the measurement made in the cloud. This page measures the same suite on my own machine, with 13 scenarios.
 
 ## What this baseline is and is not
 
@@ -12,17 +12,24 @@
   experiment and the honesty of the analysis (section 14 of [CHALLENGE.md](CHALLENGE.md)).
 - **It is not** a comparison of improvement. The local machine and the cloud machine are different, as the environment table shows.
 
+## Two baselines, two environments
+
+This is the local baseline, measured by me, Guilherme de Deus, on my own machine. The other baseline, the cloud one, was
+measured on a VM of the Claude Code cloud environment, by an agent, and is in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
+Both measurements use the same software versions (Bun 1.4.4, PostgreSQL 17, LocalStack 4.14), but the machines are
+different. The table below shows each difference. Read each measurement within its own environment.
+
 ## Environment
 
-| Item       | Local (this baseline)                            | Cloud ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) |
-| ---------- | ------------------------------------------------ | ---------------------------------------------------- |
-| Processor  | AMD Ryzen 7 7735HS, 8 cores and 16 threads (SMT) | Intel Xeon @ 2.10 GHz, 4 vCPUs                       |
-| Memory     | 22 GiB                                           | 15.7 GiB                                             |
-| System     | Linux 7.2.6                                      | Linux 6.18.44                                        |
-| Bun        | 1.4.4                                            | 1.4.4                                                |
-| Docker     | 29.9.2                                           | not recorded in the report                           |
-| PostgreSQL | 17 (`postgres:17-alpine`), default configuration | 17, default configuration                            |
-| LocalStack | 4.14.0, SQS                                      | 4.14, SQS                                            |
+| Item       | Local: my machine (this baseline)                | Cloud: Claude Code VM ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) |
+| ---------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| Processor  | AMD Ryzen 7 7735HS, 8 cores and 16 threads (SMT) | Intel Xeon @ 2.10 GHz, 4 vCPUs                                       |
+| Memory     | 22 GiB                                           | 15.7 GiB                                                             |
+| System     | Linux 7.2.6                                      | Linux 6.18.44                                                        |
+| Bun        | 1.4.4                                            | 1.4.4                                                                |
+| Docker     | 29.9.2                                           | not recorded in the report                                           |
+| PostgreSQL | 17 (`postgres:17-alpine`), default configuration | 17, default configuration                                            |
+| LocalStack | 4.14.0, SQS                                      | 4.14, SQS                                                            |
 
 On the local machine, CPUs `n` and `n+1` (with `n` even) are threads of the same core. Therefore, a 2 CPU
 stack occupies one whole core, and a 1 CPU stack shares the core with the generator.

@@ -2,7 +2,7 @@
 
 > Versão principal em português. A cópia de referência em inglês é [LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md).
 > Metodologia e critérios de cada passo estão em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md), o relatório da medição
-> feita na nuvem, gerado automaticamente. Esta página mede a mesma suíte em outra máquina, com 13 cenários.
+> feita na nuvem, gerado automaticamente. Esta página mede a mesma suíte na minha máquina, com 13 cenários.
 
 ## O que esta baseline é e o que não é
 
@@ -12,17 +12,24 @@
   experimento e a honestidade da análise (seção 14 de [CHALLENGE.md](CHALLENGE.md)).
 - **Não é** uma comparação de melhoria. A máquina local e a da nuvem são diferentes, como mostra a tabela de ambiente.
 
+## Dois baselines, dois ambientes
+
+Este é o baseline local, medido por mim, Guilherme de Deus, na minha máquina. O outro baseline, o da nuvem, foi medido
+em uma VM do ambiente de nuvem do Claude Code, por um agente, e está em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
+As duas medições usam as mesmas versões de software (Bun 1.4.4, PostgreSQL 17, LocalStack 4.14), mas as máquinas são
+diferentes. A tabela abaixo mostra cada diferença. Leia cada medição dentro do próprio ambiente.
+
 ## Ambiente
 
-| Item        | Local (esta baseline)                            | Nuvem ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) |
-| ----------- | ------------------------------------------------ | ---------------------------------------------------- |
-| Processador | AMD Ryzen 7 7735HS, 8 núcleos e 16 threads (SMT) | Intel Xeon @ 2.10 GHz, 4 vCPUs                       |
-| Memória     | 22 GiB                                           | 15.7 GiB                                             |
-| Sistema     | Linux 7.2.6                                      | Linux 6.18.44                                        |
-| Bun         | 1.4.4                                            | 1.4.4                                                |
-| Docker      | 29.9.2                                           | não registrado no relatório                          |
-| PostgreSQL  | 17 (`postgres:17-alpine`), configuração padrão   | 17, configuração padrão                              |
-| LocalStack  | 4.14.0, SQS                                      | 4.14, SQS                                            |
+| Item        | Local: minha máquina (esta baseline)             | Nuvem: VM do Claude Code ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) |
+| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| Processador | AMD Ryzen 7 7735HS, 8 núcleos e 16 threads (SMT) | Intel Xeon @ 2.10 GHz, 4 vCPUs                                          |
+| Memória     | 22 GiB                                           | 15.7 GiB                                                                |
+| Sistema     | Linux 7.2.6                                      | Linux 6.18.44                                                           |
+| Bun         | 1.4.4                                            | 1.4.4                                                                   |
+| Docker      | 29.9.2                                           | não registrado no relatório                                             |
+| PostgreSQL  | 17 (`postgres:17-alpine`), configuração padrão   | 17, configuração padrão                                                 |
+| LocalStack  | 4.14.0, SQS                                      | 4.14, SQS                                                               |
 
 Na máquina local, as CPUs `n` e `n+1` (com `n` par) são threads do mesmo núcleo. Por isso, uma stack de 2 CPUs
 ocupa um núcleo inteiro, e uma de 1 CPU divide o núcleo com o gerador.

@@ -415,7 +415,9 @@ export function renderReport(runs: readonly RunRecord[], generatedAt: string): s
 
 Rendered on ${generatedAt} from the run records below, which were measured on ${measuredOn(runs)}. One run per CPU count, each in
 \`docs/load/results/cpus-<N>.json\`. The method is in \`DECISIONS.md\`, group N. The constraints and the
-workload are in \`test/load/thresholds.ts\`.
+workload are in \`test/load/thresholds.ts\`. The local baseline, with 13 scenarios measured on another host, is in
+\`docs/LOAD_TEST_BASELINE.en.md\`, and its records are in \`docs/load/local/\`. It is not an improvement over the runs
+below, because the hosts differ.
 
 ${capacitySection(sorted)}
 ${constraintsSection(sorted)}

@@ -1,8 +1,10 @@
 # Load test results
 
-Rendered on 2026-10-31T23:15:49.285Z from the run records below, which were measured on 1 CPU at 2026-10-31T20:28:33.313Z; 2 CPUs at 2026-10-31T20:32:16.808Z; 4 CPUs at 2026-10-31T20:36:18.013Z. One run per CPU count, each in
+Rendered on 2026-11-01T16:08:30.320Z from the run records below, which were measured on 1 CPU at 2026-10-31T20:28:33.313Z; 2 CPUs at 2026-10-31T20:32:16.808Z; 4 CPUs at 2026-10-31T20:36:18.013Z. One run per CPU count, each in
 `docs/load/results/cpus-<N>.json`. The method is in `DECISIONS.md`, group N. The constraints and the
-workload are in `test/load/thresholds.ts`.
+workload are in `test/load/thresholds.ts`. The local baseline, with 13 scenarios measured on another host, is in
+`docs/LOAD_TEST_BASELINE.en.md`, and its records are in `docs/load/local/`. It is not an improvement over the runs
+below, because the hosts differ.
 
 ## Capacity by CPU count
 
@@ -59,7 +61,7 @@ operations after it.
 ## What these numbers prove, and what they do not
 
 - It proves that the stack kept its constraints for the length of one step, at one rate, on the CPUs given to it. It does not prove a rate for longer than a step: there is no soak test.
-- The CPU counts are the CPUs given to the stack with `taskset` and with the cpuset of each container. The number of processes does not change with the CPU count: three API processes, two workers, one PostgreSQL and one LocalStack. A machine with more CPUs gives the same processes more room; it does not add processes.
+- The CPU counts are the CPUs given to the stack with `taskset` and with the cpuset of each container. The number of processes does not change with the CPU count: the API processes, the workers, one PostgreSQL and one LocalStack, as the environment table gives them. A machine with more CPUs gives the same processes more room; it does not add processes.
 - The generator runs on the CPUs the stack does not use. When the stack has every CPU of the host, the generator shares them, and its CPU is in the table. A shared generator makes the figures pessimistic, not optimistic.
 - The queue is LocalStack, not AWS SQS. Its CPU is counted in the stack, and its cost is not the cost of AWS SQS.
 - PostgreSQL runs with its default configuration, on local disk, with no replica and no tuning.

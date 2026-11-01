@@ -149,6 +149,41 @@ The load test pins the stack to a number of CPUs and ramps the request rate in s
 results are in `docs/LOAD_TEST_RESULTS.md`, and the local baseline with 13 scenarios is in
 `docs/LOAD_TEST_BASELINE.en.md`. The numbers describe the machine that ran them.
 
+### Local baseline: 13 scenarios
+
+Measured on this machine, with the stack at 1, 2, 4 or 8 CPUs, 1 to 3 APIs and 1 or 2 workers. Each scenario is a
+folder in `docs/load/local/`. The agreed rate is the highest that passed every limit; the first failing rate is the
+first step of the ramp that did not pass. The p99 is at the agreed step, and utilisation is the stack's net CPU
+divided by the CPUs assigned to it.
+
+| Scenario               | CPUs | Agreed (req/s) | First failing (req/s) | p99 at the agreed step (ms) | CPU utilisation |
+| ---------------------- | ---: | -------------: | --------------------: | --------------------------: | --------------: |
+| `apis1-workers2-cpus1` |    1 |            150 |                   200 |                         146 |             71% |
+| `apis1-workers2-cpus2` |    2 |            300 |                   400 |                         245 |             79% |
+| `apis1-workers2-cpus4` |    4 |            400 |                   500 |                          50 |             52% |
+| `apis1-workers2-cpus8` |    8 |            500 |                   600 |                         109 |             29% |
+| `apis2-workers2-cpus1` |    1 |            150 |                   200 |                         161 |             83% |
+| `apis2-workers2-cpus2` |    2 |            300 |                   400 |                         539 |             92% |
+| `apis2-workers2-cpus4` |    4 |            500 |                   600 |                          74 |             78% |
+| `apis2-workers2-cpus8` |    8 |            600 |                   800 |                          65 |             41% |
+| `apis3-workers1-cpus2` |    2 |            200 |                   300 |                         308 |             66% |
+| `apis3-workers2-cpus1` |    1 |            125 |                   150 |                         659 |             81% |
+| `apis3-workers2-cpus2` |    2 |            200 |                   300 |                         339 |             68% |
+| `apis3-workers2-cpus4` |    4 |            500 |                   600 |                         603 |             84% |
+| `apis3-workers2-cpus8` |    8 |            800 |                  1000 |                         603 |             63% |
+
+Across all 13 scenarios, at the agreed step there was no lost request, no 5xx error, no financial violation, no
+duplicate and no incorrect answer. The outbox drained in at most 0.2 s, and the generator lag p99 stayed at most
+1.8 ms. Every first failure was on latency: p95 and p99 above their limits.
+
+With 1 and 2 CPUs, more APIs did not raise the agreed rate. With 4 and 8 CPUs, they did, and the highest rate was
+800 req/s, with 3 APIs and 8 CPUs.
+
+These are LocalStack measurements on this machine, not AWS SQS and not the cloud runs. The difference from the cloud
+numbers is not an improvement, because the machines are different. Method, reading and limits are in
+[docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md), and the raw JSON records of the 13 scenarios are in
+[docs/load/local/](docs/load/local/).
+
 ### Other commands
 
 | Command                                                                | What it is for                                                           |

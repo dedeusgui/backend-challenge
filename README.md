@@ -174,6 +174,39 @@ o p99 caiu de **120/134 ms** (duas execuções da versão inicial) para **31/32 
 não isola o efeito de uma única mudança, mas os arquivos permitem auditar os dois
 estados e repetir o experimento.
 
+**Baseline local, com 13 cenários.** Medido nesta máquina, com a stack em 1, 2, 4 ou 8 CPUs, de 1 a 3 APIs e 1 ou 2
+workers. Cada cenário é uma pasta em `docs/load/local/`. A taxa acordada é a maior que passou todos os limites; a
+primeira falha é o primeiro degrau da rampa que não passou. O p99 é do passo acordado, e a utilização é a CPU líquida
+da stack dividida pelas CPUs destinadas a ela.
+
+| Cenário                | CPUs | Acordada (req/s) | Primeira falha (req/s) | p99 no passo acordado (ms) | Utilização da CPU |
+| ---------------------- | ---: | ---------------: | ---------------------: | -------------------------: | ----------------: |
+| `apis1-workers2-cpus1` |    1 |              150 |                    200 |                        146 |               71% |
+| `apis1-workers2-cpus2` |    2 |              300 |                    400 |                        245 |               79% |
+| `apis1-workers2-cpus4` |    4 |              400 |                    500 |                         50 |               52% |
+| `apis1-workers2-cpus8` |    8 |              500 |                    600 |                        109 |               29% |
+| `apis2-workers2-cpus1` |    1 |              150 |                    200 |                        161 |               83% |
+| `apis2-workers2-cpus2` |    2 |              300 |                    400 |                        539 |               92% |
+| `apis2-workers2-cpus4` |    4 |              500 |                    600 |                         74 |               78% |
+| `apis2-workers2-cpus8` |    8 |              600 |                    800 |                         65 |               41% |
+| `apis3-workers1-cpus2` |    2 |              200 |                    300 |                        308 |               66% |
+| `apis3-workers2-cpus1` |    1 |              125 |                    150 |                        659 |               81% |
+| `apis3-workers2-cpus2` |    2 |              200 |                    300 |                        339 |               68% |
+| `apis3-workers2-cpus4` |    4 |              500 |                    600 |                        603 |               84% |
+| `apis3-workers2-cpus8` |    8 |              800 |                   1000 |                        603 |               63% |
+
+Em todos os 13 cenários, no passo acordado, não houve requisição perdida, erro 5xx, violação financeira, duplicata
+nem resposta incorreta. A outbox drenou em até 0,2 s, e o atraso do gerador ficou em até 1,8 ms no p99. Toda primeira
+falha foi por latência: p95 e p99 acima do limite.
+
+Com 1 e 2 CPUs, mais APIs não aumentaram a taxa acordada. Com 4 e 8 CPUs, aumentaram, e a maior taxa foi 800 req/s,
+com 3 APIs e 8 CPUs.
+
+São medições com LocalStack, nesta máquina, não da nuvem nem de AWS SQS. A diferença em relação aos números da nuvem
+não é melhoria, porque as máquinas são diferentes. Método, leitura e limites estão em
+[docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md), e os registros JSON dos 13 cenários estão em
+[docs/load/local/](docs/load/local/).
+
 **Fontes, ambiente e ressalvas:** [relatório com metodologia e critérios](docs/LOAD_TEST_RESULTS.md),
 [baseline local, com 13 cenários, correção e concorrência](docs/LOAD_TEST_BASELINE.md),
 [histórico dos experimentos pareados](docs/LOAD_TEST_HISTORY.md) e

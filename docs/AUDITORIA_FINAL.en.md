@@ -164,3 +164,43 @@ History of simulated reviews with internal estimated scores (not an evaluation p
   - Coupling in infrastructure ports: resolved by segregating ports in `application/ports/` and separating inbound/outbound flows in commit `ef390fe`.
   - Missing `retries_total` metric (§12): implemented and exposed at `/metrics` in commit `4ee8f72`.
   - Absence of executable BDD suite linked to edge matrix: implemented with 73 Gherkin scenarios in `test/features/` in commits `3620d74` and `c8320ea`.
+
+## 8. Final verification of this round
+
+Measurements of 2026-11-01. The full gate ran on commit `a6bbd82`. Figures from earlier runs were not reused as if they
+belonged to this round. The commands cited exist in `package.json`.
+
+- **Full gate (`bun run check:all`), `a6bbd82`:** passed. 519 unit, 4 infrastructure, 248 integration, 23 concurrency,
+  104 e2e and 73 Gherkin scenarios (365 steps). The two `@bloqueado` scenarios stay outside the run; their equivalent
+  coverage is in `test/integration/messaging/broker-redrive.test.ts` and
+  `test/concurrency/process-crash-and-shutdown.test.ts`.
+- **Cucumber reports:** `bun run test:features` writes `test-results/cucumber.junit.xml` (73 cases, no failures) and
+  `test-results/cucumber.ndjson` (Cucumber Messages). The CI integration job publishes that directory with the SHA.
+- **Financial demonstration (`bun run demo:finance`)**, against the `docker compose up --build` stack: passed all five
+  steps. The balance closes at 75.00 after BET, WIN and ROLLBACK; the second ROLLBACK is refused with
+  `REFERENCE_ALREADY_REVERSED`; the replay returns the balance observed; the ledger sums to the balance.
+- **Invariants by independent SQL** (`scripts/financial-invariants.sql`, read-only), on the development database after the
+  demonstration: INV-1 to INV-11 with zero violations. The sample has six ledger entries. The result proves these queries
+  on that data, not the absence of violations in general; the rules are enforced by the suites and the database constraints.
+- **Migrations:** the `migrate` service applied all 16 migrations with exit 0. `test/integration/schema/migrations.test.ts`
+  covers creation from scratch, full rollback and re-application. An upgrade from a partial schema was not tested separately.
+- **Docker build without cache:** passed, with the base image pinned by digest (commit `db756c7`).
+- **Stack smoke test:** `/health/live` and `/health/ready` answered 200, with the database and SQS `up`. `/metrics` requires
+  an API key and answers 401 without one.
+- **Trivy:** on `wagering-api:digest-check`, CRITICAL and HIGH vulnerabilities with `ignore-unfixed`: zero for the
+  debian 13.7 and node-pkg targets. On the filesystem of a clean export of `HEAD`, zero vulnerabilities in `bun.lock` and
+  no secrets. `ignore-unfixed` hides findings that have no available fix.
+- **Multi-process concurrency with failure and recovery:** `test/concurrency/process-crash-and-shutdown.test.ts` and
+  `test/concurrency/three-processes.test.ts` passed in the gate.
+- **Load, final, 2 CPUs** (default topology of three APIs and two workers, same method as
+  `docs/load/results/cpus-2.json`): the agreed rate is 200 req/s, equal to the baseline. At 300 req/s the step fails in
+  both measurements. In the final measurement there was 1 loss in 6,000 requests and a p99 of 7.6 s
+  (`docs/load/final-90f5332/`). Repeated alone, the step lost 2,230 of 6,000 and had a p99 of 9.9 s
+  (`docs/load/final-90f5332-repeat-300/`). The baseline also fails at 300 req/s, with a p99 of 3.8 s and no losses.
+  At 200 req/s the p99 was 308.7 ms against 260.9 ms in the baseline; that difference is within what a single run can
+  separate. There is no basis to claim a capacity above 200 req/s. No performance gain is attributed to this round's
+  changes. A development agent was active on the same machine during the measurement, uncontrolled.
+- **Resource cleanup:** 10 `wagering_test_*` databases existed before this round and remain the same after a full gate, so
+  there is no new leak. The origin of the 10 was not investigated.
+- **Not verified in this round:** the GitHub workflows (CI, CodeQL, Dependency Review and the CI Trivy) run only after a
+  push. None of them has been executed on the runners.

@@ -12,6 +12,7 @@ import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metr
 import { InboxMessage } from '../../messaging/domain/inbox-message';
 import type { Wallet } from '../../wallet/domain/wallet';
 import { hashOf } from '../domain/wager-payload';
+import { wagerMessageFingerprint } from '../domain/wager-payload-hash';
 import { WagerTransaction, type CreateWagerTransactionProps } from '../domain/wager-transaction';
 import type { WagerTransactionKind } from '../domain/wager-transaction-kind';
 import { TransactionSettlement, type SettlementOutcome } from './transaction-settlement';
@@ -40,6 +41,16 @@ export interface ProcessWagerCommand {
 
 export type ProcessWagerOutcome = SettlementOutcome;
 
+/**
+ * The two hashes of a command. `payloadHash` is the identity of the transaction: the same business payload
+ * under the same key or external id is a replay. `messageFingerprint` exists only for a queue message, and
+ * also covers its idempotencyKey, since the messageId identifies one exact content.
+ */
+interface Hashes {
+  readonly payloadHash: string;
+  readonly messageFingerprint: string | undefined;
+}
+
 /** Retries after losing a unique-identity race. Each retry starts from a rolled-back transaction. */
 const MAX_CONCURRENCY_ATTEMPTS = 3;
 
@@ -66,12 +77,12 @@ export class ProcessWagerTransaction {
         `${command.kind} is internal and cannot be submitted`,
       );
     }
-    const payloadHash = hashOf(businessFieldsOf(command));
+    const hashes = hashesOf(command);
 
     const started = performance.now();
     for (let attempt = 1; ; attempt += 1) {
       try {
-        const outcome = await this.inTransaction(command, payloadHash);
+        const outcome = await this.inTransaction(command, hashes);
         // A replay is not a new transaction, so it is counted by idempotent_replays_total only.
         if (!outcome.idempotentReplay) {
           this.metrics.increment('transactions_total', { status: outcome.transaction.status });
@@ -102,7 +113,7 @@ export class ProcessWagerTransaction {
    */
   private async inTransaction(
     command: ProcessWagerCommand,
-    payloadHash: string,
+    hashes: Hashes,
   ): Promise<ProcessWagerOutcome> {
     const requested = performance.now();
     let worked = requested;
@@ -110,7 +121,7 @@ export class ProcessWagerTransaction {
       const working = performance.now();
       this.metrics.observe('transaction_begin_ms', working - requested);
       try {
-        return await this.process(repositories, command, payloadHash);
+        return await this.process(repositories, command, hashes);
       } finally {
         worked = performance.now();
         this.metrics.observe('transaction_work_ms', worked - working);
@@ -123,15 +134,15 @@ export class ProcessWagerTransaction {
   private async process(
     repositories: FinancialRepositories,
     command: ProcessWagerCommand,
-    payloadHash: string,
+    hashes: Hashes,
   ): Promise<ProcessWagerOutcome> {
-    const inboundRecorded = await this.isInboundRecorded(repositories, command, payloadHash);
+    const inboundRecorded = await this.isInboundRecorded(repositories, command, hashes);
 
     // A stored transaction is answered without the wallet lock. Its payload never changes, and a replay
     // writes nothing except, for a new delivery, its inbox record.
     const stored = await this.findStored(repositories, command);
     if (stored !== undefined) {
-      return this.answerReplay(repositories, command, stored, payloadHash, inboundRecorded);
+      return this.answerReplay(repositories, command, stored, hashes, inboundRecorded);
     }
 
     // A new transaction takes the wallet lock first, then looks again. A request that committed the
@@ -149,13 +160,13 @@ export class ProcessWagerTransaction {
       // The same message may have been recorded while this one waited. Its inbox row is then the winner's,
       // and a second insert would collide with it, roll back a finished replay, and count a lost race.
       const recorded =
-        inboundRecorded || (await this.isInboundRecorded(repositories, command, payloadHash));
-      return this.answerReplay(repositories, command, committed, payloadHash, recorded);
+        inboundRecorded || (await this.isInboundRecorded(repositories, command, hashes));
+      return this.answerReplay(repositories, command, committed, hashes, recorded);
     }
 
-    const outcome = await this.settleNew(repositories, command, payloadHash, wallet);
+    const outcome = await this.settleNew(repositories, command, hashes.payloadHash, wallet);
     if (command.inbound !== undefined && !inboundRecorded) {
-      await this.recordInbound(repositories, command.inbound, payloadHash);
+      await this.recordInbound(repositories, command.inbound, hashes.messageFingerprint);
     }
     return outcome;
   }
@@ -176,12 +187,12 @@ export class ProcessWagerTransaction {
     repositories: FinancialRepositories,
     command: ProcessWagerCommand,
     existing: WagerTransaction,
-    payloadHash: string,
+    hashes: Hashes,
     inboundRecorded: boolean,
   ): Promise<ProcessWagerOutcome> {
-    const outcome = this.replay(existing, payloadHash);
+    const outcome = this.replay(existing, hashes.payloadHash);
     if (command.inbound !== undefined && !inboundRecorded) {
-      await this.recordInbound(repositories, command.inbound, payloadHash);
+      await this.recordInbound(repositories, command.inbound, hashes.messageFingerprint);
     }
     return outcome;
   }
@@ -200,11 +211,15 @@ export class ProcessWagerTransaction {
     });
   }
 
-  /** Returns true for a duplicate delivery. A reused message id with a different payload is a permanent error. */
+  /**
+   * Returns true for a duplicate delivery. A reused message id whose content differs is a permanent error.
+   * A row recorded before message fingerprints existed holds the payload hash alone, and is still compared
+   * on the business fields only, as it was then.
+   */
   private async isInboundRecorded(
     repositories: FinancialRepositories,
     command: ProcessWagerCommand,
-    payloadHash: string,
+    hashes: Hashes,
   ): Promise<boolean> {
     if (command.inbound === undefined) {
       return false;
@@ -216,7 +231,10 @@ export class ProcessWagerTransaction {
     if (received === undefined) {
       return false;
     }
-    if (!received.matchesPayload(payloadHash)) {
+    const sameContent =
+      received.matchesPayload(hashes.messageFingerprint ?? hashes.payloadHash) ||
+      received.matchesPayload(hashes.payloadHash);
+    if (!sameContent) {
       throw new MessagePayloadConflictError(command.inbound.messageId);
     }
     return true;
@@ -240,13 +258,17 @@ export class ProcessWagerTransaction {
   private async recordInbound(
     repositories: FinancialRepositories,
     inbound: InboundMessage,
-    payloadHash: string,
+    fingerprint: string | undefined,
   ): Promise<void> {
+    if (fingerprint === undefined) {
+      // Only a command that came from the queue has an inbound record, and such a command always has a fingerprint.
+      throw new Error(`Inbound message ${inbound.messageId} has no fingerprint`);
+    }
     const at = this.context.clock();
     const message = InboxMessage.receive({
       consumerName: inbound.consumerName,
       messageId: inbound.messageId,
-      payloadHash,
+      payloadHash: fingerprint,
       receivedAt: at,
     });
     message.markProcessed(at);
@@ -273,6 +295,18 @@ export class ProcessWagerTransaction {
       createdAt: this.context.clock(),
     };
   }
+}
+
+function hashesOf(command: ProcessWagerCommand): Hashes {
+  const payload = businessFieldsOf(command);
+  const payloadHash = hashOf(payload);
+  return {
+    payloadHash,
+    messageFingerprint:
+      command.inbound === undefined
+        ? undefined
+        : wagerMessageFingerprint(payload, command.idempotencyKey),
+  };
 }
 
 function businessFieldsOf(command: ProcessWagerCommand) {

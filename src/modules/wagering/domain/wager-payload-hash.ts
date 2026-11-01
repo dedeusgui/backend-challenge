@@ -40,8 +40,10 @@ function moneyFields(money: Money): { amount: string; currency: string } {
   return { amount, currency };
 }
 
-export function canonicalWagerPayload(payload: WagerPayload): string {
-  return canonicalJson({
+type CanonicalRecord = { readonly [key: string]: CanonicalValue };
+
+function canonicalFieldsOf(payload: WagerPayload): CanonicalRecord {
+  return {
     providerId: payload.providerId,
     externalTransactionId: payload.externalTransactionId,
     playerId: payload.playerId,
@@ -51,7 +53,21 @@ export function canonicalWagerPayload(payload: WagerPayload): string {
     kind: payload.kind,
     money: moneyFields(payload.money),
     referenceExternalTransactionId: payload.referenceExternalTransactionId ?? null,
-  });
+  };
+}
+
+export function canonicalWagerPayload(payload: WagerPayload): string {
+  return canonicalJson(canonicalFieldsOf(payload));
+}
+
+/**
+ * Fingerprint of one queue message: the business payload plus the idempotencyKey it carries. A queue
+ * message is identified by its messageId, so a change of its key is a change of its content. The
+ * key is not part of payloadHash, because for a transaction the key is the identity itself.
+ */
+export function wagerMessageFingerprint(payload: WagerPayload, idempotencyKey: string): string {
+  const canonical = canonicalJson({ ...canonicalFieldsOf(payload), idempotencyKey });
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
 /** SHA-256 of the canonical payload, as lowercase hex. */

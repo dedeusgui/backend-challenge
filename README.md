@@ -11,6 +11,9 @@ documentação: [docs/README.md](docs/README.md).
   LocalStack 4.14 e Docker Compose.
 - **Autenticação:** chaves de API com papéis e escopo de provedor, sem login nem provedor de identidade externo
   ([ADR 0007](docs/adr/0007-api-key-authentication.md)).
+- **Desempenho:** duas medições, em dois ambientes. Baseline local, com 13 cenários de 1 a 8 CPUs, e baseline de nuvem,
+  com 1, 2 e 4 CPUs. Nos dois, o passo acordado foi verificado quanto à correção financeira. Ver
+  [Desempenho medido](#desempenho-medido).
 
 ## Em cinco minutos
 
@@ -42,7 +45,7 @@ documentação: [docs/README.md](docs/README.md).
 | Quais testes provam o quê?                    | suítes por tipo, e o que cada uma não substitui                         | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) e [test/](test/)                                          |
 | Os cenários de negócio, em linguagem legível? | Gherkin executável, com o harness do Cucumber sobre Bun                 | [test/features/](test/features/)                                                                         |
 | Como é a API?                                 | contrato OpenAPI, verificado contra as respostas reais                  | [docs/openapi.json](docs/openapi.json)                                                                   |
-| Quanto o sistema aguenta?                     | duas campanhas de carga, com método, limites e correção                 | [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)                                                   |
+| Quanto o sistema aguenta?                     | duas medições: baseline local (13 cenários) e de nuvem (1, 2 e 4 CPUs)  | [Desempenho medido](#desempenho-medido)                                                                  |
 | O que foi auditado de forma adversarial?      | achados, experimentos e a prova de cada garantia                        | [docs/audit/README.md](docs/audit/README.md)                                                             |
 | O que ainda está em aberto?                   | decisões do dono e limitações                                           | [Limitações e decisões em aberto](#limitações-e-decisões-em-aberto)                                      |
 | Como o projeto se compara a outras soluções?  | o que foi adotado, o que já existia e o que não foi adotado             | [Comparação com outras implementações](#comparação-com-outras-implementações)                            |
@@ -52,18 +55,18 @@ documentação: [docs/README.md](docs/README.md).
 
 A tabela segue as áreas e os pontos do enunciado. Cada linha aponta para a prova e para o comando que a reproduz.
 
-| Área (pontos)                 | Resposta                                                                                                                   | Prova                                                                                                                                                                                                                                                                         |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Correção financeira (20)      | `Money` em decimal; saldo igual ao ledger imposto por triggers no `COMMIT`; ledger imutável; reconciliação                 | `test/unit/shared/domain/money.test.ts`, `test/integration/schema/ledger-balance-trigger.test.ts`, `test/integration/schema/schema-constraints.test.ts`                                                                                                                       |
-| Concorrência (20)             | trava de linha por carteira, versão como guarda, espera limitada, processos reais                                          | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`, `test/integration/wagering/lock-timeout.test.ts`                                                                                                                                           |
-| Idempotência (15)             | chave única por provedor no banco, inbox persistente, replay pelo estado gravado, conflito de payload                      | `test/integration/messaging/duplicate-deliveries.test.ts`, `test/integration/messaging/inbox-message-identity.test.ts`                                                                                                                                                        |
-| Mensageria e falhas (15)      | outbox na mesma transação, ack só após o commit, DLQ antes do ack, quarentena, retenção, devolução no encerramento, prazos | `test/integration/messaging/consumer-shutdown.test.ts`, `test/integration/messaging/outbox-quarantine.test.ts`, `test/integration/messaging/outbox-retention.test.ts`, `test/integration/faults/sqs-deadlines.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` |
-| Modelagem e arquitetura (10)  | domínio sem NestJS, MikroORM nem AWS; invariantes nas entidades; referência amarrada ao id externo da aposta               | [ARCHITECTURE.md](ARCHITECTURE.md), `test/integration/schema/reference-binding.test.ts`, `test/unit/architecture/boundaries.test.ts`                                                                                                                                          |
-| Testes (10)                   | PostgreSQL e LocalStack reais, sem mock de banco nem de fila; falhas injetadas; Gherkin executável                         | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), `bun run check:all`, `bun run test:features`                                                                                                                                                                                  |
-| Observabilidade (5)           | logs JSON com `correlationId` e sem valores financeiros; `/metrics` por processo; liveness e readiness separados           | `test/unit/observability/metric-cardinality.test.ts`, `test/e2e/metrics-http.test.ts`, `test/e2e/health.test.ts`                                                                                                                                                              |
-| Documentação (5)              | este README, ARCHITECTURE, DECISIONS, guia do avaliador e matriz de requisitos                                             | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md)                                                                                                                                                                  |
-| Autenticação (não pontua, §2) | chaves de API com papéis e escopo de provedor                                                                              | [ADR 0007](docs/adr/0007-api-key-authentication.md), `test/e2e/authorization-adversarial.test.ts`                                                                                                                                                                             |
-| Diferencial: teste de carga   | duas campanhas, em dois ambientes, com correção e latência                                                                 | [Desempenho medido](#desempenho-medido)                                                                                                                                                                                                                                       |
+| Área (pontos)                 | Resposta                                                                                                                                 | Prova                                                                                                                                                                                                                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Correção financeira (20)      | `Money` em decimal; saldo igual ao ledger imposto por triggers no `COMMIT`; ledger imutável; reconciliação                               | `test/unit/shared/domain/money.test.ts`, `test/integration/schema/ledger-balance-trigger.test.ts`, `test/integration/schema/` (constraints e triggers)                                                                                                                        |
+| Concorrência (20)             | trava de linha por carteira, versão como guarda, espera limitada, processos reais                                                        | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`, `test/integration/wagering/lock-timeout.test.ts`                                                                                                                                           |
+| Idempotência (15)             | chave única por provedor no banco, inbox persistente, replay pelo estado gravado, conflito de payload                                    | `test/integration/messaging/duplicate-deliveries.test.ts`, `test/integration/messaging/inbox-message-identity.test.ts`                                                                                                                                                        |
+| Mensageria e falhas (15)      | outbox na mesma transação, ack só após o commit, DLQ antes do ack, quarentena, retenção, devolução no encerramento, prazos               | `test/integration/messaging/consumer-shutdown.test.ts`, `test/integration/messaging/outbox-quarantine.test.ts`, `test/integration/messaging/outbox-retention.test.ts`, `test/integration/faults/sqs-deadlines.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` |
+| Modelagem e arquitetura (10)  | domínio sem NestJS, MikroORM nem AWS; invariantes nas entidades; referência amarrada ao id externo da aposta                             | [ARCHITECTURE.md](ARCHITECTURE.md), `test/integration/schema/reference-binding.test.ts`, `test/unit/architecture/boundaries.test.ts`                                                                                                                                          |
+| Testes (10)                   | PostgreSQL e LocalStack reais, sem mock de banco nem de fila; falhas injetadas; Gherkin executável                                       | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), `bun run check:all`, `bun run test:features`                                                                                                                                                                                  |
+| Observabilidade (5)           | logs JSON com `correlationId` e sem valores financeiros; `/metrics` e `/metrics/prometheus` por processo; liveness e readiness separados | `test/unit/observability/metric-cardinality.test.ts`, `test/unit/observability/prometheus-text.test.ts`, `test/e2e/metrics-http.test.ts`, `test/e2e/health.test.ts`                                                                                                           |
+| Documentação (5)              | este README, ARCHITECTURE, DECISIONS, guia do avaliador e matriz de requisitos                                                           | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md)                                                                                                                                                                  |
+| Autenticação (não pontua, §2) | chaves de API com papéis e escopo de provedor                                                                                            | [ADR 0007](docs/adr/0007-api-key-authentication.md), `test/e2e/authorization-adversarial.test.ts`                                                                                                                                                                             |
+| Diferencial: teste de carga   | duas medições, em dois ambientes, com correção e latência                                                                                | [Desempenho medido](#desempenho-medido)                                                                                                                                                                                                                                       |
 
 ## Restrições invioláveis do enunciado (§5)
 
@@ -73,7 +76,7 @@ A tabela segue as áreas e os pontos do enunciado. Cada linha aponta para a prov
 | 2   | Idempotência nunca só em memória                      | chave única no banco por provedor (`UNIQUE`) e inbox persistente                                                 | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
 | 3   | Não confiar só no SQS FIFO                            | a fila não é a garantia: duplicatas e reentregas são absorvidas pela inbox e pela chave de idempotência no banco | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
 | 4   | Nenhum evento publicado antes do commit               | o outbox é gravado na mesma transação SQL; o publicador lê só depois                                             | `test/integration/messaging/outbox-publisher.test.ts`, `test/integration/faults` |
-| 5   | Ledger nunca sobrescrito nem excluído                 | trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` em `wallet_ledger_entries`                                         | `test/integration/schema/schema-constraints.test.ts`                             |
+| 5   | Ledger nunca sobrescrito nem excluído                 | trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` em `wallet_ledger_entries`                                         | `test/integration/schema/`                                                       |
 | 6   | Nenhum lock global entre carteiras                    | `SELECT ... FOR UPDATE` por carteira                                                                             | `test/concurrency/hot-wallet.test.ts`                                            |
 | 7   | Nada de `read → calculate → update` sem controle      | lock de linha antes da decisão, com versão como guarda                                                           | `test/concurrency/hot-wallet.test.ts`                                            |
 | 8   | Correto com múltiplas instâncias                      | três processos independentes sobre o mesmo banco e a mesma fila                                                  | `test/concurrency/three-processes.test.ts`                                       |
@@ -91,7 +94,7 @@ flowchart LR
     B --> C["Implementação mínima (src/)"]
     C --> D["Gate (bun run check:all)"]
     D --> E["Mutação dos testes (docs/TEST_STRATEGY.md)"]
-    E --> F["Revisão cega (docs/audit/REVISAO_SIMULADA.md)"]
+    E --> F["Revisão cega (revisor independente, por rodada)"]
     F --> G["Correção por fatia (git cherry-pick)"]
     G --> H["Commit convencional (git commit)"]
 ```
@@ -128,7 +131,7 @@ A história do projeto é demonstrada pelas decisões técnicas tomadas diante d
 
 ### Fatias, em ordem
 
-O catálogo [docs/HISTORICO.md](docs/HISTORICO.md) contabiliza 72 commits organizados em fatias convencionais (25 docs, 8 feat, 21 fix, 2 merge, 1 perf, 3 refactor e 12 test). Dez fatias representativas do desenvolvimento:
+O catálogo [docs/HISTORICO.md](docs/HISTORICO.md), gerado do `git log` desde o commit `f12191b`, lista cada commit com seu tipo convencional e a contagem por tipo. Dez fatias representativas do desenvolvimento:
 
 | Data       | Commit    | O que mudou                                                           | Prova                                                    |
 | :--------- | :-------- | :-------------------------------------------------------------------- | :------------------------------------------------------- |
@@ -148,11 +151,11 @@ O catálogo [docs/HISTORICO.md](docs/HISTORICO.md) contabiliza 72 commits organi
 
 As revisões sistemáticas do projeto identificaram falhas e direcionaram correções antes do encerramento:
 
-| Rodada                                                                              | Nota estimada               | Achados de maior severidade                                                                                                                                                                                                                            | Status e commit                                                                                                                                                      |
-| :---------------------------------------------------------------------------------- | :-------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Revisão de Invariantes ([docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md))       | 80/100 (estimativa interna) | Risco de crédito duplicado em dois WINs ou REFUND após resultado; ausência de restrições relacionais de moeda e rodada no banco; API sem controle de acesso por provedor                                                                               | Resolvido: índice único em `ce1cb62`; restrições de schema em `f9eb95b`; autenticação em `6ff6891`                                                                   |
-| Auditoria Adversarial ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))            | 85/100 (estimativa interna) | Envelope malformado bloqueava outbox; `idempotencyKey` ausente na identificação de mensagem na inbox; lote lento tornava mensagens visíveis; hooks de teste no código de produção; retenção com erro travava o worker; relógio local usado para prazos | Resolvido: migração 9 em `2905535`; chave em `2ec4d5e`; heartbeat em `b398e22`; composição em `489df8b`; estado terminal em `c8ffbcc`; relógio do banco em `fc3862c` |
-| Revisão Simulada ([docs/audit/REVISAO_SIMULADA.md](docs/audit/REVISAO_SIMULADA.md)) | 90/100 (meta estimada)      | Escrita direta no banco aceitava saldo divergente do ledger; acoplamento em portas de infraestrutura; métrica `retries_total` ausente (§12); falta de suíte Gherkin executável                                                                         | Resolvido: migração 12 em `c5ddca9`; portas em `ef390fe`; métrica em `4ee8f72`; suíte BDD em `3620d74`                                                               |
+| Rodada                                                                        | Nota estimada               | Achados de maior severidade                                                                                                                                                                                                                            | Status e commit                                                                                                                                                      |
+| :---------------------------------------------------------------------------- | :-------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revisão de Invariantes ([docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md)) | 80/100 (estimativa interna) | Risco de crédito duplicado em dois WINs ou REFUND após resultado; ausência de restrições relacionais de moeda e rodada no banco; API sem controle de acesso por provedor                                                                               | Resolvido: índice único em `ce1cb62`; restrições de schema em `f9eb95b`; autenticação em `6ff6891`                                                                   |
+| Auditoria Adversarial ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))      | 85/100 (estimativa interna) | Envelope malformado bloqueava outbox; `idempotencyKey` ausente na identificação de mensagem na inbox; lote lento tornava mensagens visíveis; hooks de teste no código de produção; retenção com erro travava o worker; relógio local usado para prazos | Resolvido: migração 9 em `2905535`; chave em `2ec4d5e`; heartbeat em `b398e22`; composição em `489df8b`; estado terminal em `c8ffbcc`; relógio do banco em `fc3862c` |
+| Revisão Simulada (auditoria de qualidade do código e dos testes)              | 90/100 (meta estimada)      | Escrita direta no banco aceitava saldo divergente do ledger; acoplamento em portas de infraestrutura; métrica `retries_total` ausente (§12); falta de suíte Gherkin executável                                                                         | Resolvido: migração 12 em `c5ddca9`; portas em `ef390fe`; métrica em `4ee8f72`; suíte BDD em `3620d74`                                                               |
 
 ### Como o trabalho com agentes foi controlado
 
@@ -266,10 +269,26 @@ bun run dev             # API, com reinício ao salvar
 bun run src/worker.ts   # worker, em outro terminal
 ```
 
+### Três demonstrações
+
+Três cenários mostram as garantias. Cada um imprime o próprio resultado e precisa apenas dos comandos abaixo.
+
+1. **Processamento financeiro.** Suba a stack (`docker compose up --build`) e rode `bun run demo:finance`. Ele abre uma
+   carteira com 100,00, executa um BET, um WIN, um BET e seu REFUND, e um ROLLBACK do WIN. Confere cada saldo, a recusa
+   de um segundo ROLLBACK, o replay de um BET, a soma do ledger e a reconciliação.
+2. **Concorrência.** `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`. Cinquenta
+   requisições idênticas rodam em paralelo sobre três processos da API e um banco. Um débito é aplicado, e as outras são
+   replays da mesma transação.
+3. **Recuperação.** `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`. Um
+   processo worker termina com código 137 depois que o comando foi confirmado e antes do ACK da mensagem. Um worker
+   reiniciado recebe a mensagem de volta. A fila é esvaziada, o saldo é 75,00, o ledger soma 75,00, e existe exatamente
+   um débito para o comando.
+
 ## Modo protegido (opcional)
 
-Uma borda Nginx fica na frente da API e limita as requisições por endereço de cliente. Nesse modo, a API e o
-PostgreSQL não publicam porta, e a borda é a única entrada, na mesma porta 3000.
+O modo padrão não tem limite de taxa. O modo protegido põe uma borda Nginx na frente da API, que limita as requisições
+por endereço de cliente e recusa o excedente com 429. Nesse modo, a API não publica porta própria, e a borda é a única
+entrada, na mesma porta 3000.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
@@ -279,7 +298,8 @@ docker compose -f docker-compose.yml -f docker-compose.protected.yml down
 
 Os limites são `EDGE_WRITE_RATE` (20 por segundo), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50 por segundo),
 `EDGE_READ_BURST` (100) e `EDGE_MAX_CONNECTIONS` (50). Uma recusa é `429` com `Retry-After` e corpo JSON. Health não é
-limitado. O que essa proteção **não** é, e o custo medido, estão em [ARCHITECTURE.md](ARCHITECTURE.md).
+limitado. `bun run edge:check` sobe a stack, roda a suíte e derruba. `bun run bench:edge <rótulo>` mede o custo da borda
+contra a API. O que essa proteção **não** é, e o custo medido, estão em [ARCHITECTURE.md](ARCHITECTURE.md), seção 15.
 
 ## Comparação com outras implementações
 
@@ -297,14 +317,18 @@ outros projetos não aparecem no repositório.
 | Prazos explícitos para chamadas SQS e para a readiness          | adotada                   | `test/integration/faults/sqs-deadlines.test.ts`                                                                                                                          |
 | Retenção de eventos publicados                                  | adotada                   | `test/integration/messaging/outbox-retention.test.ts`                                                                                                                    |
 | DLQ enviada antes do ack da mensagem original                   | já existia                | `test/integration/messaging/wager-command-consumer.test.ts`                                                                                                              |
+| Métricas em formato Prometheus, sem dependência nova            | adotada                   | `GET /metrics/prometheus`, `test/unit/observability/prometheus-text.test.ts`                                                                                             |
 | Cadeia de hash no ledger                                        | não adotada               | Já há imutabilidade por trigger e reconciliação. A cadeia só traria detecção de adulteração por quem já tem acesso de escrita, e a separação de papéis ainda não existe. |
 | Papel de banco mínimo, sem `UPDATE` nem `DELETE` no ledger      | não adotada               | Exige separar papéis no Compose, que é uma decisão de operação. A imutabilidade já vale para qualquer papel, pelo trigger.                                               |
 | Partida dobrada com contas de casa                              | não adotada               | O enunciado não pede contas de casa. O ledger de lançamentos já é auditável.                                                                                             |
 | Circuit breaker nas chamadas à fila                             | não adotada               | Sem ganho na §14. Prazos e readiness cobrem o caso de dependência lenta ou fora do ar.                                                                                   |
 | Keycloak ou OIDC                                                | não adotada               | Fora do enunciado. A decisão está no [ADR 0007](docs/adr/0007-api-key-authentication.md).                                                                                |
+| Dashboard Grafana                                               | não adotado nesta entrega | Exigiria um serviço e um painel, que a §12 torna opcionais. Ver [Limitações e decisões em aberto](#limitações-e-decisões-em-aberto).                                     |
 | Enviar à fila dentro da transação do outbox                     | descartada                | Segura uma conexão e uma trava de linha durante a chamada ao broker. O publicador usa lease.                                                                             |
 | Dinheiro como inteiro de unidades fracionárias (`bigint`)       | descartada                | `decimal.js` com `NUMERIC(20,2)` é exato e legível. [ADR 0002](docs/adr/0002-money-representation.md).                                                                   |
-| Prometheus e Grafana                                            | em avaliação              | Ver [Limitações e decisões em aberto](#limitações-e-decisões-em-aberto).                                                                                                 |
+
+Além das alternativas acima: dois workers disputando a mesma carteira, com um deles morto no meio da disputa
+(`test/concurrency/distributed-contention.test.ts`).
 
 ## Desempenho medido
 
@@ -431,23 +455,44 @@ verifica que exatamente uma operação tem o efeito, e que as outras são replay
 
 ## Endpoints
 
-Todas as rotas exigem `Authorization: Bearer <chave>`, exceto `/health/live` e `/health/ready`. Valores monetários são
-sempre `{ "amount": "25.00", "currency": "BRL" }`.
+Valores monetários são sempre `{ "amount": "25.00", "currency": "BRL" }`. Todas as rotas exigem
+`Authorization: Bearer <chave>`, exceto os de saúde e de documentação (`/health/live`, `/health/ready`,
+`/openapi.json` e `/docs`). Um cliente de operador abre e lê carteiras. Uma chave de provedor envia e lê as operações do
+próprio provedor. As chaves são criadas pelo comando `auth`, que mostra cada uma uma vez:
 
-| Método e caminho                                                          | Para que serve                                                    | Quem                             |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------- |
-| `POST /wallets`                                                           | abre carteira, com saldo inicial opcional (201; 409 se já existe) | operador                         |
-| `GET /wallets/:walletId`                                                  | saldo, versão e moeda                                             | operador                         |
-| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | lançamentos em ordem, com `nextCursor` opaco                      | operador                         |
-| `POST /wallets/:walletId/reconciliation`                                  | recalcula o saldo pelo ledger e informa divergência               | operador                         |
-| `POST /wagering/transactions`                                             | submete uma operação, com `Idempotency-Key` (201, 200, 202, 422)  | provedor (o próprio) ou operador |
-| `GET /wagering/transactions/:transactionId`                               | uma transação pelo id interno                                     | provedor (o próprio) ou operador |
-| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | a mesma, pelo id do provedor                                      | provedor (o próprio) ou operador |
-| `GET /health/live`, `GET /health/ready`                                   | processo vivo; PostgreSQL e fila respondem                        | público                          |
-| `GET /metrics`                                                            | contadores e resumos deste processo                               | operador                         |
+```bash
+docker compose exec api bun run auth:create -- --name operations --role OPERATOR
+docker compose exec api bun run auth:create -- --name provider-a --role PROVIDER --provider provider-a
+```
+
+| Método e caminho                                                          | Para que serve                                                        | Quem                             |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
+| `POST /wallets`                                                           | abre carteira, com saldo inicial opcional (201; 409 se já existe)     | operador                         |
+| `GET /wallets/:walletId`                                                  | saldo, versão e moeda                                                 | operador                         |
+| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | lançamentos em ordem, com `nextCursor` opaco                          | operador                         |
+| `POST /wallets/:walletId/reconciliation`                                  | recalcula o saldo pelo ledger e informa divergência                   | operador                         |
+| `POST /wagering/transactions`                                             | submete uma operação, com `Idempotency-Key` (201, 200, 202 ou 422)    | provedor (o próprio) ou operador |
+| `GET /wagering/transactions/:transactionId`                               | uma transação pelo id interno                                         | provedor (o próprio) ou operador |
+| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | a mesma, pelo id do provedor                                          | provedor (o próprio) ou operador |
+| `GET /health/live`, `GET /health/ready`                                   | processo vivo; PostgreSQL e fila respondem                            | público                          |
+| `GET /metrics`                                                            | contadores e resumos deste processo, em JSON                          | operador                         |
+| `GET /metrics/prometheus`                                                 | o mesmo, em formato texto do Prometheus (`text/plain; version=0.0.4`) | operador                         |
+| `GET /openapi.json`, `GET /docs`                                          | contrato OpenAPI 3.1 e Swagger UI, servido pela própria API           | público                          |
 
 Os códigos de falha são estáveis e estão em [ARCHITECTURE.md](ARCHITECTURE.md). O contrato completo está em
 [docs/openapi.json](docs/openapi.json).
+
+Exemplo de envio de uma aposta. O cabeçalho `Idempotency-Key` é obrigatório e é a fonte da verdade da idempotência:
+
+```bash
+curl -X POST localhost:3000/wagering/transactions \
+  -H 'content-type: application/json' -H 'Idempotency-Key: provider-a:transaction-123' \
+  -H "authorization: Bearer $PROVIDER_A_KEY" \
+  -d '{"providerId":"provider-a","externalTransactionId":"transaction-123","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<id da carteira>","roundId":"round-987","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
+```
+
+Uma operação recusada volta com 422 e um `failureCode`. `ARCHITECTURE.md` seção 3 lista os códigos, e a seção 10 dá o
+status de cada erro.
 
 ## Fila
 
@@ -476,10 +521,12 @@ A lista completa está em [ARCHITECTURE.md](ARCHITECTURE.md). As mais importante
   consequente: um `WIN` sem referência não bloqueia o `REFUND` da sua `BET`.
 - **Ganho reenviado sob outro id externo.** Se o provedor reenvia um `WIN` com outro id externo, sem nomear a BET, o
   saldo recebe um segundo crédito. A regra e a limitação estão em [ARCHITECTURE.md](ARCHITECTURE.md).
-- **Decisões do dono pendentes:** os achados F-03, F-10 e F-13 da auditoria adversarial. Ver
+- **Decisões em aberto, de responsabilidade do dono do desafio:** os achados F-03, F-10 e F-13 da auditoria adversarial,
+  e as decisões D1 a D5: resultados sem referência, ROLLBACK em qualquer estado da aposta, REFUND só para aposta sem
+  resultado, uma reversão no máximo por referência e autenticação por chave estática. Ver
   [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md). O F-06 (escrita direta de saldo) foi fechado pela migração 12.
-- **Prometheus e Grafana: em avaliação.** Um endpoint em formato texto do Prometheus foi medido sem dependência nova.
-  Grafana exigiria um serviço e um painel, que a §12 torna opcionais. A decisão final é do dono do desafio.
+- **Grafana: não adotado nesta entrega.** O formato texto do Prometheus já está em `GET /metrics/prometheus`, sem
+  dependência nova. Um painel Grafana exigiria um serviço a mais, que a §12 torna opcional.
 
 ## Estrutura do repositório
 
@@ -500,6 +547,10 @@ src/
                           portas (application/ports), adaptadores SQS e persistência
     auth/                 chaves de API, papéis e escopo de provedor
   shared/                 Money, erros, porta de unidade de trabalho, migrações, eventos, validação, observabilidade
+docker/
+  localstack/             provisionamento das filas
+  edge/                   template do Nginx do modo protegido e cabeçalhos de encaminhamento
+docker-compose.protected.yml  sobreposição do modo protegido
 scripts/                  quarentena da outbox (outbox-requeue.ts), vitrine (build-site.ts) e diagramas (export-diagrams.ts)
 test/
   unit/                   domínio, lógica pura, arquitetura, contrato OpenAPI, configuração, observabilidade
@@ -507,7 +558,7 @@ test/
   concurrency/            conexões paralelas e processos reais
   e2e/                    HTTP, autorização adversarial, contrato OpenAPI contra respostas reais
   features/               cenários Gherkin, com os passos em features/steps/
-  edge/                   modo protegido
+  edge/                   modo protegido, e medição do custo da borda
   infra/                  configuração do Compose
   load/                   teste de carga opcional
   demo/                   demonstração financeira
@@ -525,6 +576,7 @@ Comece pelo [índice da documentação](docs/README.md). Os principais:
 - [docs/AUDITORIA_FINAL.md](docs/AUDITORIA_FINAL.md): situação dos itens da auditoria e decisões do dono.
 - [docs/audit/README.md](docs/audit/README.md): auditoria adversarial, com os achados e a prova de cada garantia.
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): o que cada suíte prova e o que não substitui.
+- [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.md): matriz de fluxos, por entrada e por saída.
 - [docs/openapi.json](docs/openapi.json): contrato HTTP.
 - [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), [docs/LOAD_TEST_BASELINE.md](docs/LOAD_TEST_BASELINE.md) e
   [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md): carga.

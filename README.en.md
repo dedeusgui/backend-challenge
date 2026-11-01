@@ -1,43 +1,79 @@
 # Distributed Wagering Processor (English)
 
-The main documentation is in Portuguese, by choice of the final review round: see [README.md](README.md). The challenge specification does not require a language. This file is the English version of the same guide.
+The main documentation is in Portuguese (pt-BR), which is the source of truth: see [README.md](README.md). This file is
+its English translation. The challenge specification does not require a language.
 
-Implementation of the [Jungle Gaming backend challenge](docs/CHALLENGE.md). It applies wager
-operations (BET, WIN, LOSS, REFUND, ROLLBACK) from game providers over HTTP and SQS, keeps
-balances consistent under concurrency, duplicates and crashes, and reconciles each wallet against
-its ledger.
+Service that processes wager operations (`BET`, `WIN`, `LOSS`, `REFUND` and `ROLLBACK`) sent by game providers, over HTTP
+and SQS. It keeps each wallet's balance equal to the sum of its ledger, even with concurrency, duplicate messages,
+out-of-order references, failures and restarts.
 
-## Architecture at a glance
+Solution to the [technical challenge](docs/CHALLENGE.md). Full documentation index: [docs/README.md](docs/README.md)
+(Portuguese).
 
-These diagrams are the same versioned SVG files used on the static showcase. They show the flows that are
-implemented, not a hypothetical architecture. The guarantees and failure points are explained in
-[ARCHITECTURE.md](ARCHITECTURE.md); the matching tests are in the [requirements matrix](docs/REQUIREMENTS_MATRIX.md).
+- **Stack:** Bun 1.4.4, strict TypeScript, NestJS 12, MikroORM 7 (pinned to 7.x), PostgreSQL 17, AWS SQS through
+  LocalStack 4.14, and Docker Compose.
+- **Authentication:** API keys with roles and provider scope, with no login and no external identity provider
+  ([ADR 0007](docs/adr/0007-api-key-authentication.en.md)).
+- **Performance:** two measurements, in two environments. A local baseline with 13 scenarios from 1 to 8 CPUs, and a
+  cloud baseline with 1, 2 and 4 CPUs. In both, the agreed step was verified for financial correctness. See
+  [Measured performance](#measured-performance).
 
-### 1. BET received over HTTP
+## Five minutes
 
-Authentication and provider identity, validation of the operation, idempotency, and the transactional decision.
-[Open the SVG at full size](docs/diagrams/bet-over-http.svg).
+1. Start the stack and check readiness:
 
-![BET over HTTP flow, including authentication, idempotency, and persistence](docs/diagrams/bet-over-http.svg)
+   ```bash
+   docker compose up --build
+   curl http://localhost:3000/health/ready
+   ```
 
-### 2. Command received from SQS
+2. Run the financial demonstration, which calls the API and checks every balance: `bun run demo:finance`.
+3. Run the full gate, which includes real PostgreSQL and LocalStack: `bun run infra:up` and then `bun run check:all`.
+4. Follow the [reviewer guide](docs/REVIEWER_GUIDE.md) (Portuguese), about 40 minutes, with what each test proves and
+   what it does not.
 
-Queue consumption, financial processing shared with the HTTP route, handling of redeliveries, and message
-acknowledgement. [Open the SVG at full size](docs/diagrams/queued-command.svg).
+## Where everything is
 
-![Flow of a betting command coming from the SQS queue](docs/diagrams/queued-command.svg)
+| Question                                           | Answer                                                                      | Where                                                                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| What does the challenge ask?                       | the specification, unchanged                                                | [docs/CHALLENGE.md](docs/CHALLENGE.md)                                                                      |
+| How was the work conducted?                        | development cycle, episodes, slices and reviews                             | [How the work was done](#how-the-work-was-done)                                                             |
+| Where does the evaluation start?                   | a route with estimated time and what each step proves                       | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) (Portuguese)                                               |
+| Does each requirement have a proof?                | requirement-to-test matrix, with the status of each line                    | [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) (Portuguese)                                     |
+| How is the system organised?                       | layers, flows, invariants, trade-offs and limitations                       | [ARCHITECTURE.en.md](ARCHITECTURE.en.md)                                                                    |
+| Why each choice?                                   | decisions, alternatives and evidence                                        | [DECISIONS.en.md](DECISIONS.en.md) and [docs/adr/](docs/adr/README.en.md)                                   |
+| How is money represented?                          | `Money`, on decimal, never `number`                                         | [src/shared/domain/money.ts](src/shared/domain/money.ts)                                                    |
+| How are balance and ledger protected?              | per-wallet lock, version, immutability and balance-agreement triggers       | [src/modules/wallet/](src/modules/wallet/) and [migrations](src/shared/infrastructure/database/migrations/) |
+| Where does the settlement rule live?               | settlement entity and service, called by HTTP and by the queue              | [transaction-settlement.ts](src/modules/wagering/application/transaction-settlement.ts)                     |
+| How does messaging work?                           | inbox, outbox, consumer, publisher, DLQ and quarantine                      | [src/modules/messaging/](src/modules/messaging/)                                                            |
+| Which tests prove what?                            | suites by type, and what each one does not replace                          | [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md) and [test/](test/)                                     |
+| The business scenarios, in readable language?      | executable Gherkin, with the Cucumber harness on Bun                        | [test/features/](test/features/)                                                                            |
+| What does the API look like?                       | OpenAPI contract, checked against the real responses                        | [docs/openapi.json](docs/openapi.json)                                                                      |
+| How much can the system take?                      | two measurements: local baseline (13 scenarios) and cloud (1, 2 and 4 CPUs) | [Measured performance](#measured-performance)                                                               |
+| What was audited adversarially?                    | findings, experiments and the proof of each guarantee                       | [docs/audit/README.md](docs/audit/README.md) (Portuguese)                                                   |
+| What is still open?                                | owner decisions and limitations                                             | [Limitations and open decisions](#limitations-and-open-decisions)                                           |
+| How does the project compare with other solutions? | what was adopted, what already existed and what was not adopted             | [Comparison with other implementations](#comparison-with-other-implementations)                             |
+| How is the solution published?                     | static showcase, generated from the repository                              | [technical showcase](https://dedeusgui.github.io/backend-challenge/)                                        |
 
-### 3. Outcomes, states and entities
+## How the project answers the evaluation (§14)
 
-The transitions and the records involved in the decision on a financial operation.
-[Open the SVG at full size](docs/diagrams/outcome-entities.svg).
+The table follows the areas and the points of the specification. Each row points to the proof and to the command that
+reproduces it.
 
-![State and entity diagram of the financial processing](docs/diagrams/outcome-entities.svg)
+| Area (points)                   | Answer                                                                                                                                          | Proof                                                                                                                                                                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Financial correctness (20)      | `Money` in decimal; balance equal to the ledger, enforced by triggers at `COMMIT`; immutable ledger; reconciliation                             | `test/unit/shared/domain/money.test.ts`, `test/integration/schema/ledger-balance-trigger.test.ts`, `test/integration/schema/` (constraints and triggers)                                                                                                                      |
+| Concurrency (20)                | per-wallet row lock, version as guard, bounded wait, real processes                                                                             | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`, `test/integration/wagering/lock-timeout.test.ts`                                                                                                                                           |
+| Idempotency (15)                | one key per provider in the database, persistent inbox, replay from the stored state, payload conflict                                          | `test/integration/messaging/duplicate-deliveries.test.ts`, `test/integration/messaging/inbox-message-identity.test.ts`                                                                                                                                                        |
+| Messaging and failures (15)     | outbox in the same transaction, ack only after commit, DLQ before ack, quarantine, retention, return on shutdown, deadlines                     | `test/integration/messaging/consumer-shutdown.test.ts`, `test/integration/messaging/outbox-quarantine.test.ts`, `test/integration/messaging/outbox-retention.test.ts`, `test/integration/faults/sqs-deadlines.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` |
+| Modelling and architecture (10) | domain without NestJS, MikroORM or AWS; invariants in the entities; reference bound to the bet's external id                                    | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), `test/integration/schema/reference-binding.test.ts`, `test/unit/architecture/boundaries.test.ts`                                                                                                                                    |
+| Tests (10)                      | real PostgreSQL and LocalStack, no mock of the database or the queue; injected faults; executable Gherkin                                       | [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md), `bun run check:all`, `bun run test:features`                                                                                                                                                                            |
+| Observability (5)               | JSON logs with `correlationId` and without financial values; `/metrics` and `/metrics/prometheus` per process; liveness and readiness separated | `test/unit/observability/metric-cardinality.test.ts`, `test/unit/observability/prometheus-text.test.ts`, `test/e2e/metrics-http.test.ts`, `test/e2e/health.test.ts`                                                                                                           |
+| Documentation (5)               | this README, ARCHITECTURE, DECISIONS, the reviewer guide and the requirements matrix                                                            | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) (Portuguese), [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) (Portuguese)                                                                                                                                        |
+| Authentication (not scored, §2) | API keys with roles and provider scope                                                                                                          | [ADR 0007](docs/adr/0007-api-key-authentication.en.md), `test/e2e/authorization-adversarial.test.ts`                                                                                                                                                                          |
+| Differentiator: load test       | two measurements, in two environments, with correctness and latency                                                                             | [Measured performance](#measured-performance)                                                                                                                                                                                                                                 |
 
-## Restrictions from the specification (§5)
-
-Each restriction of the [specification](docs/CHALLENGE.md) has a mechanism in the code or in the database and a
-test that proves it. The numbers follow §5 of the specification.
+## Inviolable restrictions from the specification (§5)
 
 | #   | Restriction                                               | How the project meets it                                                                                                      | Proof                                                                            |
 | --- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -45,14 +81,13 @@ test that proves it. The numbers follow §5 of the specification.
 | 2   | Idempotency never only in memory                          | a unique key in the database per provider (`UNIQUE`) and a persistent inbox                                                   | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
 | 3   | Do not rely only on SQS FIFO                              | the queue is not the guarantee: duplicates and redeliveries are absorbed by the inbox and the idempotency key in the database | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
 | 4   | No event published before the commit                      | the outbox is written in the same SQL transaction; the publisher reads only afterwards                                        | `test/integration/messaging/outbox-publisher.test.ts`, `test/integration/faults` |
-| 5   | Ledger never overwritten or deleted                       | a trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` on `wallet_ledger_entries`                                                    | `test/integration/schema/schema-constraints.test.ts`                             |
+| 5   | Ledger never overwritten or deleted                       | a trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` on `wallet_ledger_entries`                                                    | `test/integration/schema/`                                                       |
 | 6   | No global lock across wallets                             | `SELECT ... FOR UPDATE` per wallet                                                                                            | `test/concurrency/hot-wallet.test.ts`                                            |
 | 7   | No `read → calculate → update` without control            | a row lock before the decision, with the version as a guard                                                                   | `test/concurrency/hot-wallet.test.ts`                                            |
 | 8   | Correct with multiple instances                           | three independent processes over the same database and queue                                                                  | `test/concurrency/three-processes.test.ts`                                       |
 | 9   | Uniqueness, immutability and non-negativity in the schema | `CHECK`, `UNIQUE`, `FK` and triggers in the migrations                                                                        | `test/integration/schema`                                                        |
 
-The migrations are versioned and reversible: all 16 have `up` and `down`, and the rollback test is in
-`test/integration/schema/migrations.test.ts`. The code runs in strict TypeScript (`"strict": true` in `tsconfig.json`).
+All 16 migrations have `up` and `down`. The rollback test is in `test/integration/schema/migrations.test.ts`.
 
 ## How the work was done
 
@@ -63,45 +98,45 @@ flowchart LR
     A["Specification (docs/CHALLENGE.md and docs/REQUIREMENTS_MATRIX.md)"] --> B["Failing test (test/ or test/features/)"]
     B --> C["Minimal implementation (src/)"]
     C --> D["Gate (bun run check:all)"]
-    D --> E["Test mutation (docs/TEST_STRATEGY.md)"]
-    E --> F["Blind review (docs/audit/REVISAO_SIMULADA.md)"]
+    D --> E["Test mutation (docs/TEST_STRATEGY.en.md)"]
+    E --> F["Blind review (independent reviewer, per round)"]
     F --> G["Slice correction (git cherry-pick)"]
     G --> H["Conventional commit (git commit)"]
 ```
 
 ### Three real episodes
 
-The engineering process is demonstrated by concrete technical decisions driven by evidence:
+The project's history is shown by the technical decisions taken in the face of concrete evidence:
 
 #### 1. Wallet balance with deferred triggers
 
-- **What was at stake:** Enforce at the database level that a wallet balance strictly equals the sum of its ledger entries (§6.2), preventing direct SQL updates or application bugs from corrupting balances.
-- **The question that arose:** Would constraint triggers executed at `COMMIT` add unacceptable latency to the critical concurrency write path?
-- **Evidence:** Experiment 1 in [docs/audit/PERFORMANCE_COMPARISON.md](docs/audit/PERFORMANCE_COMPARISON.md) measured the cost across six rounds. Median latency increased by 0.10 ms in the sequential benchmark (+1.6%) and by 1.84 ms under contention with 8 workers (+4.7%). Read latency stayed constant at 0.50 ms with 1,000,000 ledger entries.
-- **Decision:** Adopt deferred constraint triggers `wallets_ledger_balance_check` and `wallet_ledger_entries_balance_check` in migration 12, as documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+- **What was at stake:** Enforce at the database level that a wallet balance equals the sum of its ledger entries (challenge §6.2), so that manual writes or defects outside the application cannot corrupt the accounting.
+- **The question that arose:** Would constraint triggers executed at `COMMIT` add excessive latency to the concurrent write path?
+- **Evidence:** Experiment 1 in [docs/audit/PERFORMANCE_COMPARISON.md](docs/audit/PERFORMANCE_COMPARISON.md) (Portuguese) measured the cost over six rounds. Median latency rose by 0.10 ms in the sequential scenario (+1.6%) and by 1.84 ms under contention with 8 simultaneous workers (+4.7%). Read time stayed at 0.50 ms with 1,000,000 ledger entries.
+- **Decision:** Adopt the deferred triggers `wallets_ledger_balance_check` and `wallet_ledger_entries_balance_check` in migration 12, as documented in [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
 - **Proof:** Commit `c5ddca9`, [Migration20261101000012.ts](src/shared/infrastructure/database/migrations/Migration20261101000012.ts), and test [ledger-balance-trigger.test.ts](test/integration/schema/ledger-balance-trigger.test.ts).
 
 #### 2. A test that can fail (mutation)
 
 - **What was at stake:** Verify that the test suite breaks when critical rules are removed, avoiding loose assertions.
-- **The question that arose:** Does the concurrency suite detect the removal of pessimistic locks or outbox lease expiration predicates?
-- **Evidence:** In the mutation evidence section of [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), mutants were deliberately injected against [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts):
-  - **Killed mutant:** Removing the wallet row lock (`FOR UPDATE`) was caught by the test without retries, which failed with three lost updates. Removing the outbox lease predicate caused 61 duplicate claims.
-  - **Surviving mutant:** Removing `SKIP LOCKED` from outbox claims survived. The second publisher waits on the row lock and re-evaluates the lease condition without data corruption. Because no test measures wait duration, the mutant is equivalent in terms of safety and was documented as a known gap.
-- **Decision:** Keep dedicated tests without retries to eliminate concurrency mutants, and document equivalent safety mutants in [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md).
-- **Proof:** [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) and [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts).
+- **The question that arose:** Does the concurrency suite detect the removal of pessimistic locks or of the outbox lease expiration predicate?
+- **Evidence:** In the mutation evidence section of [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md), mutants were deliberately injected against [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts):
+  - **Killed mutant:** Removing the wallet row lock (`FOR UPDATE`) was caught by the test without retries, which reported three lost updates. Removing the outbox lease predicate caused 61 duplicate claims.
+  - **Surviving mutant:** Removing `SKIP LOCKED` from outbox claims survived. The second publisher waits on the row lock and re-evaluates the lease condition, without data corruption. Because no test measures lock wait time, the mutant is equivalent in terms of safety and was kept as a documented gap.
+- **Decision:** Keep dedicated tests without retries to kill concurrency mutants, and document equivalent safety mutants in [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md).
+- **Proof:** [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md) and [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts).
 
 #### 3. A review finding turned into code
 
-- **What was at stake:** Satisfy the observability requirements of the challenge specification (§12).
-- **The question that arose:** Round 2 of the simulated review pointed out that while health and latency metrics existed, the Prometheus retry counter was missing.
-- **Evidence:** Inspecting metric collectors confirmed the absence of a unified `retries_total` counter for queue retries, outbox retries, and held reference resolution.
-- **Decision:** Introduce the Prometheus counter `retries_total` tagged with a `subsystem` label instrumented across all three reprocessing flows (`wager-command-consumer.ts`, `outbox-publisher.ts` and `process-pending-references.use-case.ts`) with a dedicated unit test.
+- **What was at stake:** Meet the operational metrics requirement of the specification (§12).
+- **The question that arose:** Round 2 of the simulated review pointed out that the Prometheus retry counter was missing.
+- **Evidence:** Inspecting the metric collectors confirmed the absence of a unified `retries_total` counter for queue retries, outbox retries and held reference resolution.
+- **Decision:** Introduce the unified `retries_total` metric with a `subsystem` label, instrumented in the three reprocessing flows (`wager-command-consumer.ts`, `outbox-publisher.ts` and `process-pending-references.use-case.ts`), and covered by a unit test.
 - **Proof:** Commit `4ee8f72` and test [retries-total.test.ts](test/unit/observability/retries-total.test.ts).
 
 ### Slices, in order
 
-The log catalog in [docs/HISTORICO.md](docs/HISTORICO.md) records 72 commits divided into conventional slices (25 docs, 8 feat, 21 fix, 2 merge, 1 perf, 3 refactor, and 12 test). Ten representative slices:
+The generated log catalog [docs/HISTORICO.en.md](docs/HISTORICO.en.md) is built from `git log` since commit `f12191b`. It lists each commit with its conventional type, and the count per type. Ten representative slices:
 
 | Date       | Commit    | What changed                                                            | Proof                                                    |
 | :--------- | :-------- | :---------------------------------------------------------------------- | :------------------------------------------------------- |
@@ -121,68 +156,82 @@ The log catalog in [docs/HISTORICO.md](docs/HISTORICO.md) records 72 commits div
 
 Systematic reviews identified defects and guided corrective slices before delivery:
 
-| Round                                                                                       | Estimated score            | Highest severity findings                                                                                                                                                                                                                     | Status and commit                                                                                                                                                                |
-| :------------------------------------------------------------------------------------------ | :------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Invariant Review ([docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md))                     | 80/100 (internal estimate) | Duplicate credit risk on multiple WINs or REFUND after result; missing database constraints for currency and round; unauthenticated API endpoints                                                                                             | Resolved: unique index in `ce1cb62`; schema constraints in `f9eb95b`; authentication in `6ff6891`                                                                                |
-| Adversarial Audit ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))                        | 85/100 (internal estimate) | Malformed envelope halted outbox; `idempotencyKey` missing from inbox message identity; slow batch exposed messages in flight; test fault hooks in production code; held transaction error stalled worker; local host clock used for timeouts | Resolved: migration 9 in `2905535`; inbox identity in `2ec4d5e`; heartbeat in `b398e22`; test composition in `489df8b`; terminal state in `c8ffbcc`; database clock in `fc3862c` |
-| Simulated Quality Review ([docs/audit/REVISAO_SIMULADA.md](docs/audit/REVISAO_SIMULADA.md)) | 90/100 (target estimate)   | Direct database write allowed balance divergent from ledger; infrastructure coupling in ports; missing `retries_total` counter (§12); missing executable Gherkin suite                                                                        | Resolved: migration 12 in `c5ddca9`; ports in `ef390fe`; metric in `4ee8f72`; BDD suite in `3620d74`                                                                             |
+| Round                                                                         | Estimated score            | Highest severity findings                                                                                                                                                                                                                     | Status and commit                                                                                                                                                                |
+| :---------------------------------------------------------------------------- | :------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Invariant Review ([docs/INVARIANT_REVIEW.en.md](docs/INVARIANT_REVIEW.en.md)) | 80/100 (internal estimate) | Duplicate credit risk on multiple WINs or REFUND after result; missing database constraints for currency and round; unauthenticated API endpoints                                                                                             | Resolved: unique index in `ce1cb62`; schema constraints in `f9eb95b`; authentication in `6ff6891`                                                                                |
+| Adversarial Audit ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))          | 85/100 (internal estimate) | Malformed envelope halted outbox; `idempotencyKey` missing from inbox message identity; slow batch exposed messages in flight; test fault hooks in production code; held transaction error stalled worker; local host clock used for timeouts | Resolved: migration 9 in `2905535`; inbox identity in `2ec4d5e`; heartbeat in `b398e22`; test composition in `489df8b`; terminal state in `c8ffbcc`; database clock in `fc3862c` |
+| Simulated Quality Review (code and test quality audit)                        | 90/100 (target estimate)   | Direct database write allowed balance divergent from ledger; infrastructure coupling in ports; missing `retries_total` counter (§12); missing executable Gherkin suite                                                                        | Resolved: migration 12 in `c5ddca9`; ports in `ef390fe`; metric in `4ee8f72`; BDD suite in `3620d74`                                                                             |
 
 ### How agent work was controlled
 
-AI-assisted development was conducted under strict delegation and continuous human supervision. Artificial intelligence tools do not guarantee correctness on their own. Architectural design, specification interpretation, and final approval of every line of code were exclusive responsibilities of the human author.
+AI-assisted development was conducted under strict delegation and continuous human supervision. Artificial intelligence does not guarantee correctness on its own. Architectural design, interpretation of the specification's rules, and final approval of the code were exclusive responsibilities of the human author.
 
-- **Scoped briefs:** each task started from a brief written by the author defining an explicit objective, allowed files, and measurable acceptance criteria.
-- **Isolated worktrees:** agents executed tasks in dedicated Git worktrees and branches, with no permission to push or alter shared branches.
-- **Diff inspection and quality gate:** the human coordinator inspected every diff and executed the full test gate (`bun run check:all`) against live PostgreSQL and LocalStack instances before accepting any changes.
-- **Selective integration:** approved slices were integrated using `git cherry-pick`. Agents drafted code and tests; the human author evaluated edge cases, reviewed design decisions, and decided what entered the codebase.
+- **Scoped briefs:** each task started from a brief written by the author, with an explicit objective, the allowed files and measurable acceptance criteria.
+- **Isolated worktrees:** agents worked in dedicated Git worktrees and branches, with no permission to push or to change shared branches.
+- **Diff inspection and quality gate:** the human coordinator inspected every diff and ran the full gate (`bun run check:all`) against real PostgreSQL and LocalStack instances before accepting any work.
+- **Selective integration:** approved slices were integrated into the history with `git cherry-pick`. Agents implemented slices and tests; the human author checked the behaviour, refined the decisions and decided what entered the repository.
 
 ### What the proof does not cover
 
-Honest boundaries regarding automated proof coverage:
+Known limits on how far the automated proofs reach:
 
-- **Git history ordering:** Git commits do not record whether each test failed before the code was written. The order is required by [CLAUDE.md](CLAUDE.md), and technical proof of test sensitivity is provided by mutation testing ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
-- **Gherkin scenarios tagged with `@bloqueado`:** two scenarios in [test/features/mensageria.feature](test/features/mensageria.feature) (lines 71 and 91) are excluded from the Gherkin harness. Scenario line 71 (DLQ redrive after ten failures) is proven by integration test [test/integration/messaging/broker-redrive.test.ts](test/integration/messaging/broker-redrive.test.ts). Scenario line 91 (graceful SIGTERM shutdown during a batch) is proven by real-process test [test/concurrency/process-crash-and-shutdown.test.ts](test/concurrency/process-crash-and-shutdown.test.ts).
-- **HTTP server process crash during active transaction:** abrupt process termination (`SIGKILL`) of an HTTP server process during an open transaction is not injected at the operating system level; it is covered in-process by concurrency and fault injection tests ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
-- **Equivalent outbox wait mutant:** the test suite does not catch the removal of `SKIP LOCKED` on outbox claiming (mutant M3 in [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)), because omitting it causes queueing wait without violating data integrity, and no test asserts lock wait time.
-- **Load test after migration 12:** the 13-scenario load test suite was not rerun after introducing the deferred balance consistency triggers in migration 12 ([ARCHITECTURE.md](ARCHITECTURE.md)).
+- **Temporal order of test writing:** the Git history does not prove that each test failed before the code was written. The order is required by [CLAUDE.md](CLAUDE.md), and the technical evidence of test sensitivity is in the mutation tests ([docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)).
+- **Gherkin scenarios tagged `@bloqueado`:** two scenarios in [test/features/mensageria.feature](test/features/mensageria.feature) (lines 71 and 91) are outside the BDD harness run. Scenario line 71 (DLQ redrive after ten failures) is covered by the integration test [test/integration/messaging/broker-redrive.test.ts](test/integration/messaging/broker-redrive.test.ts). Scenario line 91 (SIGTERM shutdown during batch processing) is covered by the real-process test [test/concurrency/process-crash-and-shutdown.test.ts](test/concurrency/process-crash-and-shutdown.test.ts).
+- **HTTP API process crash during an open transaction:** an abrupt termination (`SIGKILL`) of an HTTP process in the middle of an open transaction is not injected at the operating-system level. The API is covered in-process by the concurrency and fault-injection tests ([docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)).
+- **Equivalent outbox wait mutant:** the suite does not detect the removal of the `SKIP LOCKED` clause in the outbox query (mutant M3 in [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)), because it only introduces ordered waiting without breaking data integrity, and no test measures lock wait times.
+- **Load test after migration 12:** the full 13-scenario load test suite was not rerun after the balance-agreement triggers of migration 12 were added ([ARCHITECTURE.en.md](ARCHITECTURE.en.md)).
 
-## Reading order
+## Architecture at a glance
 
-The table follows the evaluation criteria of the specification (§14). Each area points to its proof and to the command that reproduces it.
+These diagrams are the same SVG files used on the static showcase. They show the flows that are implemented. The
+guarantees and failure points are explained in [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
 
-| Area (points)                   | Where the solution answers                                                              | How to check                                                                                                 |
-| ------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Financial correctness (20)      | `Money` as decimal, versioned balance, immutable ledger, reconciliation                 | `bun run demo:finance`; `test/unit/shared/domain/money.test.ts`                                              |
-| Concurrency (20)                | per-wallet row lock, version as guard, real processes                                   | `test/concurrency/hot-wallet.test.ts`, `test/concurrency/three-processes.test.ts`                            |
-| Idempotency (15)                | one key per provider in the database, replay from persisted state                       | `test/integration/messaging/duplicate-deliveries.test.ts`                                                    |
-| Messaging and failures (15)     | outbox in the same transaction, inbox, DLQ, lease, process death                        | `test/concurrency/process-crash-and-shutdown.test.ts`, `test/integration/faults`                             |
-| Modelling and architecture (10) | domain without NestJS, MikroORM or AWS; invariants in the entities                      | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), sections 1 and 2                                                   |
-| Tests (10)                      | real PostgreSQL and LocalStack, no mock of the database or the queue                    | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.en.md), `bun run check:all`                                       |
-| Observability (5)               | JSON logs with `correlationId`, `/metrics` per process, separate liveness and readiness | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), section 11; `GET /health/ready`                                    |
-| Documentation (5)               | this README, ARCHITECTURE, DECISIONS and the reviewer guide                             | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) (Portuguese)                                                |
-| Authentication (not scored, §2) | API keys with roles and provider scope; the choice is documented                        | [ARCHITECTURE.en.md](ARCHITECTURE.en.md), section 12; [ADR 0007](docs/adr/0007-api-key-authentication.en.md) |
-| Differentiator: load test       | two campaigns, in two environments, with correctness and latency                        | [Test](#test)                                                                                                |
+### 1. BET received over HTTP
 
-Then, in this order:
+Authentication and provider identity, validation of the operation, idempotency, and the transactional decision.
+[Open the SVG at full size](docs/diagrams/bet-over-http.svg).
 
-1. **This README**: how to run and test the service.
-2. **[ARCHITECTURE.md](ARCHITECTURE.en.md)**: the flow, the main decisions (the table at its start
-   gives each one with its reason and its evidence), and the limitations in section 14.
-3. **Contract**: [docs/openapi.json](docs/openapi.json), checked against the routes and the real answers.
-4. **Reproducible evidence**: [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) links each
-   requirement to the test that proves it. [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.en.md) says what each
-   suite runs and what it does not replace.
-5. **Appendices, for deeper reading**: the [ADR index](docs/adr/README.en.md) and its records;
-   [DECISIONS.md](DECISIONS.en.md), every decision with its evidence; the reviews in
-   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md);
-   [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.en.md); the load reports in
-   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), the local baseline with 13 scenarios, correctness and
-   concurrency in [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md), and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.en.md);
-   the [implementation log](docs/IMPLEMENTATION_PLAN.en.md); and the [specification](docs/CHALLENGE.md), kept verbatim.
+![BET over HTTP flow, including authentication, idempotency and persistence](docs/diagrams/bet-over-http.svg)
+
+### 2. Command received from SQS
+
+Queue consumption, financial processing shared with the HTTP route, handling of redeliveries, and message
+acknowledgement. [Open the SVG at full size](docs/diagrams/queued-command.svg).
+
+![Flow of a betting command coming from the SQS queue](docs/diagrams/queued-command.svg)
+
+### 3. Outcomes, states and entities
+
+The transitions and the records involved in the decision on a financial operation.
+[Open the SVG at full size](docs/diagrams/outcome-entities.svg).
+
+![State and entity diagram of the financial processing](docs/diagrams/outcome-entities.svg)
+
+The diagrams are explanatory. The proof of the invariants is in the database constraints and triggers, in the code, and
+in the integration, concurrency and fault tests.
+
+## Guarantees
+
+| Guarantee                                            | How it is enforced                                                                    | Where it is proven                                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Money is never a `number`                            | `Money` over `decimal.js`, `NUMERIC(20,2)` columns                                    | `test/unit/shared/domain/money.test.ts`                                                           |
+| Balance never negative, not even under a race        | per-wallet row lock, version as guard, `CHECK` in the database                        | `test/concurrency/hot-wallet.test.ts`                                                             |
+| Balance equal to the sum of the ledger               | constraint trigger deferred to `COMMIT`; immutable ledger; reconciliation on read     | `test/integration/schema/ledger-balance-trigger.test.ts`, `test/e2e/queries-http.test.ts`         |
+| Reference entry only for the right bet               | composite foreign key with the bet's external id                                      | `test/integration/schema/reference-binding.test.ts`                                               |
+| One effect, however many deliveries                  | idempotency key per provider, inbox, `UNIQUE` in the database                         | `test/integration/messaging/duplicate-deliveries.test.ts`                                         |
+| Event only after commit                              | outbox in the same transaction; publisher with lease                                  | `test/integration/faults`, `test/integration/messaging/outbox-publisher.test.ts`                  |
+| Three processes, no duplicate effect                 | real processes, one database, one queue                                               | `test/concurrency/three-processes.test.ts`                                                        |
+| Recovery after a death midway through the path       | worker killed before and after commit, with redelivery                                | `test/concurrency/process-crash-and-shutdown.test.ts`                                             |
+| Unprocessed message returns to the queue on shutdown | visibility returned before the next processing                                        | `test/integration/messaging/consumer-shutdown.test.ts`                                            |
+| Event that never publishes does not block the queue  | quarantine after N attempts, with operator requeue                                    | `test/integration/messaging/outbox-quarantine.test.ts`, `scripts/outbox-requeue.ts`               |
+| Waits have deadlines                                 | `lock_timeout` and `statement_timeout` per transaction; deadline on SQS and readiness | `test/integration/wagering/lock-timeout.test.ts`, `test/integration/faults/sqs-deadlines.test.ts` |
+
+The full list, with the interpretation of each ambiguous rule of the specification, is in
+[ARCHITECTURE.en.md](ARCHITECTURE.en.md) and [docs/INVARIANT_REVIEW.en.md](docs/INVARIANT_REVIEW.en.md).
 
 ## Run
 
-Requirements: Bun **1.4.4**, the version pinned in CI and in the Dockerfile, and Docker with Compose.
+Requirements: Docker with Compose and, to develop or test, Bun **1.4.4**.
 
 ```bash
 docker compose up --build
@@ -191,72 +240,112 @@ curl http://localhost:3000/health/ready
 ```
 
 Compose starts PostgreSQL and LocalStack, which provisions the queues `wager-transactions.fifo`,
-`wager-transactions-dlq.fifo` and `wager-events.fifo`. It runs the migrations once, then starts the API
-on port 3000 and the worker. The API starts only after the migration has succeeded. Every published port
-binds `127.0.0.1` (set `PUBLISH_HOST` to change it). The worker exposes its liveness and metrics on the
-internal port 3001, which is not published.
+`wager-transactions-dlq.fifo` and `wager-events.fifo`. It runs the migrations once, and only then starts the API
+(port 3000) and the worker.
 
-For local development, without the API and worker containers:
+Every published port binds `127.0.0.1`: the database, LocalStack and the API are reachable only from this machine. To
+expose another interface, set `PUBLISH_HOST`, and do it only on a network you control. The worker publishes no port; its
+internal health and metrics surface (port 3001) stays on the Compose network.
+
+To create an operator key and read the metrics:
+
+```bash
+docker compose exec api bun run auth:create -- --name operations --role OPERATOR
+# key: wgr_...   (shown once; only the hash is stored)
+curl -H "authorization: Bearer wgr_..." http://localhost:3000/metrics
+```
+
+The financial demonstration runs on the host and creates its own keys. **It requires the stack to be running**, because
+it calls the API, and the stack is what applies the migrations to the database. Without the stack, the demonstration
+fails when it creates the first key:
+
+```bash
+docker compose up --build        # in one terminal
+bun install --frozen-lockfile
+bun run demo:finance
+```
+
+### Local development without the application containers
 
 ```bash
 cp .env.example .env
 bun install --frozen-lockfile
-bun run infra:up              # PostgreSQL and LocalStack, with health checks
-bun run db:migrate            # apply migrations
-bun run dev                   # API with restart on change
-bun run src/worker.ts         # worker, in another terminal
+bun run infra:up        # PostgreSQL and LocalStack, with health checks
+bun run db:migrate
+bun run dev             # API, with restart on change
+bun run src/worker.ts   # worker, in another terminal
 ```
+
+### Three demonstrations
+
+Three scenarios show the guarantees. Each one prints its own result and needs only the commands below.
+
+1. **Financial processing.** Start the stack (`docker compose up --build`), then run `bun run demo:finance`. It opens a
+   wallet with 100.00, runs a BET, a WIN, a BET and its REFUND, and a ROLLBACK of the WIN. It checks every balance, the
+   refusal of a second ROLLBACK, the replay of a BET, the ledger sum and the reconciliation.
+2. **Concurrency.** `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`. Fifty identical
+   requests run in parallel over three API processes and one database. One debit is applied, and the others are replays
+   of the same transaction.
+3. **Recovery.** `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`. A worker
+   process exits with code 137 after its command has committed and before the message is acknowledged. A restarted
+   worker takes the message back. The queue is drained, the balance is 75.00, the ledger sums to 75.00, and there is
+   exactly one debit for the command.
 
 ## Protected mode (optional)
 
-The default mode above has no rate limit. The protected mode puts an Nginx edge in front of the API. It limits
-each client address, and it refuses the rest with 429. The API publishes no port of its own in this mode, so the
-edge is the only way in. The public port is the same, 3000.
+The default mode has no rate limit. The protected mode puts an Nginx edge in front of the API, which limits requests per
+client address and refuses the excess with 429. In this mode the API publishes no port of its own, and the edge is the
+only entry point. The public port is the same, 3000.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
-bun run test:edge                 # the protected-mode suite, against the running stack
+bun run test:edge        # 12 cases against the running stack
 docker compose -f docker-compose.yml -f docker-compose.protected.yml down
 ```
 
-The limits are set with `EDGE_WRITE_RATE` (20r/s), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50r/s),
-`EDGE_READ_BURST` (100) and `EDGE_MAX_CONNECTIONS` (50). A refused request is 429 with `Retry-After`, and its body
-is JSON. Health checks are not limited. `bun run edge:check` starts the stack, runs the suite and stops it.
-`bun run bench:edge <label>` measures the cost of the edge against the API. `ARCHITECTURE.md` section 15 gives the
-design, what it does not protect, and the measured cost.
+The limits are `EDGE_WRITE_RATE` (20 per second), `EDGE_WRITE_BURST` (40), `EDGE_READ_RATE` (50 per second),
+`EDGE_READ_BURST` (100) and `EDGE_MAX_CONNECTIONS` (50). A refusal is `429` with `Retry-After` and a JSON body. Health
+checks are not limited. `bun run edge:check` starts the stack, runs the suite and stops it. `bun run bench:edge <label>`
+measures the cost of the edge against the API. What this protection is **not**, and its measured cost, are in
+[ARCHITECTURE.en.md](ARCHITECTURE.en.md), section 15.
 
-## Test
+## Comparison with other implementations
 
-```bash
-bun install --frozen-lockfile
-bun run infra:up              # the integration, concurrency and e2e suites need PostgreSQL and LocalStack
-bun run check:all             # the final gate: typecheck, lint, format, and every suite
-```
+This solution was compared with other public implementations of the same challenge. The comparison was made by reading
+their code, without running it or copying third-party code: the ideas were reimplemented, each with a test. The names of
+the other projects do not appear in the repository.
 
-| Command                    | Purpose                                                                                                                           |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure                                                                    |
-| `bun run test:unit`        | domain and pure-logic tests                                                                                                       |
-| `bun run test:integration` | PostgreSQL and LocalStack: schema, persistence, messaging, faults                                                                 |
-| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped                                                             |
-| `bun run test:e2e`         | the HTTP application, with API keys                                                                                               |
-| `bun run check:all`        | everything above. This is the gate, and CI runs it                                                                                |
-| `bun run test:load`        | optional load run per CPU count; writes the report (Linux)                                                                        |
-| `bun run load:consolidate` | consolidated table of the load scenarios in `docs/load/local`; see [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md) |
-| `bun run test:edge`        | protected mode: the edge's limits and isolation, against the running stack                                                        |
-| `bun run edge:check`       | starts the protected stack, runs `test:edge`, and stops the stack                                                                 |
-| `bun run demo:finance`     | demonstration 1: the financial flow, against the running API                                                                      |
-| `bun run db:migrate`       | apply pending migrations and exit                                                                                                 |
-| `bun run auth:create`      | create an API client and print its key once                                                                                       |
-| `bun run auth:revoke`      | revoke an API client by id                                                                                                        |
+| Practice                                                          | Status                       | Where it is                                                                                                                                                                    |
+| ----------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Wallet lock with bounded wait and `statement_timeout`             | adopted                      | `src/shared/infrastructure/database/mikro-orm-financial-unit-of-work.ts`, `test/integration/wagering/lock-timeout.test.ts`                                                     |
+| Outbox quarantine after N attempts, with operator requeue         | adopted                      | `test/integration/messaging/outbox-quarantine.test.ts`, `scripts/outbox-requeue.ts`                                                                                            |
+| Balance-to-ledger agreement trigger, deferred to commit           | adopted, with measured cost  | migration 12, `test/integration/schema/ledger-balance-trigger.test.ts`, [PERFORMANCE_COMPARISON](docs/audit/PERFORMANCE_COMPARISON.md) (Portuguese)                            |
+| Reversal reference bound to the bet's external id                 | adopted                      | migration 14, `test/integration/schema/reference-binding.test.ts`                                                                                                              |
+| Visibility returned when the consumer shuts down                  | adopted                      | `test/integration/messaging/consumer-shutdown.test.ts`                                                                                                                         |
+| Explicit deadlines for SQS calls and for readiness                | adopted                      | `test/integration/faults/sqs-deadlines.test.ts`                                                                                                                                |
+| Retention of published events                                     | adopted                      | `test/integration/messaging/outbox-retention.test.ts`                                                                                                                          |
+| DLQ sent before the original message is acked                     | already existed              | `test/integration/messaging/wager-command-consumer.test.ts`                                                                                                                    |
+| Metrics in Prometheus format, with no new dependency              | adopted                      | `GET /metrics/prometheus`, `test/unit/observability/prometheus-text.test.ts`                                                                                                   |
+| Hash chain in the ledger                                          | not adopted                  | Immutability by trigger and reconciliation already exist. A chain would only detect tampering by someone who already has write access, and role separation does not exist yet. |
+| Minimal database role, with no `UPDATE` or `DELETE` on the ledger | not adopted                  | Requires separating roles in Compose, which is an operations decision. Immutability already holds for any role, through the trigger.                                           |
+| Double-entry with house accounts                                  | not adopted                  | The specification does not ask for house accounts. The ledger of entries is already auditable.                                                                                 |
+| Circuit breaker on queue calls                                    | not adopted                  | No gain in §14. Deadlines and readiness cover the case of a slow or unavailable dependency.                                                                                    |
+| Keycloak or OIDC                                                  | not adopted                  | Outside the specification. The decision is in [ADR 0007](docs/adr/0007-api-key-authentication.en.md).                                                                          |
+| Grafana dashboard                                                 | not adopted in this delivery | It would require a service and a dashboard, which §12 makes optional. See [Limitations and open decisions](#limitations-and-open-decisions).                                   |
+| Sending to the queue inside the outbox transaction                | rejected                     | Holds a connection and a row lock during the broker call. The publisher uses a lease.                                                                                          |
+| Money as an integer of fractional units (`bigint`)                | rejected                     | `decimal.js` with `NUMERIC(20,2)` is exact and readable. [ADR 0002](docs/adr/0002-money-representation.en.md).                                                                 |
 
-No suite replaces PostgreSQL or the queue with a mock. Each concurrency test asserts that exactly one
-operation has the effect and that the others are replays, conflicts or rejections.
-`docs/TEST_STRATEGY.md` maps each specification requirement to its suite.
+Beyond the alternatives above: two workers contending for the same wallet, with one of them killed in the middle of the
+contention (`test/concurrency/distributed-contention.test.ts`).
 
-The load test pins the stack to a number of CPUs and ramps the request rate in steps. Its method and
-results are in `docs/LOAD_TEST_RESULTS.md`, and the local baseline with 13 scenarios is in
-`docs/LOAD_TEST_BASELINE.en.md`. The numbers describe the machine that ran them.
+## Measured performance
+
+Beyond proving financial integrity under concurrency, the project measures performance with **open load, explicit limits
+and reconciliation of every wallet**. The results below come from recorded runs, not from a production capacity estimate.
+
+**Version caveat:** the load campaigns were measured **before** migration 12, which added the balance-to-ledger agreement
+triggers. Those triggers were measured in isolation (`docs/audit/PERFORMANCE_COMPARISON.md`), but the full load run was
+not repeated with them.
 
 ### Two baselines, two environments
 
@@ -277,11 +366,7 @@ but the machines are not. So the numbers show the trend within each environment,
 | Records     | [docs/load/local/](docs/load/local/)                              | [docs/load/results/](docs/load/results/)                               |
 | Report      | [LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md)         | [LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)                      |
 
-### Cloud VM results: 1, 2 and 4 CPUs
-
-The project measures performance with an open load, explicit limits and reconciliation of every wallet, beyond
-proving financial integrity under concurrency. The results below come from recorded runs, not from a production
-capacity estimate.
+### Cloud baseline: 1, 2 and 4 CPUs
 
 | CPUs given to the stack | Highest rate that passed every limit | Next step                                 |
 | ----------------------: | -----------------------------------: | ----------------------------------------- |
@@ -294,18 +379,15 @@ requests, an error rate ≤ 0.1%, the outbox drained, and the financial invarian
 limit of the test, not the capacity limit of the system**.
 
 There was also a paired experiment on the same host, with two CPUs: at 100 req/s, p99 fell from **120/134 ms** (two
-runs of the initial version) to **31/32 ms** (two runs after changes to the query and the lock path). The comparison
-does not isolate the effect of a single change, but the files let you audit both states and repeat the experiment.
-
-Full report: [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md). Paired runs:
-[docs/LOAD_TEST_HISTORY.en.md](docs/LOAD_TEST_HISTORY.en.md).
+runs of the initial version) to **31/32 ms** (two runs after changes to the query and the lock path). The comparison does
+not isolate the effect of a single change, but the files let you audit both states and repeat the experiment.
 
 ### Local baseline: 13 scenarios
 
 Measured on my own machine, with the stack at 1, 2, 4 or 8 CPUs, 1 to 3 APIs and 1 or 2 workers. Each scenario is a
-folder in `docs/load/local/`. The agreed rate is the highest that passed every limit; the first failing rate is the
-first step of the ramp that did not pass. The p99 is at the agreed step, and utilisation is the stack's net CPU
-divided by the CPUs assigned to it.
+folder in `docs/load/local/`. The agreed rate is the highest that passed every limit; the first failing rate is the first
+step of the ramp that did not pass. The p99 is at the agreed step, and utilisation is the stack's net CPU divided by the
+CPUs assigned to it.
 
 | Scenario               | CPUs | Agreed (req/s) | First failing (req/s) | p99 at the agreed step (ms) | CPU utilisation |
 | ---------------------- | ---: | -------------: | --------------------: | --------------------------: | --------------: |
@@ -323,17 +405,40 @@ divided by the CPUs assigned to it.
 | `apis3-workers2-cpus4` |    4 |            500 |                   600 |                         603 |             84% |
 | `apis3-workers2-cpus8` |    8 |            800 |                  1000 |                         603 |             63% |
 
-Across all 13 scenarios, at the agreed step there was no lost request, no 5xx error, no financial violation, no
-duplicate and no incorrect answer. The outbox drained in at most 0.2 s, and the generator lag p99 stayed at most
-1.8 ms. Every first failure was on latency: p95 and p99 above their limits.
+Across all 13 scenarios, at the agreed step there was no lost request, no 5xx error, no financial violation, no duplicate
+and no incorrect answer. The outbox drained in at most 0.2 s, and the generator lag p99 stayed at most 1.8 ms. Every first
+failure was on latency: p95 and p99 above their limits.
 
-With 1 and 2 CPUs, more APIs did not raise the agreed rate. With 4 and 8 CPUs, they did, and the highest rate was
-800 req/s, with 3 APIs and 8 CPUs.
+With 1 and 2 CPUs, more APIs did not raise the agreed rate. With 4 and 8 CPUs, they did, and the highest rate was 800 req/s,
+with 3 APIs and 8 CPUs.
 
 These are LocalStack measurements on this machine, not AWS SQS and not the cloud runs. The difference from the cloud
 numbers is not an improvement, because the machines are different. Method, reading and limits are in
 [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md), and the raw JSON records of the 13 scenarios are in
 [docs/load/local/](docs/load/local/).
+
+**Sources, environment and caveats:** [full report with method and criteria](docs/LOAD_TEST_RESULTS.md),
+[local baseline, with 13 scenarios, correctness and concurrency](docs/LOAD_TEST_BASELINE.en.md),
+[history of the paired experiments](docs/LOAD_TEST_HISTORY.en.md) and [JSON records of the runs](docs/load/). These are
+LocalStack measurements, not AWS SQS; there is no long soak test and no validated production SLO.
+
+## Tests
+
+| Command                    | What it is for                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure                                                                    |
+| `bun run check:all`        | the full gate: everything above, plus infrastructure, integration, concurrency, e2e and Gherkin. This is what CI runs             |
+| `bun run test:integration` | real PostgreSQL and LocalStack: schema, persistence, messaging, faults                                                            |
+| `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped                                                             |
+| `bun run test:e2e`         | the HTTP application, with API keys                                                                                               |
+| `bun run test:features`    | the Gherkin scenarios of `test/features/`, run by Cucumber on Bun                                                                 |
+| `bun run test:infra`       | the Compose configuration, read by `docker compose config` itself                                                                 |
+| `bun run test:edge`        | protected mode, against the running stack                                                                                         |
+| `bun run test:load`        | optional load test, per CPU count; see [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md)                                     |
+| `bun run load:consolidate` | consolidated table of the load scenarios in `docs/load/local`; see [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md) |
+
+No integration, concurrency or e2e test replaces PostgreSQL or the queue with a mock. Each concurrency test checks that
+exactly one operation has the effect, and that the others are replays, conflicts or rejections.
 
 ### Other commands
 
@@ -345,124 +450,144 @@ numbers is not an improvement, because the machines are different. Method, readi
 | `bun run test:unit`                                                    | unit tests, without infrastructure                                       |
 | `bun run auth:create -- --name <name> --role PROVIDER --provider <id>` | creates a provider key; with `--role OPERATOR`, creates an operator key  |
 | `bun run auth:revoke -- --client <clientId>`                           | revokes an API key                                                       |
+| `bun run outbox:requeue -- <eventId>`                                  | returns a quarantined event to the publishing queue                      |
+| `bun run db:migrate`                                                   | applies the migrations to the configured database                        |
 | `bun run start`                                                        | starts the API from the source, without reloading                        |
 | `bun run edge:up` and `bun run edge:down`                              | starts and stops protected mode                                          |
 | `bun run edge:check`                                                   | starts protected mode, runs `test:edge`, and stops it                    |
 | `bun run bench:edge`                                                   | measures the edge overhead (`test/edge/overhead.ts`)                     |
-
-## Alternatives considered
-
-- **Adopted:** an outbox lease with `FOR UPDATE SKIP LOCKED`, and sending outside the claim transaction; a pessimistic lock per wallet.
-- **Not adopted:** sending to the queue inside the outbox transaction, which holds a connection and a row lock during the broker call; Keycloak and Prometheus/Grafana dashboards. The challenge suggests Keycloak; this project uses API keys, as recorded in [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
-- **Different:** money as `decimal.js` with `NUMERIC(20,2)`, instead of integer minor units (`bigint`). [ADR 0002](docs/adr/0002-money-representation.en.md) explains the choice.
-- **Beyond the alternatives:** two workers contending on one wallet, with one worker killed in the middle of the contention (`test/concurrency/distributed-contention.test.ts`).
-
-## Demonstrations
-
-Three scenarios show the guarantees. Each one prints its result, and each needs only the commands below.
-
-1. **Financial processing.** Start the stack (`docker compose up --build`), then run
-   `bun run demo:finance`. It opens a wallet with 100.00, runs a BET, a WIN, a BET and its REFUND, and a ROLLBACK
-   of the WIN, and it checks every balance, the refusal of a second ROLLBACK, the replay of a BET, the ledger sum
-   and the reconciliation.
-2. **Concurrency.** `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`. Fifty
-   identical requests run in parallel over three API processes and one database. One debit is applied, and the
-   other requests are replays of the same transaction.
-3. **Recovery.** `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`. A
-   worker process exits with code 137 after its command has committed and before the message is acknowledged. A
-   restarted worker takes the message back. The queue is drained, the balance is 75.00, the ledger sums to
-   75.00, and it holds exactly one debit for the command.
+| `bun run site:build`                                                   | generates the static showcase in `site/` from the repository files       |
 
 ## Endpoints
 
-Amounts are always `{ "amount": "25.00", "currency": "BRL" }`. Every route needs an API key,
-sent as `Authorization: Bearer <key>`, except `/health/live` and `/health/ready`. An operator
-key opens and reads wallets. A provider key submits and reads the operations of its own provider
-id only. Keys are created with the `auth` command, which prints each one once:
+Monetary amounts are always `{ "amount": "25.00", "currency": "BRL" }`. Every route requires
+`Authorization: Bearer <key>`, except the health and documentation routes (`/health/live`, `/health/ready`,
+`/openapi.json` and `/docs`). An operator key opens and reads wallets. A provider key submits and reads the operations of
+its own provider only. Keys are created with the `auth` command, which prints each one once:
 
 ```bash
 docker compose exec api bun run auth:create -- --name operations --role OPERATOR
 docker compose exec api bun run auth:create -- --name provider-a --role PROVIDER --provider provider-a
 ```
 
-| Method and path                                                           | Purpose                                                                   |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `POST /wallets`                                                           | create a wallet, with an optional opening balance (201; 409 if it exists) |
-| `GET /wallets/:walletId`                                                  | balance, version and currency                                             |
-| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | ledger pages in sequence order, with an opaque `nextCursor`               |
-| `POST /wagering/transactions`                                             | submit an operation, with `Idempotency-Key` (201, 200, 202 or 422)        |
-| `GET /wagering/transactions/:transactionId`                               | one transaction                                                           |
-| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | the same, by the provider's own id                                        |
-| `POST /wallets/:walletId/reconciliation`                                  | recompute the balance from the ledger and report any divergence           |
-| `GET /health/live`, `GET /health/ready`                                   | the process is up; PostgreSQL and the command queue answer                |
-| `GET /metrics`                                                            | counters and summaries of this process                                    |
+| Method and path                                                           | Purpose                                                                  | Who                            |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
+| `POST /wallets`                                                           | opens a wallet, with an optional opening balance (201; 409 if it exists) | operator                       |
+| `GET /wallets/:walletId`                                                  | balance, version and currency                                            | operator                       |
+| `GET /wallets/:walletId/ledger?cursor=&limit=`                            | ledger entries in order, with an opaque `nextCursor`                     | operator                       |
+| `POST /wallets/:walletId/reconciliation`                                  | recomputes the balance from the ledger and reports any divergence        | operator                       |
+| `POST /wagering/transactions`                                             | submits an operation, with `Idempotency-Key` (201, 200, 202 or 422)      | provider (its own) or operator |
+| `GET /wagering/transactions/:transactionId`                               | one transaction, by internal id                                          | provider (its own) or operator |
+| `GET /providers/:providerId/wagering/transactions/:externalTransactionId` | the same, by the provider's own id                                       | provider (its own) or operator |
+| `GET /health/live`, `GET /health/ready`                                   | the process is up; PostgreSQL and the queue respond                      | public                         |
+| `GET /metrics`                                                            | counters and summaries of this process, as JSON                          | operator                       |
+| `GET /metrics/prometheus`                                                 | the same, in Prometheus text format (`text/plain; version=0.0.4`)        | operator                       |
+| `GET /openapi.json`, `GET /docs`                                          | the OpenAPI 3.1 contract and the Swagger UI, served by the API itself    | public                         |
 
-A rejected operation returns 422 with a `failureCode`. `ARCHITECTURE.md` section 3 lists the codes,
-and section 10 gives the status of every error.
+The failure codes are stable and are listed in [ARCHITECTURE.en.md](ARCHITECTURE.en.md). The full contract is in
+[docs/openapi.json](docs/openapi.json).
+
+Example of submitting a bet. The `Idempotency-Key` header is required, and it is the source of truth for idempotency:
 
 ```bash
-# Submit a BET. The Idempotency-Key header is required, and it is the source of truth.
 curl -X POST localhost:3000/wagering/transactions \
   -H 'content-type: application/json' -H 'Idempotency-Key: provider-a:transaction-123' \
   -H "authorization: Bearer $PROVIDER_A_KEY" \
   -d '{"providerId":"provider-a","externalTransactionId":"transaction-123","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<wallet id>","roundId":"round-987","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
 ```
 
+A rejected operation returns 422 with a `failureCode`. `ARCHITECTURE.en.md` section 3 lists the codes, and section 10
+gives the status of each error.
+
 ## Queue
 
-The worker consumes `WagerTransactionRequested` messages from `wager-transactions.fifo`, in the body
-shape of the specification (section 10), and calls the same use case as HTTP. A message is
-acknowledged only after its transaction commits. Permanent failures go to
-`wager-transactions-dlq.fifo`. The worker publishes `WagerTransactionProcessed`,
-`WagerTransactionRejected`, `WalletBalanceChanged` and `WagerTransactionPendingReference` to
+The worker consumes `WagerTransactionRequested` messages from `wager-transactions.fifo`, in the body shape of the
+specification, and calls the same use case as HTTP. A message is acknowledged only after its transaction commits.
+Permanent failures go to `wager-transactions-dlq.fifo`. The worker publishes `WagerTransactionProcessed`,
+`WagerTransactionRejected`, `WagerTransactionFailed`, `WalletBalanceChanged` and `WagerTransactionPendingReference` to
 `wager-events.fifo`.
 
-## Main limitations
+An external consumer orders a wallet's balance changes by `walletVersion`, not by arrival order. The contract of this
+guarantee is in [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
 
-The full list is in `ARCHITECTURE.md` section 14. The most important:
+## Limitations and open decisions
 
-- **API keys, not an identity provider.** Keys last until revoked, with no rotation or login. The API
-  serves plain HTTP, so a deployment must put it behind TLS. See [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
-- **Rate limiting is per client address, and only in protected mode.** It is not protection against a
-  distributed attack, and the default mode has none. See `ARCHITECTURE.md` section 15.
-- **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.
-- **The Dockerfile image build** could not run in the authoring sandbox, whose TLS proxy blocks package
-  downloads. The stack was verified from clean volumes with an image built from the same source and the
-  sandbox CA.
-- **Interpretations that need the owner's confirmation** are listed in `ARCHITECTURE.md` section 13 and
-  `docs/INVARIANT_REVIEW.md`. The most consequential is that an unnamed WIN does not block a REFUND of its BET.
-- **Win re-sent under a new external id.** If a provider re-sends a `WIN` with a different external id, without naming
-  the BET, the balance receives a second credit. The rule and the limitation are in [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
-  sections 7 and 14.
-- **Owner decisions pending:** findings F-03, F-06, F-10 and F-13 of the adversarial audit. See
-  [AUDITORIA_FINAL.md §4](docs/AUDITORIA_FINAL.md) (Portuguese).
+The full list is in [ARCHITECTURE.en.md](ARCHITECTURE.en.md). The most important ones:
+
+- **API keys, not an identity provider.** Keys last until they are revoked, with no rotation or login. The API speaks
+  plain HTTP, so a deployment must put TLS in front of it. See [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
+- **Rate limiting only in protected mode, and per address.** It is not protection against a distributed attack.
+- **Local infrastructure.** LocalStack stands in for SQS. No AWS deployment was made.
+- **Load measured before the agreement triggers.** Migration 12 added the cost of one trigger per wallet write. It was
+  measured in isolation; the full load run was not repeated.
+- **The image was not built inside the repository in this sandbox.** The sandbox's TLS proxy blocks `bun install` during
+  the build. The image was built from a copy of the Dockerfile that only adds the sandbox CA, and the stack was run from
+  it. See [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
+- **Interpretations of the specification that depend on the owner's confirmation** are in
+  [ARCHITECTURE.en.md](ARCHITECTURE.en.md). The most consequential: an unnamed WIN does not block the REFUND of its BET.
+- **Win re-sent under a new external id.** If a provider re-sends a `WIN` with a different external id, without naming the
+  BET, the balance receives a second credit. The rule and the limitation are in [ARCHITECTURE.en.md](ARCHITECTURE.en.md).
+- **Owner decisions still open:** findings F-03, F-10 and F-13 of the adversarial audit, and decisions D1 to D5: results
+  without a reference, ROLLBACK in any state of the bet, REFUND only for a bet without a result, at most one reversal per
+  reference, and authentication by static key. See [docs/AUDITORIA_FINAL.en.md](docs/AUDITORIA_FINAL.en.md). F-06 (direct
+  balance write) was closed by migration 12.
+- **Grafana: not adopted in this delivery.** The Prometheus text format is already served at `GET /metrics/prometheus`,
+  with no new dependency. A Grafana dashboard would require one more service, which §12 makes optional.
 
 ## Repository layout
 
 ```text
 src/
-  main.ts                 API entrypoint (HTTP)
-  worker.ts               worker entrypoint (SQS consumer, outbox publisher, reference resolver)
+  main.ts                 API entry point (HTTP)
+  worker.ts               worker entry point: SQS consumer, outbox publisher, pending references
   migrate.ts              one-shot schema migration
-  app.module.ts           composition root shared by production and tests
-  config/                 environment parsing, fail-fast
-  health/ metrics/        probes and the metrics endpoint
+  app.module.ts           composition, shared by production and tests
+  config/                 environment reading, failing fast
+  health/                 liveness and readiness probes, with deadlines
+  metrics/                the process's metrics endpoint
+  worker/                 worker loops and the internal HTTP surface
   modules/
     wallet/               Wallet, ledger, opening, queries, reconciliation
     wagering/             WagerTransaction, settlement, references, HTTP
-    messaging/            inbox, outbox, SQS adapters, command consumer, publisher
+    messaging/            inbox, outbox, consumer (application/inbound), publisher (application/outbound),
+                          ports (application/ports), SQS adapters and persistence
     auth/                 API keys, roles and provider scope
-  shared/                 Money, errors, unit of work port, events, validation, observability
-  shared/infrastructure/database/migrations/   versioned, reversible migrations
-test/
-  unit/                   domain and pure logic
-  integration/            schema, persistence, use cases, messaging, faults
-  concurrency/            parallel connections and real processes
-  e2e/                    HTTP
-  load/                   optional load test: workload, pinning, measurement, report
-docker/localstack/        queue provisioning
-docker/edge/              the protected mode's Nginx template and forwarding headers
+  shared/                 Money, errors, unit-of-work port, migrations, events, validation, observability
+docker/
+  localstack/             queue provisioning
+  edge/                   the protected mode's Nginx template and forwarding headers
 docker-compose.protected.yml  the protected mode, as an override of docker-compose.yml
-test/edge/                protected-mode suite, and the edge overhead measurement
-test/demo/                demonstration 1, the financial flow
+scripts/                  outbox quarantine (outbox-requeue.ts), showcase (build-site.ts) and diagrams (export-diagrams.ts)
+test/
+  unit/                   domain, pure logic, architecture, OpenAPI contract, configuration, observability
+  integration/            schema, persistence, use cases, messaging, faults (faults/)
+  concurrency/            parallel connections and real processes
+  e2e/                    HTTP, adversarial authorization, OpenAPI contract against real responses
+  features/               Gherkin scenarios, with the steps in features/steps/
+  edge/                   protected mode, and the measurement of the edge's cost
+  infra/                  Compose configuration
+  load/                   optional load test
+  demo/                   financial demonstration
+docs/                     guides, matrix, ADRs, OpenAPI contract, audit, load reports, showcase
 ```
+
+## Documents
+
+Start with the [documentation index](docs/README.md) (Portuguese). The main ones:
+
+- [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) (Portuguese): evaluation route, with what each step proves.
+- [ARCHITECTURE.en.md](ARCHITECTURE.en.md): architecture, invariants, flows, failures, trade-offs and limitations.
+- [DECISIONS.en.md](DECISIONS.en.md): each decision with its alternatives and evidence.
+- [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) (Portuguese): requirement to test.
+- [docs/AUDITORIA_FINAL.en.md](docs/AUDITORIA_FINAL.en.md): status of the audit items and the owner's decisions.
+- [docs/audit/README.md](docs/audit/README.md) (Portuguese): adversarial audit, with the findings and the proof of each guarantee.
+- [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md): what each suite proves and what it does not replace.
+- [docs/FLOW_MATRIX.en.md](docs/FLOW_MATRIX.en.md): flow matrix, by input and by output.
+- [docs/openapi.json](docs/openapi.json): HTTP contract.
+- [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md), [docs/LOAD_TEST_BASELINE.en.md](docs/LOAD_TEST_BASELINE.en.md) and
+  [docs/LOAD_TEST_HISTORY.en.md](docs/LOAD_TEST_HISTORY.en.md): load tests.
+- [docs/DOMAIN_GLOSSARY.md](docs/DOMAIN_GLOSSARY.md) (Portuguese): domain glossary.
+- [docs/adr/README.en.md](docs/adr/README.en.md): index of the recorded decisions.
+- [docs/CHALLENGE.md](docs/CHALLENGE.md): the specification, unchanged.
+- Static showcase published at https://dedeusgui.github.io/backend-challenge/. It is generated by `bun run site:build`
+  from the repository files, and does not depend on any service.

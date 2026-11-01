@@ -24,7 +24,7 @@ export interface SettlementOutcome {
   idempotentReplay: boolean;
 }
 
-export interface SettlementOptions {
+interface SettlementOptions {
   /** True when the transaction was created earlier and is waiting for its reference. */
   existing: boolean;
   correlationId: string;

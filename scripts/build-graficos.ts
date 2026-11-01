@@ -12,7 +12,7 @@ const GREEN = '#28734b';
 const CANVAS = '#ffffff';
 const FONT = 'Arial, Helvetica, sans-serif';
 
-export interface LoadScenario {
+interface LoadScenario {
   readonly scenarioName: string;
   readonly agreedRate: number | null;
   readonly firstFailingRate: number | null;
@@ -20,7 +20,7 @@ export interface LoadScenario {
   readonly cpuUtilisationPercent: number | null;
 }
 
-export interface ExperimentRow {
+interface ExperimentRow {
   readonly carga: string;
   readonly quantil: 'p50' | 'p95' | 'p99';
   readonly semTriggersMs: number;
@@ -277,7 +277,7 @@ export function renderCargaTaxaP99Svg(scenarios: readonly LoadScenario[]): strin
   return body.join('\n');
 }
 
-export function renderCargaUtilizacaoSvg(scenarios: readonly LoadScenario[]): string {
+function renderCargaUtilizacaoSvg(scenarios: readonly LoadScenario[]): string {
   const width = 920;
   const top = 82;
   const rowHeight = 38;
@@ -314,7 +314,7 @@ export function renderCargaUtilizacaoSvg(scenarios: readonly LoadScenario[]): st
   return body.join('\n');
 }
 
-export function renderGatilhoCustoSvg(rows: readonly ExperimentRow[]): string {
+function renderGatilhoCustoSvg(rows: readonly ExperimentRow[]): string {
   const groups = [...new Set(rows.map((row) => row.carga))];
   const width = 1040;
   const top = 105;
@@ -423,13 +423,13 @@ export function renderGateSuitesSvg(gate: GateRecord, blockedScenarios?: number)
   return body.join('\n');
 }
 
-export function renderSeloGateSvg(gate: GateRecord): string {
+function renderSeloGateSvg(gate: GateRecord): string {
   const label = gate.passed ? 'GATE APROVADO' : 'GATE REPROVADO';
   const color = gate.passed ? GREEN : '#a52f24';
   return `${xmlStart(label, 290, 82)}<rect x="16" y="45" width="258" height="24" rx="6" fill="${color}"/><text x="145" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">${label} · exit ${gate.exitCode}</text></svg>`;
 }
 
-export function renderSeloCenariosSvg(gate: GateRecord): string {
+function renderSeloCenariosSvg(gate: GateRecord): string {
   const { scenarios, steps } = gate.cucumber;
   const label = `${scenarios.passed}/${scenarios.total} cenários · ${steps.passed}/${steps.total} passos`;
   return `${xmlStart('Resultado dos cenários Gherkin', 390, 82)}<rect x="16" y="45" width="358" height="24" rx="6" fill="#dbe9f7" stroke="${LINE}"/><text x="195" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="${INK}">${escapeXml(label)}</text></svg>`;

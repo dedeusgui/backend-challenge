@@ -1,6 +1,6 @@
 import type { MetricsRegistry } from '../shared/observability/metrics';
 
-export interface WorkerHttpOptions {
+interface WorkerHttpOptions {
   port: number;
   /** The interface to listen on. Compose publishes nothing from the worker, so this is the internal network. */
   hostname: string;

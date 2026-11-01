@@ -20,9 +20,9 @@ import { createSqsClient, resolveQueues } from '../shared/infrastructure/sqs/sqs
 import { MetricsRegistry } from '../shared/observability/metrics';
 import type { OperationLogger } from '../shared/observability/structured-log';
 
-export const WAGER_CONSUMER_NAME = 'wager-transactions';
+const WAGER_CONSUMER_NAME = 'wager-transactions';
 
-export interface WorkerRuntime {
+interface WorkerRuntime {
   metrics: MetricsRegistry;
   consumer: WagerCommandConsumer;
   publisher: OutboxPublisher;
@@ -31,7 +31,7 @@ export interface WorkerRuntime {
   close(): Promise<void>;
 }
 
-export interface WorkerRuntimeOptions {
+interface WorkerRuntimeOptions {
   logger?: OperationLogger;
   metrics?: MetricsRegistry;
 }
@@ -41,7 +41,7 @@ export interface WorkerRuntimeOptions {
  * that needs a crash or a delay at a precise point wraps one of them and passes the result to
  * `assembleWorker`, so that production code never carries a hook for that purpose.
  */
-export interface WorkerDependencies {
+interface WorkerDependencies {
   unitOfWork: FinancialUnitOfWork;
   outboxStore: OutboxStore;
   commandQueue: MessageQueue;
@@ -51,7 +51,7 @@ export interface WorkerDependencies {
 }
 
 /** The tuning values the worker takes from its configuration. */
-export type WorkerTuning = Pick<
+type WorkerTuning = Pick<
   WorkerConfig,
   | 'consumerVisibilitySeconds'
   | 'outboxBatchSize'

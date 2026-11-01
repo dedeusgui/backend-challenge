@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of a wager transaction row. Check constraints in the migration guard its shape. */
-export const WagerTransactionRecordSchema = defineEntity({
+const WagerTransactionRecordSchema = defineEntity({
   name: 'WagerTransactionRecord',
   tableName: 'wager_transactions',
   properties: {

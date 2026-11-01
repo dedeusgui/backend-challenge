@@ -18,7 +18,7 @@ export interface CommandProcessor {
   execute(command: ProcessWagerCommand): Promise<ProcessWagerOutcome>;
 }
 
-export interface WagerCommandConsumerOptions {
+interface WagerCommandConsumerOptions {
   consumerName: string;
   queue: MessageQueue;
   deadLetters: MessageQueue;

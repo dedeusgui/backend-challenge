@@ -14,14 +14,14 @@ import type {
   ReceivedMessage,
 } from '../../application/ports/message-queue';
 
-export interface SendBatchEntry {
+interface SendBatchEntry {
   id: string;
   body: string;
   groupId: string;
   deduplicationId: string;
 }
 
-export interface SendBatchOutcome {
+interface SendBatchOutcome {
   /** The ids the broker accepted. An entry that is not listed here was not accepted. */
   sentIds: readonly string[];
   refused: readonly { id: string; code: string; message: string }[];

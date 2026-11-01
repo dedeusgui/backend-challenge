@@ -31,7 +31,7 @@ export const WAGER_COMMAND_FIELDS = [
 
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 
-export interface WagerCommandFields {
+interface WagerCommandFields {
   providerId: string;
   externalTransactionId: string;
   playerId: string;

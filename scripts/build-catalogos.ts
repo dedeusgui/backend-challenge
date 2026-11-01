@@ -8,7 +8,7 @@ import * as prettier from 'prettier';
  */
 export const REVIEW_BASE_COMMIT = 'f12191b';
 
-export interface CommitInfo {
+interface CommitInfo {
   readonly hash: string;
   readonly shortHash: string;
   readonly date: string;
@@ -18,14 +18,14 @@ export interface CommitInfo {
   readonly description: string;
 }
 
-export interface EnvVarInfo {
+interface EnvVarInfo {
   readonly name: string;
   readonly defaultValue?: string;
   readonly validationRule: string;
   readonly source: string;
 }
 
-export interface MetricCallInfo {
+interface MetricCallInfo {
   readonly name: string;
   readonly kind: 'contador' | 'resumo' | 'gauge';
   readonly labels: readonly string[];
@@ -261,7 +261,7 @@ export function extractEnvVars(filePath: string, content: string): EnvVarInfo[] 
   return results;
 }
 
-export function extractComposeEnvVars(
+function extractComposeEnvVars(
   composeContent: string,
   filePath = 'docker-compose.yml',
 ): EnvVarInfo[] {
@@ -399,13 +399,13 @@ async function getSourceFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-export interface BuildCatalogosOptions {
+interface BuildCatalogosOptions {
   root?: string;
   outDir?: string;
   commitShort?: string;
 }
 
-export interface BuildCatalogosResult {
+interface BuildCatalogosResult {
   commitShort: string;
   filesWritten: string[];
   metricsCount: number;

@@ -21,7 +21,7 @@ export interface WorkerLoops {
   idleDelayMs: number;
 }
 
-export interface RunWorkerOptions {
+interface RunWorkerOptions {
   logger: OperationLogger;
   /** Pause after a failed pass, so a dependency that is down is not called in a tight loop. */
   errorDelayMs?: number;

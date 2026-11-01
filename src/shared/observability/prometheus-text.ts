@@ -1,6 +1,6 @@
 import type { MetricsRegistry } from './metrics';
 
-export type MetricsSnapshot = ReturnType<MetricsRegistry['snapshot']>;
+type MetricsSnapshot = ReturnType<MetricsRegistry['snapshot']>;
 
 interface SeriesKey {
   readonly name: string;

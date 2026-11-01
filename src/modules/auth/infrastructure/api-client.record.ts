@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of an API client. The key itself is never stored, only its SHA-256 hash. */
-export const ApiClientRecordSchema = defineEntity({
+const ApiClientRecordSchema = defineEntity({
   name: 'ApiClientRecord',
   tableName: 'api_clients',
   properties: {

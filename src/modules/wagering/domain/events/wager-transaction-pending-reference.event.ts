@@ -6,7 +6,7 @@ import {
 import type { MoneyProps } from '../../../../shared/domain/money';
 import type { WagerTransaction } from '../wager-transaction';
 
-export interface WagerTransactionPendingReferenceData {
+interface WagerTransactionPendingReferenceData {
   transactionId: string;
   providerId: string;
   externalTransactionId: string;

@@ -2,7 +2,7 @@ import { DomainError } from '../../../shared/domain/domain-error';
 import { LedgerDirection } from '../../../shared/domain/ledger-direction';
 import { Money } from '../../../shared/domain/money';
 
-export interface WalletLedgerEntryState {
+interface WalletLedgerEntryState {
   id: string;
   walletId: string;
   transactionId: string;

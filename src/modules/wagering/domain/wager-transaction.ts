@@ -56,19 +56,19 @@ export type CreateWagerTransactionProps = Pick<
   | 'createdAt'
 >;
 
-export interface ProcessedTransition {
+interface ProcessedTransition {
   referenceTransactionId: string | undefined;
   resultingBalance: Money;
   at: Date;
 }
 
-export interface TerminalRejection {
+interface TerminalRejection {
   code: FailureCode;
   observedBalance: Money | undefined;
 }
 
 /** What to do with a transaction given the state of its reference. */
-export type ReferenceEvaluation =
+type ReferenceEvaluation =
   { outcome: 'READY' } | { outcome: 'WAIT' } | { outcome: 'REJECT'; code: FailureCode };
 
 /**

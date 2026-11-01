@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of a wallet row. Converted to and from the Wallet aggregate by the repository. */
-export const WalletRecordSchema = defineEntity({
+const WalletRecordSchema = defineEntity({
   name: 'WalletRecord',
   tableName: 'wallets',
   properties: {

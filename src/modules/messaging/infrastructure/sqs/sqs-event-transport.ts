@@ -25,7 +25,7 @@ export interface EventBatchSender {
 }
 
 /** The broker refused one event. The message names the reason, never the body. */
-export class EventRefusedError extends Error {
+class EventRefusedError extends Error {
   readonly code: string;
 
   constructor(code: string, message: string) {

@@ -15,7 +15,7 @@ export interface WalletState {
   updatedAt: Date;
 }
 
-export interface OpenWalletCommand {
+interface OpenWalletCommand {
   walletId: string;
   playerId: string;
   initialBalance: Money;
@@ -24,14 +24,14 @@ export interface OpenWalletCommand {
   openedAt: Date;
 }
 
-export interface OpenedWallet {
+interface OpenedWallet {
   wallet: Wallet;
   /** Present only when the initial balance is positive. */
   openingEntry: WalletLedgerEntry | undefined;
 }
 
 /** A balance change requested by a transaction. The caller supplies ids and time. */
-export interface WalletMovement {
+interface WalletMovement {
   entryId: string;
   transactionId: string;
   money: Money;

@@ -15,7 +15,7 @@ export interface CreatedApiClient {
   apiKey: string;
 }
 
-export interface CreateApiClientDependencies {
+interface CreateApiClientDependencies {
   repository: ApiClientRepository;
   clock: () => Date;
   newId: () => string;

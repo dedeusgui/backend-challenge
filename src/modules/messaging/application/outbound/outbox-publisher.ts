@@ -9,7 +9,7 @@ import type { OutboxStore } from '../ports/outbox-store';
 import type { OutboxTransport } from '../ports/outbox-transport';
 import { readOutboxMaxAttempts, readOutboxRetentionDays } from '../../../../config/worker-config';
 
-export interface OutboxPublisherOptions {
+interface OutboxPublisherOptions {
   store: OutboxStore;
   transport: OutboxTransport;
   clock: () => Date;

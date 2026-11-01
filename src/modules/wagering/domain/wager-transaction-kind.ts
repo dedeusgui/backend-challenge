@@ -11,7 +11,7 @@ export const WAGER_TRANSACTION_KINDS = [
 
 export type WagerTransactionKind = (typeof WAGER_TRANSACTION_KINDS)[number];
 
-export interface ReferenceRule {
+interface ReferenceRule {
   /** Kinds this transaction may reference. */
   readonly kinds: readonly WagerTransactionKind[];
   readonly required: boolean;
@@ -24,7 +24,7 @@ export interface ReferenceRule {
   readonly mustBeUnsettled: boolean;
 }
 
-export interface KindRules {
+interface KindRules {
   readonly affectsBalance: boolean;
   /** Fixed direction, `'INVERSE_OF_REFERENCE'` for ROLLBACK, or undefined when there is no ledger effect. */
   readonly ledgerDirection: LedgerDirection | 'INVERSE_OF_REFERENCE' | undefined;

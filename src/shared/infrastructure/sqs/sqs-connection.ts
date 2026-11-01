@@ -2,7 +2,7 @@ import { GetQueueUrlCommand, SQSClient } from '@aws-sdk/client-sqs';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import type { SqsSettings } from '../../../config/app-config';
 
-export interface ResolvedQueues {
+interface ResolvedQueues {
   commandQueueUrl: string;
   deadLetterQueueUrl: string;
   eventsQueueUrl: string;

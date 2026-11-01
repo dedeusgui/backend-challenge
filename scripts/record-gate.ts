@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export interface SuiteResult {
+interface SuiteResult {
   readonly key: string;
   readonly name: string;
   readonly passed: number;
@@ -118,7 +118,7 @@ export function parseCheckAllLog(log: string, recordedAt = new Date().toISOStrin
   };
 }
 
-export async function recordGate(logPath: string, outputPath: string): Promise<GateRecord> {
+async function recordGate(logPath: string, outputPath: string): Promise<GateRecord> {
   const record = parseCheckAllLog(await readFile(logPath, 'utf8'));
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');

@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of an inbox row. (consumer_name, message_id) is the primary key. */
-export const InboxMessageRecordSchema = defineEntity({
+const InboxMessageRecordSchema = defineEntity({
   name: 'InboxMessageRecord',
   tableName: 'inbox_messages',
   properties: {

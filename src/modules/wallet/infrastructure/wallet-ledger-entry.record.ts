@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of a ledger row. `seq` is assigned by the database and orders the ledger. */
-export const WalletLedgerEntryRecordSchema = defineEntity({
+const WalletLedgerEntryRecordSchema = defineEntity({
   name: 'WalletLedgerEntryRecord',
   tableName: 'wallet_ledger_entries',
   properties: {

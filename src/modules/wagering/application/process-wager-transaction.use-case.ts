@@ -18,7 +18,7 @@ import type { WagerTransactionKind } from '../domain/wager-transaction-kind';
 import { TransactionSettlement, type SettlementOutcome } from './transaction-settlement';
 
 /** Queue metadata for a command that arrived from SQS. The inbox deduplicates on it. */
-export interface InboundMessage {
+interface InboundMessage {
   consumerName: string;
   messageId: string;
 }

@@ -7,7 +7,7 @@ import type { MoneyProps } from '../../../../shared/domain/money';
 import type { FailureCode } from '../failure-code';
 import type { WagerTransaction } from '../wager-transaction';
 
-export interface WagerTransactionFailedData {
+interface WagerTransactionFailedData {
   transactionId: string;
   providerId: string;
   externalTransactionId: string;

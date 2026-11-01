@@ -39,7 +39,7 @@ export interface NodeSpec {
   readonly proof: string;
 }
 
-export interface EdgeSpec {
+interface EdgeSpec {
   readonly from: string;
   readonly to: string;
   readonly label?: string;
@@ -53,14 +53,14 @@ export interface DiagramSpec {
   readonly edges: readonly EdgeSpec[];
 }
 
-export interface BuildSiteOptions {
+interface BuildSiteOptions {
   root: string;
   outDir: string;
   builtAt: Date;
   branch?: string;
 }
 
-export interface BuildSiteResult {
+interface BuildSiteResult {
   commit: string;
   files: string[];
   linksChecked: number;
@@ -145,7 +145,7 @@ export async function buildSite(options: BuildSiteOptions): Promise<BuildSiteRes
 }
 
 /** Replaces every {{NAME}}. A placeholder with no value is an error, so the page cannot ship a gap. */
-export function fillTemplate(template: string, values: Record<string, string>): string {
+function fillTemplate(template: string, values: Record<string, string>): string {
   const filled = template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (match, name: string) => {
     const value = values[name];
     if (value === undefined) {
@@ -164,7 +164,7 @@ export function countMatrixRows(markdown: string): number {
 }
 
 /** The operations of the OpenAPI document: one per path and method. */
-export function countOpenApiOperations(value: unknown): number {
+function countOpenApiOperations(value: unknown): number {
   if (!isRecord(value) || !isRecord(value.paths)) {
     throw new Error('docs/openapi.json has no paths');
   }
@@ -373,11 +373,7 @@ function renderDiagramBlock(diagram: DiagramSpec, commit: string): string {
 }
 
 /** Every repository link in the page must name the commit of the page and an existing file or folder in it. */
-export async function checkRepositoryLinks(
-  html: string,
-  commit: string,
-  root: string,
-): Promise<number> {
+async function checkRepositoryLinks(html: string, commit: string, root: string): Promise<number> {
   const pattern = new RegExp(
     `${REPO.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(blob|tree|commit)/([^"\\s<>)]+)`,
     'g',
@@ -415,7 +411,7 @@ async function isFile(path: string): Promise<boolean> {
   return (await stat(path)).isFile();
 }
 
-export interface GateResults {
+interface GateResults {
   commit: string;
   ciRun: string;
   unit: number;
@@ -425,7 +421,7 @@ export interface GateResults {
   e2e: number;
 }
 
-export function parseGateResults(value: unknown): GateResults {
+function parseGateResults(value: unknown): GateResults {
   if (!isRecord(value) || typeof value.commit !== 'string') {
     throw new Error('docs/site/gate-results.json has no commit');
   }
@@ -543,7 +539,7 @@ function factCards(
 }
 
 /** The load runs as a chart: one bar per CPU count, from the recorded agreed rate. Each bar names its run. */
-export function loadChart(runs: readonly LoadRun[]): string {
+function loadChart(runs: readonly LoadRun[]): string {
   const width = 640;
   const height = 280;
   const left = 56;
@@ -592,7 +588,7 @@ function loadRow(run: LoadRun): string {
   return `<tr>${cells.map((cell, index) => (index === 0 ? `<th scope="row">${cell}</th>` : `<td>${cell}</td>`)).join('')}</tr>`;
 }
 
-export interface LocalLoadRun {
+interface LocalLoadRun {
   readonly scenario: string;
   readonly cpus: number;
   readonly file: string;
@@ -661,7 +657,7 @@ async function loadLocalRun(
   };
 }
 
-export async function loadAllLocalRuns(
+async function loadAllLocalRuns(
   root: string,
   git: (args: string[]) => Promise<string>,
 ): Promise<LocalLoadRun[]> {
@@ -673,7 +669,7 @@ export async function loadAllLocalRuns(
   return Promise.all(scenarios.map((scenario) => loadLocalRun(root, scenario, git)));
 }
 
-export function localLoadRow(run: LocalLoadRun): string {
+function localLoadRow(run: LocalLoadRun): string {
   const cells = [
     `<code>${escapeHtml(run.scenario)}</code>`,
     String(run.cpus),

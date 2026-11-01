@@ -1,7 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 
 /** Persistence shape of an outbox row. The lease columns belong to the publisher, not to the domain. */
-export const OutboxMessageRecordSchema = defineEntity({
+const OutboxMessageRecordSchema = defineEntity({
   name: 'OutboxMessageRecord',
   tableName: 'outbox_messages',
   properties: {

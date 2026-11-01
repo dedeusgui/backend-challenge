@@ -10,7 +10,7 @@ import type {
   FinancialUnitOfWork,
 } from '../../application/ports/financial-unit-of-work';
 
-export interface FinancialUnitOfWorkOptions {
+interface FinancialUnitOfWorkOptions {
   /** Longest wait for a row lock. Past it the attempt fails with SQLSTATE 55P03, which is transient. */
   lockTimeoutMs?: number;
   /** Longest run of one statement. Past it the statement is cancelled with SQLSTATE 57014. */

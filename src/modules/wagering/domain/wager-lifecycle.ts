@@ -47,7 +47,7 @@ export interface ReferenceHistory {
   readonly reversed: boolean;
 }
 
-export type HistoryDecision =
+type HistoryDecision =
   | { readonly outcome: 'ACCEPT' }
   | {
       readonly outcome: 'REJECT';

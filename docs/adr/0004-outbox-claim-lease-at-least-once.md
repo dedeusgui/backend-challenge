@@ -20,7 +20,8 @@ lost once it has committed. Several publishers may run at once.
   published **only if its lease token still matches** (`complete`). A lease that
   expired and was taken over makes the mark a no-op, which is reported
   (`outbox_lost_lease_total`).
-- Failed sends are rescheduled with exponential backoff, and only under the lease.
+- Failed sends are rescheduled with exponential backoff, and only under the lease. The next attempt is
+  `now()` of the database plus the backoff, so the clock of a publisher does not shorten it.
 - The event id is the outbox id and the SQS deduplication id. A crash after the
   broker accepted an event and before the mark causes a republication with the same
   id. Consumers deduplicate on it.

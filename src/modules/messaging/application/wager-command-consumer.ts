@@ -4,7 +4,7 @@ import type {
   ProcessWagerOutcome,
 } from '../../wagering/application/process-wager-transaction.use-case';
 import type { MessageQueue, ReceivedMessage } from './message-queue.port';
-import { classifyCommandFailure } from './failure-classification';
+import { classifyCommandFailure } from '../../../shared/application/failure-classification';
 import { parseWagerCommandMessage } from './wager-command-message';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
 import {

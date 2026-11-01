@@ -2,9 +2,9 @@ import {
   IdempotencyConflictError,
   MessagePayloadConflictError,
   WalletNotFoundError,
-} from '../../../shared/application/application-errors';
-import { DomainError } from '../../../shared/domain/domain-error';
-import { RequestValidationError } from '../../../shared/validation/request-validation';
+} from './application-errors';
+import { DomainError } from '../domain/domain-error';
+import { RequestValidationError } from '../validation/request-validation';
 
 /**
  * PERMANENT: the same message can never succeed, so it goes to the dead-letter queue.

@@ -7,8 +7,9 @@ import {
   MessagePayloadConflictError,
   WalletNotFoundError,
 } from '../../../../src/shared/application/application-errors';
-import { classifyCommandFailure } from '../../../../src/modules/messaging/application/failure-classification';
+import { classifyCommandFailure } from '../../../../src/shared/application/failure-classification';
 import { parseWagerCommandMessage } from '../../../../src/modules/messaging/application/wager-command-message';
+import { WagerTransactionFailed } from '../../../../src/modules/wagering/domain/events/wager-transaction-failed.event';
 import { WagerTransactionPendingReference } from '../../../../src/modules/wagering/domain/events/wager-transaction-pending-reference.event';
 import { WagerTransactionProcessed } from '../../../../src/modules/wagering/domain/events/wager-transaction-processed.event';
 import { WagerTransactionRejected } from '../../../../src/modules/wagering/domain/events/wager-transaction-rejected.event';
@@ -136,6 +137,32 @@ describe('the integration events announce only the status they describe', () => 
             kind: 'BET',
             referenceNextAttemptAt: CONTEXT.occurredAt,
           }),
+          CONTEXT,
+        ),
+      ),
+    ).toBe('INVALID_TRANSACTION');
+  });
+});
+
+describe('a failed transaction is announced only as failed', () => {
+  test('a held transaction that failed permanently is announced with its code, and refuses one that did not fail', () => {
+    const event = WagerTransactionFailed.from(
+      transaction({
+        status: 'FAILED',
+        kind: 'REFUND',
+        failureCode: 'PROCESSING_FAILED',
+        processedAt: undefined,
+      }),
+      CONTEXT,
+    );
+    expect({ type: event.eventType, aggregate: event.aggregateId }).toEqual({
+      type: 'WagerTransactionFailed',
+      aggregate: 'tx-1',
+    });
+    expect(
+      refusalOf(() =>
+        WagerTransactionFailed.from(
+          transaction({ status: 'REJECTED', kind: 'BET', failureCode: 'INSUFFICIENT_BALANCE' }),
           CONTEXT,
         ),
       ),

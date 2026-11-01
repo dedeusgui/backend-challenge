@@ -7,21 +7,23 @@ Base da rodada: `d65a1e7`. Linha de base: `BASELINE.md`.
 
 ## Resumo
 
-| ID   | Título                                                                                    | Severidade                   | Status                                             | Evidência                                                                                    | Commit                   |
-| ---- | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------ |
-| F-01 | Um envelope malformado no outbox pára a publicação de todos os eventos atrás dele         | P1 (disponibilidade)         | Corrigido                                          | Teste: 8 casos falhavam antes; a publicação enviava 0 eventos com 3 pendentes                | `2905535`                |
-| F-02 | Mesmo `messageId` com `idempotencyKey` diferente era aceito como duplicata                | P2 (integridade da mensagem) | Corrigido, com compatibilidade para linhas antigas | Teste: 1 caso resolvia em vez de recusar                                                     | `2ec4d5e`                |
-| F-03 | Transação de outro provedor respondia 403, e o 404 de id inexistente revelava a diferença | P2 (segurança)               | Corrigido. **Mudança de contrato: aguarda o dono** | Teste: esperado 404, recebido 403                                                            | `154b52a`                |
-| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor                        | P2 (operação)                | Corrigido                                          | Teste com LocalStack: o segundo consumidor recebeu 2 mensagens em voo                        | `b398e22`                |
-| F-05 | Hooks de falha de teste dentro do código de produção                                      | Regra do projeto             | Corrigido                                          | Composição em `assembleWorker`; suítes passam sem alterar as asserções                       | `489df8b`                |
-| F-06 | A concordância entre saldo e ledger não é garantida pelo esquema                          | P3 (defesa em profundidade)  | Aberto, com decisão. **Aguarda o dono**            | 3 escritas diretas aceitas pelo esquema atual                                                | experimento em `0f4fa19` |
-| F-07 | O lease do outbox compara expiração com o relógio do chamador                             | P3 (duplicatas de envio)     | Corrigido. Posse decidida pelo `now()` do banco    | Dois testes, relógio uma hora atrás e uma hora à frente, tomavam 6 eventos de um lease ativo | —                        |
-| F-08 | O resumo do ledger na reconciliação era lido fora da transação                            | Robustez                     | Endurecido. Não reproduzido como defeito           | Leitura correta sob o lock; agora na transação                                               | `0f4fa19`                |
-| F-09 | O plano de consulta do ledger depende das estatísticas                                    | Observação                   | Monitorar com `EXPLAIN`                            | 1 mil lançamentos: varredura; 100 mil e 1 milhão: índice                                     | —                        |
-| F-10 | `ROLLBACK` do BET após o `ROLLBACK` do REFUND é recusado                                  | Decisão de contrato (D4)     | Comportamento fixado em teste. **Aguarda o dono**  | Teste existente                                                                              | —                        |
-| F-11 | Resultados sem referência não podem ser limitados a um por BET                            | Decisão de contrato (D1)     | Documentado                                        | Limitação inerente ao enunciado                                                              | —                        |
-| F-12 | A imagem Docker do repositório não constrói no sandbox                                    | Ambiente                     | Contornado para a demonstração                     | `bun install` falha com `SELF_SIGNED_CERT_IN_CHAIN`                                          | —                        |
-| F-14 | Mensagem isolada mais longa que a janela de visibilidade era reentregue                   | P2 (duplicidade de entrega)  | Corrigido, com limite de retenção                  | Teste com LocalStack: o segundo consumidor recebia a mensagem aos 3,5 s                      | —                        |
+| ID   | Título                                                                                    | Severidade                              | Status                                             | Evidência                                                                                    | Commit                   |
+| ---- | ----------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------ |
+| F-01 | Um envelope malformado no outbox pára a publicação de todos os eventos atrás dele         | P1 (disponibilidade)                    | Corrigido                                          | Teste: 8 casos falhavam antes; a publicação enviava 0 eventos com 3 pendentes                | `2905535`                |
+| F-02 | Mesmo `messageId` com `idempotencyKey` diferente era aceito como duplicata                | P2 (integridade da mensagem)            | Corrigido, com compatibilidade para linhas antigas | Teste: 1 caso resolvia em vez de recusar                                                     | `2ec4d5e`                |
+| F-03 | Transação de outro provedor respondia 403, e o 404 de id inexistente revelava a diferença | P2 (segurança)                          | Corrigido. **Mudança de contrato: aguarda o dono** | Teste: esperado 404, recebido 403                                                            | `154b52a`                |
+| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor                        | P2 (operação)                           | Corrigido                                          | Teste com LocalStack: o segundo consumidor recebeu 2 mensagens em voo                        | `b398e22`                |
+| F-05 | Hooks de falha de teste dentro do código de produção                                      | Regra do projeto                        | Corrigido                                          | Composição em `assembleWorker`; suítes passam sem alterar as asserções                       | `489df8b`                |
+| F-06 | A concordância entre saldo e ledger não é garantida pelo esquema                          | P3 (defesa em profundidade)             | Aberto, com decisão. **Aguarda o dono**            | 3 escritas diretas aceitas pelo esquema atual                                                | experimento em `0f4fa19` |
+| F-07 | O lease do outbox compara expiração com o relógio do chamador                             | P3 (duplicatas de envio)                | Corrigido. Posse decidida pelo `now()` do banco    | Dois testes, relógio uma hora atrás e uma hora à frente, tomavam 6 eventos de um lease ativo | —                        |
+| F-08 | O resumo do ledger na reconciliação era lido fora da transação                            | Robustez                                | Endurecido. Não reproduzido como defeito           | Leitura correta sob o lock; agora na transação                                               | `0f4fa19`                |
+| F-09 | O plano de consulta do ledger depende das estatísticas                                    | Observação                              | Monitorar com `EXPLAIN`                            | 1 mil lançamentos: varredura; 100 mil e 1 milhão: índice                                     | —                        |
+| F-10 | `ROLLBACK` do BET após o `ROLLBACK` do REFUND é recusado                                  | Decisão de contrato (D4)                | Comportamento fixado em teste. **Aguarda o dono**  | Teste existente                                                                              | —                        |
+| F-11 | Resultados sem referência não podem ser limitados a um por BET                            | Decisão de contrato (D1)                | Documentado                                        | Limitação inerente ao enunciado                                                              | —                        |
+| F-12 | A imagem Docker do repositório não constrói no sandbox                                    | Ambiente                                | Contornado para a demonstração                     | `bun install` falha com `SELF_SIGNED_CERT_IN_CHAIN`                                          | —                        |
+| F-13 | FAILED sem caminho de produção; uma retenção com falha permanente travava as demais       | P2 (fila de retenções; auditoria)       | Corrigido. Decisão do dono a confirmar             | Teste com carteira ilegível: a passagem falhava e a retenção saudável não era resolvida      | —                        |
+| F-14 | Mensagem isolada mais longa que a janela de visibilidade era reentregue                   | P2 (duplicidade de entrega)             | Corrigido, com limite de retenção                  | Teste com LocalStack: o segundo consumidor recebia a mensagem aos 3,5 s                      | —                        |
+| F-15 | O worker decide o prazo de referência pelo próprio relógio                                | P2 (decisão financeira depende do host) | Corrigido                                          | Relógio uma hora à frente consumia tentativa antes do prazo; agenda gravada 3601 s adiante   | `fc3862c`                |
 
 ---
 
@@ -142,9 +144,10 @@ publicação atrasada não marca como enviada), e os consumidores deduplicam por
 adiantado. Antes da correção, cada um tomava 6 eventos de um lease ativo de outro publicador. Os demais testes de
 tempo avançam o relógio do banco com `advanceOutboxClock`, em vez de passar um `now` sintético.
 
-**Risco que resta.** O agendamento de nova tentativa ainda usa o relógio do publicador. Um publicador com relógio
-atrasado tenta de novo antes, e um adiantado depois. Isso muda quando há tentativa, não quem detém o evento. Os
-marcadores continuam protegidos pelo token do lease.
+**Também corrigido nesta rodada.** O agendamento de nova tentativa usava o relógio do publicador. Com o relógio uma
+hora atrás, um evento recusado voltava a ser enviado a cada passagem, sem backoff. Agora o `reschedule` grava
+`now() + backoff` no banco (`test/integration/messaging/outbox-retry-clock.test.ts`). O instante de publicação e a
+métrica de atraso ainda usam o relógio do publicador: não decidem estado.
 
 ## F-08 — leitura do resumo fora da transação
 
@@ -200,16 +203,23 @@ repositório com sucesso no commit `d65a1e7`.
 
 ---
 
-## F-13 — FAILED não é alcançável por nenhum caminho de produção
+## F-13 — FAILED não tinha caminho de produção, e uma retenção com falha permanente travava as demais
 
-**Evidência.** `WagerTransaction.fail` existe e tem testes, mas nenhum código de produção o chama. Uma falha permanente de
-infraestrutura vai para a DLQ, sem linha `FAILED`. A especificação (§6.3) define FAILED como "erro permanente de
-infraestrutura (terminal, auditável)".
+**Evidência.** `test/integration/wagering/held-failure.test.ts`, contra PostgreSQL. Uma retenção cuja resolução falhava de
+forma permanente (carteira ilegível) fazia `runOnce` lançar o erro. Como a consulta ordena pela agenda, a mesma linha
+voltava primeiro em toda passagem, e as retenções seguintes nunca eram resolvidas. Antes da correção o teste falhava com
+`WalletNotFoundError`, e a retenção saudável continuava `PENDING_REFERENCE`. Nenhum código de produção gravava `FAILED`.
 
-**Situação.** O valor está na tabela de status e nas guardas, para que a regra exista. Nenhuma transação é gravada
-como FAILED hoje. **Decisão do dono do desafio:** manter FAILED como auditoria da falha permanente, o que exige gravar a
-linha num caminho que hoje só manda para a DLQ, ou remover o valor do enum e a transição. A escolha de remover é mais simples,
-e a de gravar é a que a especificação descreve.
+**Correção.** A falha permanente de uma retenção é registrada como `FAILED`, com `PROCESSING_FAILED` e o saldo com que
+ela foi retida. O registro é feito em uma unidade de trabalho própria, depois que a tentativa foi desfeita, e é
+anunciado por `WagerTransactionFailed`. A passagem segue para as demais. Uma falha transitória não é registrada: ela
+encerra a passagem com o erro, e a linha é consultada de novo. O classificador de falhas foi movido para
+`src/shared/application`, porque o worker de referências também o usa.
+
+**Decisão a confirmar pelo dono.** Escolhi gravar FAILED, como descreve a especificação (§6.3), em vez de remover o valor.
+Isso acrescenta o evento `WagerTransactionFailed`, que a especificação não lista. Uma transação que falha antes de ser
+retida não é gravada: vai para a DLQ, ou a HTTP responde com o erro, como antes. `PENDING → FAILED` continua no domínio,
+sem caminho de produção.
 
 ## F-14 — mensagem isolada mais longa que a janela de visibilidade era reentregue
 
@@ -225,6 +235,24 @@ liberada, para que um processador travado não a retenha para sempre. Teste unit
 **Limite.** Passado o limite de retenção, dois consumidores podem processar o mesmo comando ao mesmo tempo. A identidade
 da transação mantém o efeito em um: o teste de limite afirma o saldo de 99,00 depois dos dois. Um comando mais lento que
 o limite roda em duplicidade. O custo de uma renovação a cada terço da janela não foi medido.
+
+## F-15 — o worker decide o prazo de referência pelo próprio relógio
+
+**Evidência.** `test/integration/wagering/database-clock-references.test.ts`, contra PostgreSQL. Com o relógio de um
+worker uma hora à frente, uma referência ainda não vencida era consultada, e uma tentativa era consumida antes do prazo.
+Com o relógio uma hora atrás, uma referência vencida no banco não era consultada. A agenda gravada por um worker adiantado
+ficava 3601 s à frente.
+
+**Por que importa.** A regra "seis consultas sem resposta levam a REFERENCE_NOT_FOUND" passava a depender de qual host
+rodava o worker. A matriz dizia "sem efeito financeiro", e isso estava errado: um estorno podia ser rejeitado mais cedo
+ou ficar parado mais tempo, conforme o relógio do host que consultou.
+
+**Correção.** A porta `DatabaseClock` lê `now()` na própria unidade de trabalho. O vencimento em
+`ProcessPendingReferences` e a agenda gravada em `TransactionSettlement` usam esse instante. O relógio do worker
+ficou apenas nos instantes dos eventos, que não decidem estado.
+
+**Risco que resta.** Nenhum conhecido nesse caminho. O custo de uma consulta a `now()` em cada primeira falha não foi
+medido (ver `PERFORMANCE_COMPARISON.md`).
 
 ## Execução do demo
 
@@ -248,7 +276,7 @@ igual ao saldo (75,00); reconciliação consistente.
 
 ## Decisões que precisam do dono do desafio
 
-5. **F-13:** FAILED, gravar a falha permanente de infraestrutura ou remover o valor.
+5. **F-13:** confirmar o caminho de FAILED (gravado pelo worker de referências) e o evento `WagerTransactionFailed`, que não está na especificação.
 1. **F-03:** a resposta 404 uniforme para transação alheia (mudança de um status documentado).
 1. **F-06:** adotar ou não os triggers de concordância, pagando ~1,8 ms de lock sob contenção.
 1. **F-10:** a leitura de D4 para ROLLBACK após desfazer REFUND.

@@ -199,7 +199,7 @@ Os códigos de falha são estáveis e estão em [ARCHITECTURE.md §3](ARCHITECTU
 
 O worker consome `WagerTransactionRequested` de `wager-transactions.fifo`, no formato do enunciado, e chama o mesmo
 caso de uso da HTTP. A mensagem só é confirmada depois do commit. Falhas permanentes vão para
-`wager-transactions-dlq.fifo`. O worker publica `WagerTransactionProcessed`, `WagerTransactionRejected`,
+`wager-transactions-dlq.fifo`. O worker publica `WagerTransactionProcessed`, `WagerTransactionRejected`, `WagerTransactionFailed`,
 `WalletBalanceChanged` e `WagerTransactionPendingReference` em `wager-events.fifo`.
 
 Um consumidor externo ordena as alterações de saldo de uma carteira por `walletVersion`, não pela ordem de chegada.

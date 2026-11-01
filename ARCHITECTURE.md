@@ -104,16 +104,20 @@ stateDiagram-v2
   PENDING_REFERENCE --> PENDING_REFERENCE: lookup missed, attempt counted
   PENDING_REFERENCE --> PROCESSED: reference arrived, applied
   PENDING_REFERENCE --> REJECTED: rejected, or six misses (REFERENCE_NOT_FOUND)
-  PENDING --> FAILED: permanent failure
-  PENDING_REFERENCE --> FAILED: permanent failure
+  PENDING --> FAILED: allowed by the domain; no production path reaches it
+  PENDING_REFERENCE --> FAILED: permanent failure while the reference is resolved (the only production path)
   PROCESSED --> [*]
   REJECTED --> [*]
   FAILED --> [*]
 ```
 
-`FAILED` is in the domain and the database, and it has a transition. No current path
-reaches it, because a transaction is written atomically. It is kept for a future
-permanent-failure path, and nothing claims otherwise.
+`FAILED` has one production path: the reference worker. A held transaction whose resolution fails with a
+permanent error (the classifier's PERMANENT, such as an unreadable wallet) is recorded `FAILED`, with
+`PROCESSING_FAILED` and the balance it was held with, in a unit of work of its own, and announced as
+`WagerTransactionFailed`. The pass goes on to the rows behind it. A transient error is not recorded: the pass ends
+with it, and the row is looked up again. A transaction that fails before it is held is not stored, because its unit of
+work rolled back: the queue sends it to the dead-letter queue, and HTTP returns the error. Tests:
+`held-failure.test.ts`.
 
 The table above is `STATUS_TRANSITIONS` in `src/modules/wagering/domain/wager-lifecycle.ts`, and the rule that
 decides whether a new operation may apply, given the results its reference already has, is `decideAgainstHistory`
@@ -124,21 +128,21 @@ in the same module. The database trigger of migration 10 copies the status table
 
 Stable, machine-readable, and persisted with the rejected transaction:
 
-| Code                         | Meaning                                                                 | Provider action                                    |
-| ---------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------- |
-| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                                          | do not resend unchanged                            |
-| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative                         | investigate; not a payload error                   |
-| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                                      | correct the payload                                |
-| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                                    | correct the payload                                |
-| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit                            | check the reference, then resend under a new id    |
-| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                                    | nothing to reverse                                 |
-| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency                     | correct the payload                                |
-| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed                      | correct the payload                                |
-| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference                      | correct the payload                                |
-| `REFERENCE_ALREADY_REVERSED` | the referenced transaction was already reversed                         | nothing to do                                      |
-| `REFERENCE_ALREADY_SETTLED`  | the BET already has a WIN or LOSS, or a REFUND follows one              | nothing to do                                      |
-| `BALANCE_LIMIT_EXCEEDED`     | a credit that would leave the balance above the largest storable amount | do not resend unchanged; the wallet cannot hold it |
-| `PROCESSING_FAILED`          | reserved for the permanent-failure path                                 | none in this build                                 |
+| Code                         | Meaning                                                                     | Provider action                                                               |
+| ---------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `INSUFFICIENT_BALANCE`       | a BET the balance cannot cover                                              | do not resend unchanged                                                       |
+| `REVERSAL_WOULD_OVERDRAW`    | a reversal that would make the balance negative                             | investigate; not a payload error                                              |
+| `WALLET_PLAYER_MISMATCH`     | the player does not own the wallet                                          | correct the payload                                                           |
+| `WALLET_CURRENCY_MISMATCH`   | the currency differs from the wallet                                        | correct the payload                                                           |
+| `REFERENCE_NOT_FOUND`        | the reference never arrived within the limit                                | check the reference, then resend under a new id                               |
+| `REFERENCE_NOT_PROCESSED`    | the reference was rejected or failed                                        | nothing to reverse                                                            |
+| `REFERENCE_CONTEXT_MISMATCH` | another provider, player, wallet, round or currency                         | correct the payload                                                           |
+| `REFERENCE_KIND_NOT_ALLOWED` | the reference is of a kind that cannot be reversed                          | correct the payload                                                           |
+| `REFERENCE_AMOUNT_MISMATCH`  | a reversal whose amount differs from its reference                          | correct the payload                                                           |
+| `REFERENCE_ALREADY_REVERSED` | the referenced transaction was already reversed                             | nothing to do                                                                 |
+| `REFERENCE_ALREADY_SETTLED`  | the BET already has a WIN or LOSS, or a REFUND follows one                  | nothing to do                                                                 |
+| `BALANCE_LIMIT_EXCEEDED`     | a credit that would leave the balance above the largest storable amount     | do not resend unchanged; the wallet cannot hold it                            |
+| `PROCESSING_FAILED`          | a held transaction that failed permanently while its reference was resolved | not resent: the transaction is final; check the wallet and the reference data |
 
 Transport outcomes are not persisted. They are the HTTP table below.
 
@@ -392,8 +396,9 @@ refused and counted. Delivery is at-least-once. The event id is the SQS deduplic
 deduplication key. Events committed at the same instant have no defined order within a batch: the claim
 orders them by their instant, and the timestamp is the only key. Consumers order by `walletVersion`.
 Lease expiry and due times are decided by the database clock (`now()`), so a publisher whose clock runs
-ahead or behind cannot take an event that another publisher holds. Retry timing still uses the publisher's
-clock: a skewed publisher retries early or late, and the lease still guards its marks.
+ahead or behind cannot take an event that another publisher holds. A refused event waits its backoff from the
+database's now(), so a skewed publisher neither retries at once nor waits longer than the backoff. The publication
+instant and the lag metric use the publisher's clock; they decide nothing.
 Decision: [ADR 0004](docs/adr/0004-outbox-claim-lease-at-least-once.md).
 
 ```mermaid
@@ -419,7 +424,7 @@ id, which consumers deduplicate. Its mark is refused under the lost lease and co
 `outbox_lost_lease_total`, and the event is marked published once. The test is `integration: stalled
 publisher loses the lease`, in `test/integration/messaging/outbox-publisher.test.ts`.
 
-Events: `WagerTransactionProcessed` (including LOSS), `WagerTransactionRejected`,
+Events: `WagerTransactionProcessed` (including LOSS), `WagerTransactionRejected`, `WagerTransactionFailed`,
 `WagerTransactionPendingReference`, `WalletBalanceChanged` (only when the balance changes,
 carrying `walletVersion`). The envelope is an abstract class (`IntegrationEvent`) with one
 concrete subclass per event type. Its data holds only JSON-friendly values.
@@ -467,7 +472,10 @@ A reversal whose reference is missing is held as `PENDING_REFERENCE`, with its a
 count and next lookup time in the row. The reference worker resolves due rows under the
 wallet lock, re-reads them, and calls the shared settlement. Backoff starts at 1 s and
 doubles, capped at 5 minutes. Six misses end in `REJECTED` with `REFERENCE_NOT_FOUND`,
-which is announced. The schedule is in PostgreSQL, so a restarted worker resumes it.
+which is announced. The schedule is in PostgreSQL, so a restarted worker resumes it. Due times and
+the next lookup are read from the database clock (`DatabaseClock`, the `now()` of the unit of work), never from
+a worker's clock, so a worker an hour ahead or behind decides what the others decide
+(`database-clock-references.test.ts`).
 Decision: [ADR 0005](docs/adr/0005-reference-hold-and-bounded-retries.md).
 
 ## 10. HTTP contract

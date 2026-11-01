@@ -499,6 +499,7 @@ describe('wager_transactions references', () => {
     const walletId = await insertWallet();
     const bet = await insertWager({
       walletId,
+      externalTransactionId: 'bet-1',
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',
@@ -522,8 +523,10 @@ describe('wager_transactions references', () => {
 
   test('keeps a rejected second refund as an auditable row', async () => {
     const walletId = await insertWallet();
+    const betExternalId = 'bet-1-auditable';
     const bet = await insertWager({
       walletId,
+      externalTransactionId: betExternalId,
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',
@@ -533,7 +536,7 @@ describe('wager_transactions references', () => {
         walletId,
         kind: 'REFUND',
         amount: '25.00',
-        referenceExternalTransactionId: 'bet-1',
+        referenceExternalTransactionId: betExternalId,
         referenceTransactionId: bet,
         status,
         failureCode: status === 'REJECTED' ? 'REFERENCE_ALREADY_REVERSED' : null,
@@ -636,6 +639,7 @@ describe('wager_transactions: results name their BET, and a BET has one result',
     const walletId = await insertWallet();
     const bet = await insertWager({
       walletId,
+      externalTransactionId: 'bet-result',
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',
@@ -659,32 +663,37 @@ describe('wager_transactions: results name their BET, and a BET has one result',
 
   test('a BET cannot have a processed result and a processed refund, in either order', async () => {
     const walletId = await insertWallet();
-    const processedBet = () =>
+    const processedBet = (externalTransactionId: string) =>
       insertWager({
         walletId,
+        externalTransactionId,
         status: 'PROCESSED',
         processedAt: new Date(),
         resultingBalance: '75.00',
       });
-    const settle = (bet: string, kind: 'WIN' | 'REFUND') =>
+    const settle = (bet: string, externalId: string, kind: 'WIN' | 'REFUND') =>
       insertWager({
         walletId,
         kind,
         amount: '25.00',
-        referenceExternalTransactionId: 'bet-settled',
+        referenceExternalTransactionId: externalId,
         referenceTransactionId: bet,
         status: 'PROCESSED',
         processedAt: new Date(),
         resultingBalance: '100.00',
       });
 
-    const resultFirst = await processedBet();
-    await settle(resultFirst, 'WIN');
-    expect(await sqlStateOf(() => settle(resultFirst, 'REFUND'))).toBe('23505');
+    const resultFirstExternalId = 'bet-settled-result-first';
+    const resultFirst = await processedBet(resultFirstExternalId);
+    await settle(resultFirst, resultFirstExternalId, 'WIN');
+    expect(await sqlStateOf(() => settle(resultFirst, resultFirstExternalId, 'REFUND'))).toBe(
+      '23505',
+    );
 
-    const refundFirst = await processedBet();
-    await settle(refundFirst, 'REFUND');
-    expect(await sqlStateOf(() => settle(refundFirst, 'WIN'))).toBe('23505');
+    const refundFirstExternalId = 'bet-settled-refund-first';
+    const refundFirst = await processedBet(refundFirstExternalId);
+    await settle(refundFirst, refundFirstExternalId, 'REFUND');
+    expect(await sqlStateOf(() => settle(refundFirst, refundFirstExternalId, 'WIN'))).toBe('23505');
   });
 });
 
@@ -693,6 +702,7 @@ describe('wager_transactions: reference shape and one reversal per reference', (
     const walletId = await insertWallet();
     const bet = await insertWager({
       walletId,
+      externalTransactionId: 'bet-of-win',
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',
@@ -718,6 +728,7 @@ describe('wager_transactions: reference shape and one reversal per reference', (
     const walletId = await insertWallet();
     const bet = await insertWager({
       walletId,
+      externalTransactionId: 'bet-once',
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',
@@ -744,6 +755,7 @@ describe('wager_transactions: amount, wallet context and round are checked by th
     const walletId = await insertWallet();
     const bet = await insertWager({
       walletId,
+      externalTransactionId: 'bet-zero',
       status: 'PROCESSED',
       processedAt: new Date(),
       resultingBalance: '75.00',

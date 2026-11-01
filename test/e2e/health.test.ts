@@ -52,4 +52,19 @@ describe('health', () => {
       await unreachable.close();
     }
   });
+
+  test('readiness is 503 and names the failing dependency when PostgreSQL is unreachable', async () => {
+    const unreachable = await startTestApp('postgresql://postgres:postgres@127.0.0.1:1/postgres');
+    try {
+      const result = await get(unreachable.baseUrl, '/health/ready');
+
+      expect(result.status).toBe(503);
+      expect(result.body).toEqual({
+        status: 'unavailable',
+        checks: { database: 'down', sqs: 'up' },
+      });
+    } finally {
+      await unreachable.close();
+    }
+  });
 });

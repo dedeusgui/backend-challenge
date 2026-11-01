@@ -37,12 +37,14 @@ export class MikroOrmInboxRepository implements InboxRepository {
         processedAt: message.processedAt ?? null,
       });
     } catch (error) {
-      if (error instanceof UniqueConstraintViolationException) {
-        throw new ConcurrencyConflictError(
-          `Message ${message.messageId} was recorded concurrently`,
-        );
-      }
-      throw error;
+      this.handleInsertError(error, message.messageId);
     }
+  }
+
+  private handleInsertError(error: unknown, messageId: string): never {
+    if (error instanceof UniqueConstraintViolationException) {
+      throw new ConcurrencyConflictError(`Message ${messageId} was recorded concurrently`);
+    }
+    throw error;
   }
 }

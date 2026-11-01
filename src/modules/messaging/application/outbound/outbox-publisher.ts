@@ -81,52 +81,80 @@ export class OutboxPublisher {
     this.metrics.observe('outbox_publish_ms', performance.now() - sendStarted);
 
     const sent = batch.filter((message) => !failures.has(message.id));
-    let published = 0;
-    if (sent.length > 0) {
-      // Recording the outcome is outside any try: a failure here must surface, not be counted as a send failure.
-      for (const message of sent) {
-        message.markPublished(attemptAt);
-      }
-      const recorded = new Set(await this.options.store.complete(sent, token, attemptAt));
-      for (const message of sent) {
-        if (recorded.has(message.id)) {
-          published += 1;
-          this.metrics.increment('outbox_published_total');
-          this.metrics.observe(
-            'outbox_lag_seconds',
-            (attemptAt.getTime() - message.occurredAt.getTime()) / 1000,
-          );
-        } else {
-          this.metrics.increment('outbox_lost_lease_total');
-        }
-      }
-    }
+    const published = await this.completeSent(sent, token, attemptAt);
 
-    for (const message of batch.filter((candidate) => failures.has(candidate.id))) {
-      this.metrics.increment('outbox_publish_failures_total');
-      this.metrics.increment('retries_total', { subsystem: 'outbox' });
-      this.logger({
-        operation: 'outbox.publish',
-        status: 'failed',
-        messageId: message.id,
-        ...describeError(failures.get(message.id)),
-      });
-      // The store writes the next attempt from the database clock, so this publisher's clock does not set it.
-      message.recordFailedAttempt();
-      if (message.attempts >= this.maxAttempts) {
-        message.quarantine();
-      }
-      const quarantined = await this.options.store.reschedule(message, token, this.maxAttempts);
-      if (quarantined && message.quarantined) {
-        this.metrics.increment('outbox_quarantined_total');
-        this.logger({
-          operation: 'outbox.quarantine',
-          status: 'quarantined',
-          messageId: message.id,
-        });
+    const failed = batch.filter((candidate) => failures.has(candidate.id));
+    await this.rescheduleFailed(failed, failures, token);
+
+    return published;
+  }
+
+  private async completeSent(
+    sent: readonly OutboxMessage[],
+    token: string,
+    attemptAt: Date,
+  ): Promise<number> {
+    if (sent.length === 0) {
+      return 0;
+    }
+    // Recording the outcome is outside any try: a failure here must surface, not be counted as a send failure.
+    for (const message of sent) {
+      message.markPublished(attemptAt);
+    }
+    const recorded = new Set(await this.options.store.complete(sent, token, attemptAt));
+    let published = 0;
+    for (const message of sent) {
+      if (recorded.has(message.id)) {
+        published += 1;
+        this.metrics.increment('outbox_published_total');
+        this.metrics.observe(
+          'outbox_lag_seconds',
+          (attemptAt.getTime() - message.occurredAt.getTime()) / 1000,
+        );
+      } else {
+        this.metrics.increment('outbox_lost_lease_total');
       }
     }
     return published;
+  }
+
+  private async rescheduleFailed(
+    failed: readonly OutboxMessage[],
+    failures: Map<string, unknown>,
+    token: string,
+  ): Promise<void> {
+    for (const message of failed) {
+      await this.handleFailedMessage(message, failures.get(message.id), token);
+    }
+  }
+
+  private async handleFailedMessage(
+    message: OutboxMessage,
+    failure: unknown,
+    token: string,
+  ): Promise<void> {
+    this.metrics.increment('outbox_publish_failures_total');
+    this.metrics.increment('retries_total', { subsystem: 'outbox' });
+    this.logger({
+      operation: 'outbox.publish',
+      status: 'failed',
+      messageId: message.id,
+      ...describeError(failure),
+    });
+    // The store writes the next attempt from the database clock, so this publisher's clock does not set it.
+    message.recordFailedAttempt();
+    if (message.attempts >= this.maxAttempts) {
+      message.quarantine();
+    }
+    const quarantined = await this.options.store.reschedule(message, token, this.maxAttempts);
+    if (quarantined && message.quarantined) {
+      this.metrics.increment('outbox_quarantined_total');
+      this.logger({
+        operation: 'outbox.quarantine',
+        status: 'quarantined',
+        messageId: message.id,
+      });
+    }
   }
 
   /** The failure of each event the transport did not send, by id. A throw fails every event of the batch. */

@@ -11,6 +11,7 @@ interface OutboxRow {
   occurred_at: Date;
   attempts: number;
   next_attempt_at: Date;
+  status: 'PENDING' | 'PUBLISHED' | 'QUARANTINED';
 }
 
 /**
@@ -31,12 +32,13 @@ export class MikroOrmOutboxStore implements OutboxStore {
           WHERE id IN (
             SELECT id FROM outbox_messages
              WHERE published_at IS NULL
+               AND status = 'PENDING'
                AND next_attempt_at <= now()
                AND (lease_expires_at IS NULL OR lease_expires_at < now())
              ORDER BY next_attempt_at, occurred_at
              LIMIT ?
              FOR UPDATE SKIP LOCKED)
-         RETURNING id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at
+         RETURNING id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at, status
        )
        SELECT * FROM claimed ORDER BY next_attempt_at, occurred_at`,
       [request.token, request.leaseMs / 1000, request.limit],
@@ -56,7 +58,7 @@ export class MikroOrmOutboxStore implements OutboxStore {
     const placeholders = messages.map(() => '?').join(', ');
     const rows = (await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
-          SET published_at = ?, lease_token = NULL, lease_expires_at = NULL
+          SET published_at = ?, status = 'PUBLISHED', lease_token = NULL, lease_expires_at = NULL
         WHERE lease_token = ? AND id IN (${placeholders})
        RETURNING id`,
       [at, token, ...messages.map((message) => message.id)],
@@ -64,14 +66,34 @@ export class MikroOrmOutboxStore implements OutboxStore {
     return rows.map((row) => row.id);
   }
 
-  async reschedule(message: OutboxMessage, token: string): Promise<boolean> {
+  async reschedule(message: OutboxMessage, token: string, maxAttempts = 10): Promise<boolean> {
     const rows = (await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
-          SET attempts = ?, next_attempt_at = now() + make_interval(secs => ?),
+          SET attempts = ?, status = CASE WHEN ? >= ? THEN 'QUARANTINED' ELSE 'PENDING' END,
+              next_attempt_at = CASE WHEN ? >= ? THEN next_attempt_at ELSE now() + make_interval(secs => ?) END,
               lease_token = NULL, lease_expires_at = NULL
         WHERE id = ? AND lease_token = ?
        RETURNING id`,
-      [message.attempts, retryDelayMs(message.attempts) / 1000, message.id, token],
+      [
+        message.attempts,
+        message.attempts,
+        maxAttempts,
+        message.attempts,
+        maxAttempts,
+        retryDelayMs(message.attempts) / 1000,
+        message.id,
+        token,
+      ],
+    )) as Array<{ id: string }>;
+    return rows.length === 1;
+  }
+
+  async requeue(id: string): Promise<boolean> {
+    const rows = (await this.orm.em.getConnection().execute(
+      `UPDATE outbox_messages SET status = 'PENDING', attempts = 0, next_attempt_at = now(),
+                                  lease_token = NULL, lease_expires_at = NULL
+        WHERE id = ? AND status = 'QUARANTINED' RETURNING id`,
+      [id],
     )) as Array<{ id: string }>;
     return rows.length === 1;
   }
@@ -87,6 +109,7 @@ function toDomain(row: OutboxRow): OutboxMessage {
     attempts: row.attempts,
     nextAttemptAt: new Date(row.next_attempt_at),
     publishedAt: undefined,
+    quarantined: row.status === 'QUARANTINED',
   });
 }
 

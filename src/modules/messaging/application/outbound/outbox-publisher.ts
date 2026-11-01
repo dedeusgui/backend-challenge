@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/observability/structured-log';
 import type { OutboxStore } from '../ports/outbox-store';
 import type { OutboxTransport } from '../ports/outbox-transport';
+import { readOutboxMaxAttempts } from '../../../../config/worker-config';
 
 export interface OutboxPublisherOptions {
   store: OutboxStore;
@@ -15,6 +16,7 @@ export interface OutboxPublisherOptions {
   newLeaseToken: () => string;
   leaseDurationMs: number;
   batchSize: number;
+  maxAttempts?: number;
   metrics?: MetricsSink;
   logger?: OperationLogger;
 }
@@ -29,10 +31,12 @@ export interface OutboxPublisherOptions {
 export class OutboxPublisher {
   private readonly metrics: MetricsSink;
   private readonly logger: OperationLogger;
+  private readonly maxAttempts: number;
 
   constructor(private readonly options: OutboxPublisherOptions) {
     this.metrics = options.metrics ?? NO_METRICS;
     this.logger = options.logger ?? SILENT_LOGGER;
+    this.maxAttempts = options.maxAttempts ?? readOutboxMaxAttempts(process.env);
   }
 
   /** Returns how many events were published successfully in this pass. */
@@ -90,7 +94,18 @@ export class OutboxPublisher {
       });
       // The store writes the next attempt from the database clock, so this publisher's clock does not set it.
       message.recordFailedAttempt();
-      await this.options.store.reschedule(message, token);
+      if (message.attempts >= this.maxAttempts) {
+        message.quarantine();
+      }
+      const quarantined = await this.options.store.reschedule(message, token, this.maxAttempts);
+      if (quarantined && message.quarantined) {
+        this.metrics.increment('outbox_quarantined_total');
+        this.logger({
+          operation: 'outbox.quarantine',
+          status: 'quarantined',
+          messageId: message.id,
+        });
+      }
     }
     return published;
   }

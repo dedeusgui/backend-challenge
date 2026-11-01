@@ -13,6 +13,7 @@ export const OutboxMessageRecordSchema = defineEntity({
     attempts: p.integer(),
     nextAttemptAt: p.datetime().columnType('timestamptz'),
     publishedAt: p.datetime().columnType('timestamptz').nullable(),
+    status: p.string().columnType('text'),
     leaseToken: p.string().columnType('uuid').nullable(),
     leaseExpiresAt: p.datetime().columnType('timestamptz').nullable(),
   },

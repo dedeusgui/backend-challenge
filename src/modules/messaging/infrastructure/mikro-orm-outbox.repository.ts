@@ -24,6 +24,7 @@ export class MikroOrmOutboxRepository implements OutboxRepository {
           attempts: message.attempts,
           nextAttemptAt: message.nextAttemptAt,
           publishedAt: null,
+          status: 'PENDING',
           leaseToken: null,
           leaseExpiresAt: null,
         };

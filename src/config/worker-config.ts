@@ -5,6 +5,7 @@ export interface WorkerConfig {
   sqs: SqsSettings;
   consumerVisibilitySeconds: number;
   outboxBatchSize: number;
+  outboxMaxAttempts: number;
   outboxLeaseMs: number;
   outboxIdleDelayMs: number;
   /** The port of the worker's own HTTP surface (liveness and metrics). Unset means no surface. */
@@ -21,10 +22,15 @@ export function readWorkerConfig(env: Readonly<Record<string, string | undefined
     sqs: readSqsSettings(env),
     consumerVisibilitySeconds: positiveInteger(env, 'CONSUMER_VISIBILITY_SECONDS', 30),
     outboxBatchSize: positiveInteger(env, 'OUTBOX_BATCH_SIZE', 20),
+    outboxMaxAttempts: positiveInteger(env, 'OUTBOX_MAX_ATTEMPTS', 10),
     outboxLeaseMs: positiveInteger(env, 'OUTBOX_LEASE_MS', 30_000),
     outboxIdleDelayMs: positiveInteger(env, 'OUTBOX_IDLE_DELAY_MS', 500),
     httpPort: tcpPort(env, 'WORKER_HTTP_PORT'),
   };
+}
+
+export function readOutboxMaxAttempts(env: Readonly<Record<string, string | undefined>>): number {
+  return positiveInteger(env, 'OUTBOX_MAX_ATTEMPTS', 10);
 }
 
 function tcpPort(

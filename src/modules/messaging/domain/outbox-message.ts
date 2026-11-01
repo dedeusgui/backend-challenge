@@ -21,6 +21,7 @@ export interface OutboxMessageState {
   attempts: number;
   nextAttemptAt: Date;
   publishedAt: Date | undefined;
+  quarantined?: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export class OutboxMessage {
   private currentAttempts: number;
   private currentNextAttemptAt: Date;
   private currentPublishedAt: Date | undefined;
+  private currentQuarantined: boolean;
 
   private constructor(state: OutboxMessageState) {
     this.id = state.id;
@@ -47,6 +49,7 @@ export class OutboxMessage {
     this.currentAttempts = state.attempts;
     this.currentNextAttemptAt = state.nextAttemptAt;
     this.currentPublishedAt = state.publishedAt;
+    this.currentQuarantined = state.quarantined ?? false;
   }
 
   static enqueue(event: IntegrationEvent<unknown>): OutboxMessage {
@@ -60,6 +63,7 @@ export class OutboxMessage {
       attempts: 0,
       nextAttemptAt: event.occurredAt,
       publishedAt: undefined,
+      quarantined: false,
     });
   }
 
@@ -79,8 +83,17 @@ export class OutboxMessage {
     return this.currentPublishedAt;
   }
 
+  get quarantined(): boolean {
+    return this.currentQuarantined;
+  }
+
+  quarantine(): void {
+    this.assertPending();
+    this.currentQuarantined = true;
+  }
+
   isPending(): boolean {
-    return this.currentPublishedAt === undefined;
+    return this.currentPublishedAt === undefined && !this.currentQuarantined;
   }
 
   isDue(now: Date): boolean {

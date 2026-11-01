@@ -165,7 +165,7 @@ describe('OutboxPublisher', () => {
     const pending = await pendingCount();
     expect(pending).toBeGreaterThan(0);
     transport.failuresRemaining = 1;
-    // The backoff is measured from this publisher's clock, which is the real one, so it agrees with the database clock.
+    // The backoff is written from the database clock, so the publisher's own clock does not matter here.
     const publisher = publisherFor(transport, () => new Date());
 
     expect(await publisher.publishOnce()).toBe(0);

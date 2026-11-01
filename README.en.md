@@ -96,7 +96,7 @@ The engineering process is demonstrated by concrete technical decisions driven b
 - **What was at stake:** Satisfy the observability requirements of the challenge specification (§12).
 - **The question that arose:** Round 2 of the simulated review pointed out that while health and latency metrics existed, the Prometheus retry counter was missing.
 - **Evidence:** Inspecting metric collectors confirmed the absence of a unified `retries_total` counter for queue retries, outbox retries, and held reference resolution.
-- **Decision:** Introduce the Prometheus counter `retries_total` tagged with a `subsystem` label in `prometheus-metrics.ts`, instrumented across all three reprocessing flows with a dedicated unit test.
+- **Decision:** Introduce the Prometheus counter `retries_total` tagged with a `subsystem` label instrumented across all three reprocessing flows (`wager-command-consumer.ts`, `outbox-publisher.ts` and `process-pending-references.use-case.ts`) with a dedicated unit test.
 - **Proof:** Commit `4ee8f72` and test [retries-total.test.ts](test/unit/observability/retries-total.test.ts).
 
 ### Slices, in order

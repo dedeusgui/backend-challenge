@@ -123,7 +123,7 @@ A história do projeto é demonstrada pelas decisões técnicas tomadas diante d
 - **O que estava em jogo:** Cumprir o requisito de métricas operacionais da especificação (§12).
 - **Pergunta que surgiu:** A segunda rodada da revisão simulada apontou a ausência do contador Prometheus de retentativas.
 - **Evidência:** O exame dos coletores confirmou a falta da métrica `retries_total` para monitorar retentativas de consumo de fila, publicação de outbox e resolução de referências retidas.
-- **Decisão:** Introduzir a métrica unificada `retries_total` com rótulo `subsystem` em `prometheus-metrics.ts`, instrumentada nos três pontos de reprocessamento e coberta por teste unitário.
+- **Decisão:** Introduzir a métrica unificada `retries_total` com rótulo `subsystem` instrumentada nos três fluxos de reprocessamento (`wager-command-consumer.ts`, `outbox-publisher.ts` e `process-pending-references.use-case.ts`) e coberta por teste unitário.
 - **Prova:** Commit `4ee8f72` e teste [retries-total.test.ts](test/unit/observability/retries-total.test.ts).
 
 ### Fatias, em ordem

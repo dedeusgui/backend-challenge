@@ -311,7 +311,7 @@
           "kind": "store",
           "summary": "A carteira aplica a mudança só com lançamento válido e moeda compatível. O saldo nunca fica negativo: há CHECK no banco.",
           "path": "src/modules/wallet/domain/wallet.ts",
-          "proof": "test/integration/schema/schema-constraints.test.ts"
+          "proof": "test/integration/schema/wallet-schema-constraints.test.ts"
         },
         {
           "id": "failure",
@@ -341,7 +341,7 @@
           "kind": "store",
           "summary": "WalletLedgerEntry não tem campos mutáveis. Um trigger no banco recusa UPDATE, DELETE e TRUNCATE.",
           "path": "src/modules/wallet/domain/wallet-ledger-entry.ts",
-          "proof": "test/integration/schema/schema-constraints.test.ts"
+          "proof": "test/integration/schema/wallet-schema-constraints.test.ts"
         },
         {
           "id": "events",

@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { sqlStateOf } from '../../support/sql-state';
 import { type TestDatabase, createTestDatabase } from '../support/test-database';
 
 /**
  * These tests bypass the application code on purpose: they prove that PostgreSQL
- * itself refuses invalid rows. SQLSTATE codes: 23505 unique, 23514 check,
- * 23503 foreign key, 22003 numeric overflow.
+ * itself refuses invalid wager_transactions rows. SQLSTATE codes: 23505 unique,
+ * 23514 check, 23503 foreign key.
  */
 
 let database: TestDatabase;
@@ -19,29 +20,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await database.drop();
 });
-
-/** Runs `action` and returns the SQLSTATE it raised, or 'NO_ERROR'. */
-async function sqlStateOf(action: () => Promise<unknown>): Promise<string> {
-  try {
-    await action();
-  } catch (error) {
-    return findSqlState(error) ?? `UNEXPECTED: ${String(error)}`;
-  }
-  return 'NO_ERROR';
-}
-
-function findSqlState(error: unknown): string | undefined {
-  let current: unknown = error;
-  while (current !== null && typeof current === 'object') {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) {
-      return code;
-    }
-    current =
-      (current as { cause?: unknown }).cause ?? (current as { driverError?: unknown }).driverError;
-  }
-  return undefined;
-}
 
 function sql(query: string, params: unknown[] = []): Promise<unknown> {
   return database.orm.em.getConnection().execute(query, params);
@@ -117,9 +95,20 @@ interface WagerOverrides {
 async function insertWager(overrides: WagerOverrides): Promise<string> {
   const id = overrides.id ?? randomUUID();
   const externalId = overrides.externalTransactionId ?? `ext-${randomUUID()}`;
-  const [wallet] = (await sql('SELECT player_id, currency FROM wallets WHERE id = ?', [
+  const rows = await sql('SELECT player_id, currency FROM wallets WHERE id = ?', [
     overrides.walletId,
-  ])) as Array<{ player_id: string; currency: string }>;
+  ]);
+  let walletPlayerId = 'player-1';
+  let walletCurrency = 'BRL';
+  if (Array.isArray(rows) && rows.length > 0 && typeof rows[0] === 'object' && rows[0] !== null) {
+    const first = rows[0];
+    if ('player_id' in first && typeof first.player_id === 'string') {
+      walletPlayerId = first.player_id;
+    }
+    if ('currency' in first && typeof first.currency === 'string') {
+      walletCurrency = first.currency;
+    }
+  }
   await sql(
     `INSERT INTO wager_transactions (
        id, provider_id, external_transaction_id, idempotency_key, payload_hash,
@@ -134,11 +123,11 @@ async function insertWager(overrides: WagerOverrides): Promise<string> {
       overrides.idempotencyKey ?? `provider-a:${externalId}`,
       'a'.repeat(64),
       overrides.walletId,
-      overrides.playerId ?? wallet?.player_id ?? 'player-1',
+      overrides.playerId ?? walletPlayerId,
       overrides.roundId ?? 'round-987',
       overrides.kind ?? 'BET',
       overrides.amount ?? '25.00',
-      overrides.currency ?? wallet?.currency ?? 'BRL',
+      overrides.currency ?? walletCurrency,
       overrides.referenceExternalTransactionId ?? null,
       overrides.referenceTransactionId ?? null,
       overrides.status ?? 'PENDING',
@@ -160,9 +149,14 @@ async function insertLedgerEntry(overrides: {
   balanceBefore?: string;
   balanceAfter?: string;
 }): Promise<void> {
-  const [wallet] = (await sql('SELECT currency FROM wallets WHERE id = ?', [
-    overrides.walletId,
-  ])) as Array<{ currency: string }>;
+  const rows = await sql('SELECT currency FROM wallets WHERE id = ?', [overrides.walletId]);
+  let currency = 'BRL';
+  if (Array.isArray(rows) && rows.length > 0 && typeof rows[0] === 'object' && rows[0] !== null) {
+    const first = rows[0];
+    if ('currency' in first && typeof first.currency === 'string') {
+      currency = first.currency;
+    }
+  }
   await database.orm.em.fork().transactional(async (em) => {
     await em.execute(
       `INSERT INTO wallet_ledger_entries (
@@ -174,7 +168,7 @@ async function insertLedgerEntry(overrides: {
         overrides.walletId,
         overrides.transactionId,
         overrides.direction ?? 'DEBIT',
-        overrides.currency ?? wallet?.currency ?? 'BRL',
+        overrides.currency ?? currency,
         overrides.amount ?? '25.00',
         overrides.balanceBefore ?? '100.00',
         overrides.balanceAfter ?? '75.00',
@@ -186,141 +180,6 @@ async function insertLedgerEntry(overrides: {
     );
   });
 }
-
-describe('wallets constraints', () => {
-  test('allow only one wallet per player and currency', async () => {
-    const playerId = `player-${randomUUID()}`;
-    await insertWallet({ playerId });
-
-    expect(await sqlStateOf(() => insertWallet({ playerId }))).toBe('23505');
-  });
-
-  test('allow the same player to hold a wallet in another currency', async () => {
-    const playerId = `player-${randomUUID()}`;
-    await insertWallet({ playerId, currency: 'BRL' });
-
-    expect(await sqlStateOf(() => insertWallet({ playerId, currency: 'USD' }))).toBe('NO_ERROR');
-  });
-
-  test('reject a negative balance', async () => {
-    expect(await sqlStateOf(() => insertWallet({ balance: '-0.01' }))).toBe('23514');
-  });
-
-  test('reject a version below 1', async () => {
-    expect(await sqlStateOf(() => insertWallet({ version: 0 }))).toBe('23514');
-  });
-
-  test('reject a currency that is not three uppercase letters', async () => {
-    expect(await sqlStateOf(() => insertWallet({ currency: 'brl' }))).toBe('23514');
-  });
-
-  test('reject a balance beyond NUMERIC(20,2), with 19 integer digits', async () => {
-    expect(await sqlStateOf(() => insertWallet({ balance: '1000000000000000000.00' }))).toBe(
-      '22003',
-    );
-  });
-});
-
-describe('wallet_ledger_entries constraints', () => {
-  test('is append-only: UPDATE is refused', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({
-      walletId,
-      status: 'PROCESSED',
-      processedAt: new Date(),
-      resultingBalance: '75.00',
-    });
-    await insertLedgerEntry({ walletId, transactionId });
-
-    const error = await sqlStateOf(() =>
-      sql(`UPDATE wallet_ledger_entries SET amount = 1.00 WHERE wallet_id = ?`, [walletId]),
-    );
-    expect(error).not.toBe('NO_ERROR');
-    const remaining = await sql(
-      `SELECT amount::text AS amount FROM wallet_ledger_entries WHERE wallet_id = ? AND transaction_id = ?`,
-      [walletId, transactionId],
-    );
-    expect(remaining).toEqual([{ amount: '25.00' }]);
-  });
-
-  test('is append-only: DELETE is refused', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({
-      walletId,
-      status: 'PROCESSED',
-      processedAt: new Date(),
-      resultingBalance: '75.00',
-    });
-    await insertLedgerEntry({ walletId, transactionId });
-
-    expect(
-      await sqlStateOf(() =>
-        sql(`DELETE FROM wallet_ledger_entries WHERE wallet_id = ?`, [walletId]),
-      ),
-    ).not.toBe('NO_ERROR');
-  });
-
-  test('is append-only: TRUNCATE is refused', async () => {
-    expect(await sqlStateOf(() => sql(`TRUNCATE wallet_ledger_entries`))).not.toBe('NO_ERROR');
-  });
-
-  test('rejects an entry whose arithmetic does not balance', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({ walletId });
-
-    expect(
-      await sqlStateOf(() => insertLedgerEntry({ walletId, transactionId, balanceAfter: '74.00' })),
-    ).toBe('23514');
-  });
-
-  test('rejects a CREDIT recorded with debit arithmetic', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({ walletId });
-
-    expect(
-      await sqlStateOf(() =>
-        insertLedgerEntry({
-          walletId,
-          transactionId,
-          direction: 'CREDIT',
-          balanceBefore: '100.00',
-          balanceAfter: '75.00',
-        }),
-      ),
-    ).toBe('23514');
-  });
-
-  test('rejects a zero amount', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({ walletId });
-
-    expect(
-      await sqlStateOf(() =>
-        insertLedgerEntry({ walletId, transactionId, amount: '0.00', balanceAfter: '100.00' }),
-      ),
-    ).toBe('23514');
-  });
-
-  test('rejects two entries for the same wallet and transaction', async () => {
-    const walletId = await insertWallet();
-    const transactionId = await insertWager({ walletId });
-    await insertLedgerEntry({ walletId, transactionId });
-
-    expect(await sqlStateOf(() => insertLedgerEntry({ walletId, transactionId }))).toBe('23505');
-  });
-
-  test('rejects an entry whose transaction belongs to another wallet', async () => {
-    const walletA = await insertWallet();
-    const walletB = await insertWallet();
-    const transactionOfB = await insertWager({ walletId: walletB });
-
-    expect(
-      await sqlStateOf(() =>
-        insertLedgerEntry({ walletId: walletA, transactionId: transactionOfB }),
-      ),
-    ).toBe('23503');
-  });
-});
 
 describe('wager_transactions identity and shape', () => {
   test('rejects a duplicate external transaction id within a provider', async () => {
@@ -564,44 +423,6 @@ describe('wager_transactions references', () => {
         }),
       ),
     ).toBe('23514');
-  });
-});
-
-describe('inbox and outbox constraints', () => {
-  test('deduplicates inbox messages by consumer and message id', async () => {
-    const insertInbox = (consumerName: string) =>
-      sql(
-        `INSERT INTO inbox_messages (consumer_name, message_id, payload_hash, received_at)
-         VALUES (?, 'msg-123', ?, now())`,
-        [consumerName, 'b'.repeat(64)],
-      );
-
-    await insertInbox('wager-transactions');
-    expect(await sqlStateOf(() => insertInbox('wager-transactions'))).toBe('23505');
-    expect(await sqlStateOf(() => insertInbox('other-consumer'))).toBe('NO_ERROR');
-  });
-
-  test('keeps one outbox row per stable event id', async () => {
-    const eventId = randomUUID();
-    // The payload is a well-formed envelope: the shape constraint refuses anything else before this one applies.
-    const payload = JSON.stringify({
-      eventId,
-      eventType: 'WalletBalanceChanged',
-      aggregateId: 'wallet-1',
-      correlationId: 'correlation-1',
-      occurredAt: '2026-07-29T15:00:00.000Z',
-      version: 1,
-      data: {},
-    });
-    const insertOutbox = () =>
-      sql(
-        `INSERT INTO outbox_messages (id, aggregate_id, event_type, payload, occurred_at, next_attempt_at)
-         VALUES (?, 'wallet-1', 'WalletBalanceChanged', ?::jsonb, now(), now())`,
-        [eventId, payload],
-      );
-
-    await insertOutbox();
-    expect(await sqlStateOf(insertOutbox)).toBe('23505');
   });
 });
 

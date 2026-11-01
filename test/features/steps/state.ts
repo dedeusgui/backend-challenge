@@ -9,7 +9,7 @@ import type {
 import type { WorldData } from './finance.steps';
 import type { OutboxPublisher } from '../../../src/modules/messaging/application/outbound/outbox-publisher';
 import type { OutboxMessage } from '../../../src/modules/messaging/domain/outbox-message';
-import type { MessagingScenario } from './mensageria.steps';
+import type { MessagingScenario } from './mensageria-consumer.steps';
 
 export interface ScenarioState {
   outcome?: ProcessWagerOutcome;

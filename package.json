@@ -37,7 +37,7 @@
     "graficos:build": "bun run scripts/build-graficos.ts",
     "gate:registrar": "bun run scripts/record-gate.ts",
     "diagrams:export": "bun run scripts/export-diagrams.ts",
-    "test:features": "bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'",
+    "test:features": "mkdir -p test-results && bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' --format progress --format junit:test-results/cucumber.junit.xml --format message:test-results/cucumber.ndjson 'test/features/**/*.feature'",
     "arch:check": "depcruise --config .dependency-cruiser.cjs src",
     "deadcode:check": "knip"
   },

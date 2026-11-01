@@ -161,7 +161,7 @@ operations after it.
 
 const LIMITS = [
   'It proves that the stack kept its constraints for the length of one step, at one rate, on the CPUs given to it. It does not prove a rate for longer than a step: there is no soak test.',
-  'The CPU counts are the CPUs given to the stack with `taskset` and with the cpuset of each container. The number of processes does not change with the CPU count: three API processes, two workers, one PostgreSQL and one LocalStack. A machine with more CPUs gives the same processes more room; it does not add processes.',
+  'The CPU counts are the CPUs given to the stack with `taskset` and with the cpuset of each container. The number of processes does not change with the CPU count: the API processes, the workers, one PostgreSQL and one LocalStack, as the environment table gives them. A machine with more CPUs gives the same processes more room; it does not add processes.',
   'The generator runs on the CPUs the stack does not use. When the stack has every CPU of the host, the generator shares them, and its CPU is in the table. A shared generator makes the figures pessimistic, not optimistic.',
   'The queue is LocalStack, not AWS SQS. Its CPU is counted in the stack, and its cost is not the cost of AWS SQS.',
   'PostgreSQL runs with its default configuration, on local disk, with no replica and no tuning.',

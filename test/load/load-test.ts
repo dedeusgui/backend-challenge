@@ -1,6 +1,7 @@
 /**
  * Load test (ARCHITECTURE.md section 14). It runs the real stack as independent processes, three API
- * processes and two workers, on one PostgreSQL and one LocalStack, under a product mix (test/load/workload.ts).
+ * processes and two workers by default (LOAD_API_PROCESSES and LOAD_WORKER_PROCESSES change them, for a
+ * scenario), on one PostgreSQL and one LocalStack, under a product mix (test/load/workload.ts).
  *
  * The stack is pinned to a number of CPUs (LOAD_CPUS, default: every CPU of the host). The processes
  * are pinned with taskset and the containers with their cpuset, and the generator runs on the CPUs the
@@ -86,6 +87,17 @@ const RATES: readonly number[] = env.LOAD_RATES
 const STEP_SECONDS = Number(env.LOAD_STEP_SECONDS ?? LOAD_THRESHOLDS.stepSeconds);
 const IDLE_SECONDS = Number(env.LOAD_IDLE_SECONDS ?? LOAD_THRESHOLDS.idleSeconds);
 const WARMUP_SECONDS = Number(env.LOAD_WARMUP_SECONDS ?? LOAD_THRESHOLDS.warmupSeconds);
+// The agreed topology is the default. A scenario may run fewer or more processes; its report says which.
+const API_PROCESSES = processCount(
+  env.LOAD_API_PROCESSES,
+  LOAD_THRESHOLDS.apiProcesses,
+  'LOAD_API_PROCESSES',
+);
+const WORKER_PROCESSES = processCount(
+  env.LOAD_WORKER_PROCESSES,
+  LOAD_THRESHOLDS.workerProcesses,
+  'LOAD_WORKER_PROCESSES',
+);
 const RESULTS_DIR = env.LOAD_RESULTS_DIR ?? `${import.meta.dir}/../../docs/load/results`;
 const REPORT_PATH = env.LOAD_REPORT_PATH ?? `${import.meta.dir}/../../docs/LOAD_TEST_RESULTS.md`;
 const PROVIDER_ID = 'provider-a';
@@ -392,23 +404,15 @@ async function measureRun(
   ).apiKey;
 
   const apis: string[] = [];
-  for (let index = 0; index < LOAD_THRESHOLDS.apiProcesses; index += 1) {
+  for (let index = 0; index < API_PROCESSES; index += 1) {
     apis.push(await cluster.startApi(`api-${index + 1}`));
   }
-  for (let index = 0; index < LOAD_THRESHOLDS.workerProcesses; index += 1) {
+  for (let index = 0; index < WORKER_PROCESSES; index += 1) {
     cluster.startWorker(`worker-${index + 1}`);
   }
   const names = new Map<number, string>(
     cluster.processes.map((managed: ManagedProcess) => [managed.process.pid, managed.name]),
   );
-
-  const observedAffinity: Record<string, string> = {};
-  if (plan.pinned) {
-    for (const managed of cluster.processes) {
-      const list = await affinityOf(managed.process.pid);
-      if (list !== undefined) observedAffinity[managed.name] = formatCpuList(parseCpuList(list));
-    }
-  }
 
   const wallets: WorkloadWallet[] = [];
   for (let index = 0; index < LOAD_THRESHOLDS.wallets; index += 1) {
@@ -514,6 +518,16 @@ async function measureRun(
     if (step.reasons.length > 0) break;
   }
 
+  // Read after the steps, not at start: a worker is not waited for, so right after its spawn its affinity
+  // can still be the generator's, until taskset has run. By now every process has settled.
+  const observedAffinity: Record<string, string> = {};
+  if (plan.pinned) {
+    for (const managed of cluster.processes) {
+      const list = await affinityOf(managed.process.pid);
+      if (list !== undefined) observedAffinity[managed.name] = formatCpuList(parseCpuList(list));
+    }
+  }
+
   // Stop the workers gracefully, so that they print their final metrics.
   for (const managed of cluster.processes.filter((candidate) =>
     candidate.name.startsWith('worker-'),
@@ -556,7 +570,7 @@ async function measureRun(
       cpuModel: cpuModelName(),
       memoryGiB: totalmem() / 1024 ** 3,
       bun: Bun.version,
-      topology: `${LOAD_THRESHOLDS.apiProcesses} API, ${LOAD_THRESHOLDS.workerProcesses} workers, one PostgreSQL 17, one LocalStack 4.14`,
+      topology: `${API_PROCESSES} API, ${WORKER_PROCESSES} workers, one PostgreSQL 17, one LocalStack 4.14`,
     },
     constraints: {
       stepSeconds: STEP_SECONDS,
@@ -896,6 +910,16 @@ async function launch(): Promise<number> {
     return child.exited;
   }
   return runLoad(plan);
+}
+
+/** A process count from the environment, or the agreed one. It must be a whole number of at least one. */
+function processCount(value: string | undefined, agreed: number, name: string): number {
+  if (value === undefined) return agreed;
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`${name} must be a whole number of at least 1, not "${value}"`);
+  }
+  return count;
 }
 
 function planFromEnvironment(text: string): PinningPlan {

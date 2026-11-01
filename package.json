@@ -22,6 +22,7 @@
     "auth:create": "bun run src/auth.ts create",
     "auth:revoke": "bun run src/auth.ts revoke",
     "test:load": "bun run test/load/load-test.ts",
+    "load:consolidate": "bun run test/load/consolidate.ts",
     "edge:up": "docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build -d --wait",
     "edge:down": "docker compose -f docker-compose.yml -f docker-compose.protected.yml down",
     "test:edge": "bun test test/edge",

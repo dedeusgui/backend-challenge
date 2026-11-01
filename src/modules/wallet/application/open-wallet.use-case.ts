@@ -1,8 +1,10 @@
 import type { ApplicationContext } from '../../../shared/application/application-context';
+import type { FinancialRepositories } from '../../../shared/application/ports/financial-unit-of-work';
 import { DomainError } from '../../../shared/domain/domain-error';
 import { Money } from '../../../shared/domain/money';
 import { WalletBalanceChanged } from '../domain/events/wallet-balance-changed.event';
 import { Wallet } from '../domain/wallet';
+import type { WalletLedgerEntry } from '../domain/wallet-ledger-entry';
 import { WagerTransaction } from '../../wagering/domain/wager-transaction';
 import { WagerTransactionProcessed } from '../../wagering/domain/events/wager-transaction-processed.event';
 import { hashOf } from '../../wagering/domain/wager-payload';
@@ -49,30 +51,35 @@ export class OpenWallet {
       if (openingEntry === undefined) {
         return;
       }
-      const opening = this.openingTransaction(
-        walletId,
-        input,
-        openingEntry.transactionId,
-        openedAt,
-      );
-      await repositories.wagers.insert(opening);
-      await repositories.ledger.append(openingEntry);
-
-      const context = {
-        eventId: this.context.newId(),
-        correlationId: walletId,
-        occurredAt: openedAt,
-      };
-      await repositories.outbox.enqueue(
-        WagerTransactionProcessed.from(opening, context),
-        WalletBalanceChanged.from(wallet, openingEntry, {
-          ...context,
-          eventId: this.context.newId(),
-        }),
-      );
+      await this.recordOpeningBalance(repositories, wallet, openingEntry, input, openedAt);
     });
 
     return { walletId, balance: wallet.balance, version: wallet.version };
+  }
+
+  private async recordOpeningBalance(
+    repositories: FinancialRepositories,
+    wallet: Wallet,
+    openingEntry: WalletLedgerEntry,
+    input: OpenWalletInput,
+    openedAt: Date,
+  ): Promise<void> {
+    const opening = this.openingTransaction(wallet.id, input, openingEntry.transactionId, openedAt);
+    await repositories.wagers.insert(opening);
+    await repositories.ledger.append(openingEntry);
+
+    const context = {
+      eventId: this.context.newId(),
+      correlationId: wallet.id,
+      occurredAt: openedAt,
+    };
+    await repositories.outbox.enqueue(
+      WagerTransactionProcessed.from(opening, context),
+      WalletBalanceChanged.from(wallet, openingEntry, {
+        ...context,
+        eventId: this.context.newId(),
+      }),
+    );
   }
 
   private openingTransaction(

@@ -4,6 +4,7 @@ import type { ProcessedOutcomes } from './ports/wager-transaction-repository';
 import type { IntegrationEventContext } from '../../../shared/domain/integration-event';
 import { WalletBalanceChanged } from '../../wallet/domain/events/wallet-balance-changed.event';
 import type { Wallet } from '../../wallet/domain/wallet';
+import type { WalletLedgerEntry } from '../../wallet/domain/wallet-ledger-entry';
 import { WagerTransactionPendingReference } from '../domain/events/wager-transaction-pending-reference.event';
 import { WagerTransactionProcessed } from '../domain/events/wager-transaction-processed.event';
 import { WagerTransactionRejected } from '../domain/events/wager-transaction-rejected.event';
@@ -62,13 +63,7 @@ export class TransactionSettlement {
     wallet: Wallet,
     options: SettlementOptions,
   ): Promise<SettlementOutcome> {
-    const reference =
-      transaction.referenceExternalTransactionId === undefined
-        ? undefined
-        : await repositories.wagers.findByExternalId(
-            transaction.providerId,
-            transaction.referenceExternalTransactionId,
-          );
+    const reference = await this.findReference(repositories, transaction);
 
     const walletMismatch = transaction.walletMismatch(wallet);
     if (walletMismatch !== undefined) {
@@ -83,21 +78,41 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, evaluation.code, options);
     }
 
-    const history =
-      reference === undefined
-        ? NO_PROCESSED_OUTCOMES
-        : await repositories.wagers.processedOutcomesOf(reference.id);
-
-    // The lifecycle rule for the results the reference already has (wager-lifecycle.ts).
-    const decision = decideAgainstHistory(transaction.kind, history);
-    if (decision.outcome === 'REJECT') {
-      return this.reject(repositories, transaction, wallet, decision.code, options);
+    const historyCode = await this.checkHistoryRejection(repositories, transaction.kind, reference);
+    if (historyCode !== undefined) {
+      return this.reject(repositories, transaction, wallet, historyCode, options);
     }
 
     if (!transaction.affectsBalance()) {
       return this.finishWithoutBalanceChange(repositories, transaction, reference, wallet, options);
     }
     return this.applyBalanceChange(repositories, transaction, reference, wallet, options);
+  }
+
+  private findReference(
+    repositories: FinancialRepositories,
+    transaction: WagerTransaction,
+  ): Promise<WagerTransaction | undefined> {
+    if (transaction.referenceExternalTransactionId === undefined) {
+      return Promise.resolve(undefined);
+    }
+    return repositories.wagers.findByExternalId(
+      transaction.providerId,
+      transaction.referenceExternalTransactionId,
+    );
+  }
+
+  private async checkHistoryRejection(
+    repositories: FinancialRepositories,
+    kind: WagerTransaction['kind'],
+    reference: WagerTransaction | undefined,
+  ): Promise<FailureCode | undefined> {
+    const history =
+      reference === undefined
+        ? NO_PROCESSED_OUTCOMES
+        : await repositories.wagers.processedOutcomesOf(reference.id);
+    const decision = decideAgainstHistory(kind, history);
+    return decision.outcome === 'REJECT' ? decision.code : undefined;
   }
 
   private async applyBalanceChange(
@@ -108,16 +123,9 @@ export class TransactionSettlement {
     options: SettlementOptions,
   ): Promise<SettlementOutcome> {
     const direction = transaction.ledgerDirectionFor(reference);
-    if (direction === 'DEBIT' && !wallet.canDebit(transaction.money)) {
-      const code: FailureCode = transaction.isReversal()
-        ? 'REVERSAL_WOULD_OVERDRAW'
-        : 'INSUFFICIENT_BALANCE';
-      return this.reject(repositories, transaction, wallet, code, options);
-    }
-
-    if (direction === 'CREDIT' && !wallet.canCredit(transaction.money)) {
-      // A balance the database cannot store is a business outcome of the wallet's state, not a storage failure.
-      return this.reject(repositories, transaction, wallet, 'BALANCE_LIMIT_EXCEEDED', options);
+    const capacityFailure = this.checkBalanceCapacity(direction, transaction, wallet);
+    if (capacityFailure !== undefined) {
+      return this.reject(repositories, transaction, wallet, capacityFailure, options);
     }
 
     const expectedVersion = wallet.version;
@@ -134,6 +142,40 @@ export class TransactionSettlement {
       at: movement.at,
     });
 
+    await this.persistBalanceChange(
+      repositories,
+      transaction,
+      wallet,
+      entry,
+      expectedVersion,
+      options,
+    );
+    return { transaction, balance: wallet.balance, idempotentReplay: false };
+  }
+
+  private checkBalanceCapacity(
+    direction: 'DEBIT' | 'CREDIT',
+    transaction: WagerTransaction,
+    wallet: Wallet,
+  ): FailureCode | undefined {
+    if (direction === 'DEBIT' && !wallet.canDebit(transaction.money)) {
+      return transaction.isReversal() ? 'REVERSAL_WOULD_OVERDRAW' : 'INSUFFICIENT_BALANCE';
+    }
+    if (direction === 'CREDIT' && !wallet.canCredit(transaction.money)) {
+      // A balance the database cannot store is a business outcome of the wallet's state, not a storage failure.
+      return 'BALANCE_LIMIT_EXCEEDED';
+    }
+    return undefined;
+  }
+
+  private async persistBalanceChange(
+    repositories: FinancialRepositories,
+    transaction: WagerTransaction,
+    wallet: Wallet,
+    entry: WalletLedgerEntry,
+    expectedVersion: number,
+    options: SettlementOptions,
+  ): Promise<void> {
     await this.save(repositories, transaction, options);
     await repositories.wallets.save(wallet, expectedVersion);
     await repositories.ledger.append(entry);
@@ -143,7 +185,6 @@ export class TransactionSettlement {
       WagerTransactionProcessed.from(transaction, eventContext),
       WalletBalanceChanged.from(wallet, entry, { ...eventContext, eventId: this.context.newId() }),
     );
-    return { transaction, balance: wallet.balance, idempotentReplay: false };
   }
 
   private async finishWithoutBalanceChange(

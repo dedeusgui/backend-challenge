@@ -20,6 +20,54 @@ const USAGE = `usage:
   auth create --name <name> --role OPERATOR
   auth revoke --client <clientId>`;
 
+async function handleCreate(
+  repository: MikroOrmApiClientRepository,
+  values: { name?: string; role?: string; provider?: string },
+): Promise<number> {
+  const role = API_CLIENT_ROLES.find((candidate) => candidate === values.role);
+  if (values.name === undefined || role === undefined) {
+    console.error(USAGE);
+    return 2;
+  }
+  const created = await new CreateApiClient({
+    repository,
+    clock: () => new Date(),
+    newId: randomUUID,
+  }).execute({ name: values.name, role, providerId: values.provider });
+  console.log(`client: ${created.clientId}`);
+  console.log(`key: ${created.apiKey}`);
+  console.log('The key is shown once. Store it now: only its hash is kept.');
+  return 0;
+}
+
+async function handleRevoke(
+  repository: MikroOrmApiClientRepository,
+  client: string | undefined,
+): Promise<number> {
+  if (client === undefined) {
+    console.error(USAGE);
+    return 2;
+  }
+  const revoked = await repository.revoke(client, new Date());
+  console.log(revoked ? `revoked: ${client}` : `no active client: ${client}`);
+  return revoked ? 0 : 1;
+}
+
+async function runCommand(
+  repository: MikroOrmApiClientRepository,
+  command: string | undefined,
+  values: { name?: string; role?: string; provider?: string; client?: string },
+): Promise<number> {
+  if (command === 'create') {
+    return handleCreate(repository, values);
+  }
+  if (command === 'revoke') {
+    return handleRevoke(repository, values.client);
+  }
+  console.error(USAGE);
+  return 2;
+}
+
 async function main(): Promise<number> {
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === '') {
@@ -39,29 +87,7 @@ async function main(): Promise<number> {
   const orm = await MikroORM.init(ormOptions(databaseUrl));
   try {
     const repository = new MikroOrmApiClientRepository(orm);
-    if (positionals[0] === 'create') {
-      const role = API_CLIENT_ROLES.find((candidate) => candidate === values.role);
-      if (values.name === undefined || role === undefined) {
-        console.error(USAGE);
-        return 2;
-      }
-      const created = await new CreateApiClient({
-        repository,
-        clock: () => new Date(),
-        newId: randomUUID,
-      }).execute({ name: values.name, role, providerId: values.provider });
-      console.log(`client: ${created.clientId}`);
-      console.log(`key: ${created.apiKey}`);
-      console.log('The key is shown once. Store it now: only its hash is kept.');
-      return 0;
-    }
-    if (positionals[0] === 'revoke' && values.client !== undefined) {
-      const revoked = await repository.revoke(values.client, new Date());
-      console.log(revoked ? `revoked: ${values.client}` : `no active client: ${values.client}`);
-      return revoked ? 0 : 1;
-    }
-    console.error(USAGE);
-    return 2;
+    return await runCommand(repository, positionals[0], values);
   } finally {
     await orm.close(true);
   }

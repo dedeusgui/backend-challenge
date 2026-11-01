@@ -28,26 +28,7 @@ export function startWorkerHttp(options: WorkerHttpOptions): WorkerHttpServer {
     hostname: options.hostname,
     port: options.port,
     fetch(request) {
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        return json(
-          405,
-          { error: { code: 'METHOD_NOT_ALLOWED', message: 'Use GET' } },
-          { allow: 'GET, HEAD' },
-        );
-      }
-      const { pathname } = new URL(request.url);
-      if (pathname === '/health/live') {
-        return json(200, { status: 'ok' });
-      }
-      if (pathname === '/metrics') {
-        return json(200, {
-          startedAt: options.startedAt.toISOString(),
-          collectedAt: now().toISOString(),
-          pid: process.pid,
-          ...options.metrics.snapshot(),
-        });
-      }
-      return json(404, { error: { code: 'NOT_FOUND', message: 'Unknown route' } });
+      return handleWorkerHttpRequest(request, options, now);
     },
     error() {
       // The reason stays out of the response. The process logs its own failures.
@@ -65,6 +46,33 @@ export function startWorkerHttp(options: WorkerHttpOptions): WorkerHttpServer {
       server.stop(true);
     },
   };
+}
+
+function handleWorkerHttpRequest(
+  request: Request,
+  options: WorkerHttpOptions,
+  now: () => Date,
+): Response {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json(
+      405,
+      { error: { code: 'METHOD_NOT_ALLOWED', message: 'Use GET' } },
+      { allow: 'GET, HEAD' },
+    );
+  }
+  const { pathname } = new URL(request.url);
+  if (pathname === '/health/live') {
+    return json(200, { status: 'ok' });
+  }
+  if (pathname === '/metrics') {
+    return json(200, {
+      startedAt: options.startedAt.toISOString(),
+      collectedAt: now().toISOString(),
+      pid: process.pid,
+      ...options.metrics.snapshot(),
+    });
+  }
+  return json(404, { error: { code: 'NOT_FOUND', message: 'Unknown route' } });
 }
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {

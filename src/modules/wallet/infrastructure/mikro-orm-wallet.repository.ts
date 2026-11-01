@@ -44,11 +44,15 @@ export class MikroOrmWalletRepository implements WalletRepository {
     try {
       await this.em.insert(WalletRecord, toRecordData(wallet));
     } catch (error) {
-      if (error instanceof UniqueConstraintViolationException) {
-        throw new WalletAlreadyExistsError(wallet.playerId, wallet.currency);
-      }
-      throw error;
+      this.handleInsertError(error, wallet.playerId, wallet.currency);
     }
+  }
+
+  private handleInsertError(error: unknown, playerId: string, currency: string): never {
+    if (error instanceof UniqueConstraintViolationException) {
+      throw new WalletAlreadyExistsError(playerId, currency);
+    }
+    throw error;
   }
 
   async save(wallet: Wallet, expectedVersion: number): Promise<void> {

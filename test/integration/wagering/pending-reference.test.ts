@@ -143,6 +143,38 @@ describe('pending references', () => {
     ]);
   });
 
+  test('a held ROLLBACK is applied once its BET has been processed, and balances the ledger', async () => {
+    const wallet = await fundedWallet('100.00');
+    const rollbackId = `rollback-${randomUUID()}`;
+    const held = await processWager.execute(
+      command(wallet.playerId, wallet.walletId, {
+        kind: 'ROLLBACK',
+        money: Money.from({ amount: '25.00', currency: 'BRL' }),
+        externalTransactionId: rollbackId,
+        referenceExternalTransactionId: 'bet-late-rollback',
+      }),
+    );
+    expect(held.transaction.status).toBe('PENDING_REFERENCE');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+
+    await processWager.execute(
+      command(wallet.playerId, wallet.walletId, {
+        kind: 'BET',
+        money: Money.from({ amount: '25.00', currency: 'BRL' }),
+        externalTransactionId: 'bet-late-rollback',
+      }),
+    );
+    expect(await balanceOf(wallet.walletId)).toBe('75.00');
+    expect(await countCredits(wallet.walletId)).toBe(1);
+
+    await advanceReferenceClock(database, HOUR_MS);
+    await worker().runOnce();
+
+    expect((await row(rollbackId)).status).toBe('PROCESSED');
+    expect(await balanceOf(wallet.walletId)).toBe('100.00');
+    expect(await countCredits(wallet.walletId)).toBe(2);
+  });
+
   test('a replay of a held REFUND returns the balance it was held with, not the balance after a later change', async () => {
     const wallet = await fundedWallet('100.00');
     const refund = command(wallet.playerId, wallet.walletId, {

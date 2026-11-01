@@ -51,8 +51,100 @@ test that proves it. The numbers follow §5 of the specification.
 | 8   | Correct with multiple instances                           | three independent processes over the same database and queue                                                                  | `test/concurrency/three-processes.test.ts`                                       |
 | 9   | Uniqueness, immutability and non-negativity in the schema | `CHECK`, `UNIQUE`, `FK` and triggers in the migrations                                                                        | `test/integration/schema`                                                        |
 
-The migrations are versioned and reversible: all 12 have `up` and `down`, and the rollback test is in
+The migrations are versioned and reversible: all 16 have `up` and `down`, and the rollback test is in
 `test/integration/schema/migrations.test.ts`. The code runs in strict TypeScript (`"strict": true` in `tsconfig.json`).
+
+## How the work was done
+
+### The development lifecycle
+
+```mermaid
+flowchart LR
+    A["Specification (docs/CHALLENGE.md and docs/REQUIREMENTS_MATRIX.md)"] --> B["Failing test (test/ or test/features/)"]
+    B --> C["Minimal implementation (src/)"]
+    C --> D["Gate (bun run check:all)"]
+    D --> E["Test mutation (docs/TEST_STRATEGY.md)"]
+    E --> F["Blind review (docs/audit/REVISAO_SIMULADA.md)"]
+    F --> G["Slice correction (git cherry-pick)"]
+    G --> H["Conventional commit (git commit)"]
+```
+
+### Three real episodes
+
+The engineering process is demonstrated by concrete technical decisions driven by evidence:
+
+#### 1. Wallet balance with deferred triggers
+
+- **What was at stake:** Enforce at the database level that a wallet balance strictly equals the sum of its ledger entries (§6.2), preventing direct SQL updates or application bugs from corrupting balances.
+- **The question that arose:** Would constraint triggers executed at `COMMIT` add unacceptable latency to the critical concurrency write path?
+- **Evidence:** Experiment 1 in [docs/audit/PERFORMANCE_COMPARISON.md](docs/audit/PERFORMANCE_COMPARISON.md) measured the cost across six rounds. Median latency increased by 0.10 ms in the sequential benchmark (+1.6%) and by 1.84 ms under contention with 8 workers (+4.7%). Read latency stayed constant at 0.50 ms with 1,000,000 ledger entries.
+- **Decision:** Adopt deferred constraint triggers `wallets_ledger_balance_check` and `wallet_ledger_entries_balance_check` in migration 12, as documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Proof:** Commit `c5ddca9`, [Migration20261101000012.ts](src/shared/infrastructure/database/migrations/Migration20261101000012.ts), and test [ledger-balance-trigger.test.ts](test/integration/schema/ledger-balance-trigger.test.ts).
+
+#### 2. A test that can fail (mutation)
+
+- **What was at stake:** Verify that the test suite breaks when critical rules are removed, avoiding loose assertions.
+- **The question that arose:** Does the concurrency suite detect the removal of pessimistic locks or outbox lease expiration predicates?
+- **Evidence:** In the mutation evidence section of [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), mutants were deliberately injected against [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts):
+  - **Killed mutant:** Removing the wallet row lock (`FOR UPDATE`) was caught by the test without retries, which failed with three lost updates. Removing the outbox lease predicate caused 61 duplicate claims.
+  - **Surviving mutant:** Removing `SKIP LOCKED` from outbox claims survived. The second publisher waits on the row lock and re-evaluates the lease condition without data corruption. Because no test measures wait duration, the mutant is equivalent in terms of safety and was documented as a known gap.
+- **Decision:** Keep dedicated tests without retries to eliminate concurrency mutants, and document equivalent safety mutants in [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md).
+- **Proof:** [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) and [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts).
+
+#### 3. A review finding turned into code
+
+- **What was at stake:** Satisfy the observability requirements of the challenge specification (§12).
+- **The question that arose:** Round 2 of the simulated review pointed out that while health and latency metrics existed, the Prometheus retry counter was missing.
+- **Evidence:** Inspecting metric collectors confirmed the absence of a unified `retries_total` counter for queue retries, outbox retries, and held reference resolution.
+- **Decision:** Introduce the Prometheus counter `retries_total` tagged with a `subsystem` label in `prometheus-metrics.ts`, instrumented across all three reprocessing flows with a dedicated unit test.
+- **Proof:** Commit `4ee8f72` and test [retries-total.test.ts](test/unit/observability/retries-total.test.ts).
+
+### Slices, in order
+
+The log catalog in [docs/HISTORICO.md](docs/HISTORICO.md) records 72 commits divided into conventional slices (25 docs, 8 feat, 21 fix, 2 merge, 1 perf, 3 refactor, and 12 test). Ten representative slices:
+
+| Date       | Commit    | What changed                                                            | Proof                                                    |
+| :--------- | :-------- | :---------------------------------------------------------------------- | :------------------------------------------------------- |
+| 2026-10-31 | `211392e` | `Money` value object with exact decimal arithmetic and no `number`      | `test/unit/shared/domain/money.test.ts`                  |
+| 2026-10-31 | `2358842` | `Wallet` aggregate and append-only ledger entries                       | `test/unit/wallet/domain/wallet.test.ts`                 |
+| 2026-10-31 | `5843be4` | Balance and idempotency invariants under real concurrency               | `test/concurrency/hot-wallet.test.ts`                    |
+| 2026-10-31 | `fd5710d` | SQS command consumer and transactional outbox publisher                 | `test/integration/messaging/outbox-publisher.test.ts`    |
+| 2026-10-31 | `0a1e1f0` | Fault injection and recovery at critical transaction boundaries         | `test/integration/faults/fault-injection.test.ts`        |
+| 2026-10-31 | `6ff6891` | API key authentication with provider scope and roles                    | `test/e2e/authorization-adversarial.test.ts`             |
+| 2026-11-01 | `ef390fe` | Port separation into `application/ports` and inbound/outbound structure | `test/unit/architecture/boundaries.test.ts`              |
+| 2026-11-01 | `3620d74` | Executable Gherkin feature suite running under Bun with Cucumber        | `test/features/`                                         |
+| 2026-11-01 | `4c58edb` | Bounded wallet lock wait time (`lock_timeout`)                          | `test/integration/wagering/lock-timeout.test.ts`         |
+| 2026-11-01 | `c5ddca9` | Deferred triggers preventing commit with balance divergent from ledger  | `test/integration/schema/ledger-balance-trigger.test.ts` |
+| 2026-11-01 | `4ee8f72` | Unified Prometheus counter `retries_total` required by §12              | `test/unit/observability/retries-total.test.ts`          |
+
+### Reviews
+
+Systematic reviews identified defects and guided corrective slices before delivery:
+
+| Round                                                                                       | Estimated score            | Highest severity findings                                                                                                                                                                                                                     | Status and commit                                                                                                                                                                |
+| :------------------------------------------------------------------------------------------ | :------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Invariant Review ([docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md))                     | 80/100 (internal estimate) | Duplicate credit risk on multiple WINs or REFUND after result; missing database constraints for currency and round; unauthenticated API endpoints                                                                                             | Resolved: unique index in `ce1cb62`; schema constraints in `f9eb95b`; authentication in `6ff6891`                                                                                |
+| Adversarial Audit ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))                        | 85/100 (internal estimate) | Malformed envelope halted outbox; `idempotencyKey` missing from inbox message identity; slow batch exposed messages in flight; test fault hooks in production code; held transaction error stalled worker; local host clock used for timeouts | Resolved: migration 9 in `2905535`; inbox identity in `2ec4d5e`; heartbeat in `b398e22`; test composition in `489df8b`; terminal state in `c8ffbcc`; database clock in `fc3862c` |
+| Simulated Quality Review ([docs/audit/REVISAO_SIMULADA.md](docs/audit/REVISAO_SIMULADA.md)) | 90/100 (target estimate)   | Direct database write allowed balance divergent from ledger; infrastructure coupling in ports; missing `retries_total` counter (§12); missing executable Gherkin suite                                                                        | Resolved: migration 12 in `c5ddca9`; ports in `ef390fe`; metric in `4ee8f72`; BDD suite in `3620d74`                                                                             |
+
+### How agent work was controlled
+
+AI-assisted development was conducted under strict delegation and continuous human supervision. Artificial intelligence tools do not guarantee correctness on their own. Architectural design, specification interpretation, and final approval of every line of code were exclusive responsibilities of the human author.
+
+- **Scoped briefs:** each task started from a brief written by the author defining an explicit objective, allowed files, and measurable acceptance criteria.
+- **Isolated worktrees:** agents executed tasks in dedicated Git worktrees and branches, with no permission to push or alter shared branches.
+- **Diff inspection and quality gate:** the human coordinator inspected every diff and executed the full test gate (`bun run check:all`) against live PostgreSQL and LocalStack instances before accepting any changes.
+- **Selective integration:** approved slices were integrated using `git cherry-pick`. Agents drafted code and tests; the human author evaluated edge cases, reviewed design decisions, and decided what entered the codebase.
+
+### What the proof does not cover
+
+Honest boundaries regarding automated proof coverage:
+
+- **Git history ordering:** Git commits do not record whether each test failed before the code was written. The order is required by [CLAUDE.md](CLAUDE.md), and technical proof of test sensitivity is provided by mutation testing ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
+- **Gherkin scenarios tagged with `@bloqueado`:** two scenarios in [test/features/mensageria.feature](test/features/mensageria.feature) (lines 71 and 91) are excluded from the Gherkin harness. Scenario line 71 (DLQ redrive after ten failures) is proven by integration test [test/integration/messaging/broker-redrive.test.ts](test/integration/messaging/broker-redrive.test.ts). Scenario line 91 (graceful SIGTERM shutdown during a batch) is proven by real-process test [test/concurrency/process-crash-and-shutdown.test.ts](test/concurrency/process-crash-and-shutdown.test.ts).
+- **HTTP server process crash during active transaction:** abrupt process termination (`SIGKILL`) of an HTTP server process during an open transaction is not injected at the operating system level; it is covered in-process by concurrency and fault injection tests ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
+- **Equivalent outbox wait mutant:** the test suite does not catch the removal of `SKIP LOCKED` on outbox claiming (mutant M3 in [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)), because omitting it causes queueing wait without violating data integrity, and no test asserts lock wait time.
+- **Load test after migration 12:** the 13-scenario load test suite was not rerun after introducing the deferred balance consistency triggers in migration 12 ([ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Reading order
 

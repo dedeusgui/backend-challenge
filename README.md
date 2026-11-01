@@ -30,6 +30,7 @@ documentação: [docs/README.md](docs/README.md).
 | Pergunta                                      | Resposta                                                                | Onde                                                                                                     |
 | --------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | O que o desafio pede?                         | o enunciado, sem alterações                                             | [docs/CHALLENGE.md](docs/CHALLENGE.md)                                                                   |
+| Como o trabalho foi conduzido?                | ciclo de desenvolvimento, episódios, fatias e revisões                  | [Como o trabalho foi conduzido](#como-o-trabalho-foi-conduzido)                                          |
 | Por onde começar a avaliação?                 | roteiro com tempo estimado e o que cada passo prova                     | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md)                                                         |
 | Cada requisito tem uma prova?                 | matriz de requisito para teste, com o status de cada linha              | [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md)                                               |
 | Como o sistema é organizado?                  | camadas, fluxos, invariantes, trade-offs e limitações                   | [ARCHITECTURE.md](ARCHITECTURE.md)                                                                       |
@@ -79,6 +80,98 @@ A tabela segue as áreas e os pontos do enunciado. Cada linha aponta para a prov
 | 9   | Unicidade, imutabilidade e não-negatividade no schema | `CHECK`, `UNIQUE`, `FK` e triggers nas migrações                                                                 | `test/integration/schema`                                                        |
 
 Todas as 16 migrações têm `up` e `down`. O teste de reversão está em `test/integration/schema/migrations.test.ts`.
+
+## Como o trabalho foi conduzido
+
+### O ciclo de desenvolvimento
+
+```mermaid
+flowchart LR
+    A["Especificação (docs/CHALLENGE.md e docs/REQUIREMENTS_MATRIX.md)"] --> B["Teste que falha (test/ ou test/features/)"]
+    B --> C["Implementação mínima (src/)"]
+    C --> D["Gate (bun run check:all)"]
+    D --> E["Mutação dos testes (docs/TEST_STRATEGY.md)"]
+    E --> F["Revisão cega (docs/audit/REVISAO_SIMULADA.md)"]
+    F --> G["Correção por fatia (git cherry-pick)"]
+    G --> H["Commit convencional (git commit)"]
+```
+
+### Três episódios reais
+
+A história do projeto é demonstrada pelas decisões técnicas tomadas diante de evidências concretas:
+
+#### 1. Saldo com triggers adiados
+
+- **O que estava em jogo:** Garantir no banco que o saldo da carteira coincida com a soma do ledger (desafio §6.2), impedindo que escritas manuais ou desvios fora da aplicação corrompam a contabilidade.
+- **Pergunta que surgiu:** Triggers de restrição executados no `COMMIT` adicionariam latência excessiva no caminho concorrente de escrita?
+- **Evidência:** O experimento 1 em [docs/audit/PERFORMANCE_COMPARISON.md](docs/audit/PERFORMANCE_COMPARISON.md) mediu o custo em seis rodadas. A mediana de latência subiu 0.10 ms no cenário sequencial (+1.6%) e 1.84 ms sob contenção com 8 trabalhadores simultâneos (+4.7%). O tempo por leitura manteve-se em 0.50 ms com 1,000,000 de lançamentos.
+- **Decisão:** Adotar os triggers adiados `wallets_ledger_balance_check` e `wallet_ledger_entries_balance_check` na migração 12, conforme documentado em [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Prova:** Commit `c5ddca9`, [Migration20261101000012.ts](src/shared/infrastructure/database/migrations/Migration20261101000012.ts) e teste [ledger-balance-trigger.test.ts](test/integration/schema/ledger-balance-trigger.test.ts).
+
+#### 2. Um teste que pode falhar (mutação)
+
+- **O que estava em jogo:** Comprovar a sensibilidade dos testes diante de regressões reais, sem depender apenas de testes que passam.
+- **Pergunta que surgiu:** A suíte de concorrência detecta a remoção de travas pessimistas e falhas de expiração de lease?
+- **Evidência:** Na seção de evidência de mutação em [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md), mutantes foram injetados intencionalmente contra [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts):
+  - **Mutante eliminado:** A remoção do bloqueio de linha da carteira (`FOR UPDATE`) foi eliminada pelo teste sem retentativas, que acusou três disputas perdidas. A remoção do predicado de lease da outbox provocou 61 reivindicações duplicadas.
+  - **Mutante que sobreviveu:** A remoção de `SKIP LOCKED` na outbox sobreviveu. O segundo publicador aguarda o primeiro e reavalia a condição de lease, sem corromper dados contábeis. Como nenhum teste mede tempo de bloqueio, o mutante é equivalente em termos de segurança e foi mantido como lacuna documentada.
+- **Decisão:** Manter casos de teste específicos sem retentativa para eliminar mutantes de concorrência e documentar mutantes equivalentes em [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md).
+- **Prova:** [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) e [distributed-contention.test.ts](test/concurrency/distributed-contention.test.ts).
+
+#### 3. Um achado de revisão que virou código
+
+- **O que estava em jogo:** Cumprir o requisito de métricas operacionais da especificação (§12).
+- **Pergunta que surgiu:** A segunda rodada da revisão simulada apontou a ausência do contador Prometheus de retentativas.
+- **Evidência:** O exame dos coletores confirmou a falta da métrica `retries_total` para monitorar retentativas de consumo de fila, publicação de outbox e resolução de referências retidas.
+- **Decisão:** Introduzir a métrica unificada `retries_total` com rótulo `subsystem` em `prometheus-metrics.ts`, instrumentada nos três pontos de reprocessamento e coberta por teste unitário.
+- **Prova:** Commit `4ee8f72` e teste [retries-total.test.ts](test/unit/observability/retries-total.test.ts).
+
+### Fatias, em ordem
+
+O catálogo [docs/HISTORICO.md](docs/HISTORICO.md) contabiliza 72 commits organizados em fatias convencionais (25 docs, 8 feat, 21 fix, 2 merge, 1 perf, 3 refactor e 12 test). Dez fatias representativas do desenvolvimento:
+
+| Data       | Commit    | O que mudou                                                           | Prova                                                    |
+| :--------- | :-------- | :-------------------------------------------------------------------- | :------------------------------------------------------- |
+| 2026-10-31 | `211392e` | Objeto de valor `Money` com aritmética decimal exata sem `number`     | `test/unit/shared/domain/money.test.ts`                  |
+| 2026-10-31 | `2358842` | Agregado `Wallet` e lançamentos imutáveis no ledger                   | `test/unit/wallet/domain/wallet.test.ts`                 |
+| 2026-10-31 | `5843be4` | Garantia de saldo e idempotência sob concorrência real                | `test/concurrency/hot-wallet.test.ts`                    |
+| 2026-10-31 | `fd5710d` | Consumidor de comandos SQS e publicador transacional de outbox        | `test/integration/messaging/outbox-publisher.test.ts`    |
+| 2026-10-31 | `0a1e1f0` | Injeção de falhas e recuperação em pontos críticos da transação       | `test/integration/faults/fault-injection.test.ts`        |
+| 2026-10-31 | `6ff6891` | Autenticação por chaves de API com escopo de provedor e papéis        | `test/e2e/authorization-adversarial.test.ts`             |
+| 2026-11-01 | `ef390fe` | Separação de portas em `application/ports` e direção inbound/outbound | `test/unit/architecture/boundaries.test.ts`              |
+| 2026-11-01 | `3620d74` | Especificações Gherkin executáveis sob Bun com Cucumber               | `test/features/`                                         |
+| 2026-11-01 | `4c58edb` | Limite de tempo de espera por trava de carteira (`lock_timeout`)      | `test/integration/wagering/lock-timeout.test.ts`         |
+| 2026-11-01 | `c5ddca9` | Triggers adiados impedindo commit com saldo divergente do ledger      | `test/integration/schema/ledger-balance-trigger.test.ts` |
+| 2026-11-01 | `4ee8f72` | Contador Prometheus `retries_total` exigido pelo enunciado            | `test/unit/observability/retries-total.test.ts`          |
+
+### As revisões
+
+As revisões sistemáticas do projeto identificaram falhas e direcionaram correções antes do encerramento:
+
+| Rodada                                                                              | Nota estimada               | Achados de maior severidade                                                                                                                                                                                                                            | Status e commit                                                                                                                                                      |
+| :---------------------------------------------------------------------------------- | :-------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revisão de Invariantes ([docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md))       | 80/100 (estimativa interna) | Risco de crédito duplicado em dois WINs ou REFUND após resultado; ausência de restrições relacionais de moeda e rodada no banco; API sem controle de acesso por provedor                                                                               | Resolvido: índice único em `ce1cb62`; restrições de schema em `f9eb95b`; autenticação em `6ff6891`                                                                   |
+| Auditoria Adversarial ([docs/audit/FINDINGS.md](docs/audit/FINDINGS.md))            | 85/100 (estimativa interna) | Envelope malformado bloqueava outbox; `idempotencyKey` ausente na identificação de mensagem na inbox; lote lento tornava mensagens visíveis; hooks de teste no código de produção; retenção com erro travava o worker; relógio local usado para prazos | Resolvido: migração 9 em `2905535`; chave em `2ec4d5e`; heartbeat em `b398e22`; composição em `489df8b`; estado terminal em `c8ffbcc`; relógio do banco em `fc3862c` |
+| Revisão Simulada ([docs/audit/REVISAO_SIMULADA.md](docs/audit/REVISAO_SIMULADA.md)) | 90/100 (meta estimada)      | Escrita direta no banco aceitava saldo divergente do ledger; acoplamento em portas de infraestrutura; métrica `retries_total` ausente (§12); falta de suíte Gherkin executável                                                                         | Resolvido: migração 12 em `c5ddca9`; portas em `ef390fe`; métrica em `4ee8f72`; suíte BDD em `3620d74`                                                               |
+
+### Como o trabalho com agentes foi controlado
+
+O trabalho com agentes seguiu delegação estrita e supervisão contínua do autor humano. A inteligência artificial não garante correção por si só. Toda decisão de arquitetura, interpretação das regras do enunciado e aprovação final de código foram prerrogativas exclusivas do autor humano.
+
+- **Instruções com escopo fechado:** o autor escreveu documentos de especificação com objetivo delimitado, lista explícita de arquivos autorizados e critérios objetivos de aceitação.
+- **Ambientes de trabalho isolados:** cada agente atuou em um worktree próprio do Git e branch dedicado, sem permissão para executar push ou modificar branches compartilhados.
+- **Inspeção de código e gate de qualidade:** o coordenador humano inspecionou o diff de cada alteração e executou a validação completa (`bun run check:all`) contra instâncias reais de PostgreSQL e LocalStack antes de aceitar o trabalho.
+- **Integração seletiva:** as alterações aprovadas foram integradas ao histórico por cherry-pick manual. Os agentes implementaram fatias e testes; o autor humano validou o comportamento, refinou as decisões e determinou o que entrava no repositório.
+
+### O que a prova não cobre
+
+Limitações conhecidas e honestas quanto à abrangência das provas automatizadas:
+
+- **Ordem temporal de escrita dos testes:** o histórico do Git não prova que cada teste falhou antes da escrita do código. A ordem é exigida pelo [CLAUDE.md](CLAUDE.md), e a comprovação técnica dessa sensibilidade reside nos testes de mutação ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
+- **Cenários Gherkin com tag `@bloqueado`:** dois cenários em [test/features/mensageria.feature](test/features/mensageria.feature) (linhas 71 e 91) ficam fora da execução do harness de BDD. O cenário da linha 71 (redrive para a DLQ após dez falhas) é coberto pelo teste de integração [test/integration/messaging/broker-redrive.test.ts](test/integration/messaging/broker-redrive.test.ts). O cenário da linha 91 (encerramento com SIGTERM durante processamento de lote) é coberto pelo teste com processos reais [test/concurrency/process-crash-and-shutdown.test.ts](test/concurrency/process-crash-and-shutdown.test.ts).
+- **Interrupção de processo da API HTTP durante transação:** a queda abrupta (`SIGKILL`) de um processo HTTP no meio de uma transação aberta não é injetada em nível de processo de sistema operacional. A API é coberta em processo pelos testes de concorrência e injeção de falhas ([docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)).
+- **Mutante equivalente de espera na outbox:** a suíte não detecta a ausência da cláusula `SKIP LOCKED` na busca da outbox (mutante M3 em [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)), pois ela apenas introduz espera ordenada sem quebrar a integridade dos dados, e nenhum teste afere tempos de bloqueio.
+- **Teste de carga após migração 12:** a bateria completa de teste de carga com 13 cenários não foi reexecutada após a adição dos triggers de concordância da migração 12 ([ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Arquitetura em um olhar
 

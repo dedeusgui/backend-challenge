@@ -155,7 +155,7 @@ describe('the transaction repository', () => {
     const walletId = randomUUID();
     await connection.execute(
       `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
-       VALUES (?, ?, 'BRL', 100.00, 1, now(), now())`,
+       VALUES (?, ?, 'BRL', 0.00, 1, now(), now())`,
       [walletId, `player-${randomUUID()}`],
     );
     const repository = new MikroOrmWagerTransactionRepository(database.orm.em.fork());
@@ -194,7 +194,7 @@ describe('the transaction repository', () => {
     const walletId = randomUUID();
     await database.orm.em.getConnection().execute(
       `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
-       VALUES (?, 'player-y', 'BRL', 100.00, 1, now(), now())`,
+       VALUES (?, 'player-y', 'BRL', 0.00, 1, now(), now())`,
       [walletId],
     );
     await repository.insert(

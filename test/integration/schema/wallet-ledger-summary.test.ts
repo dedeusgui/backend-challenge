@@ -106,11 +106,15 @@ describe('the ledger summary view agrees with the reconciliation of the applicat
   test('a divergence made with the version moved along is reported by both, with the same value', async () => {
     const playerId = `player-${randomUUID()}`;
     const { walletId } = await openWallet.execute({ playerId, initialBalance: brl('100.00') });
-    await database.orm.em
-      .getConnection()
-      .execute(`UPDATE wallets SET balance = balance + 7.00, version = version + 1 WHERE id = ?`, [
-        walletId,
-      ]);
+    await database.orm.em.fork().transactional(async (em) => {
+      // This suite deliberately creates a corrupt row to prove the read model reports it.
+      await em.execute('ALTER TABLE wallets DISABLE TRIGGER wallets_ledger_balance_check');
+      await em.execute(
+        `UPDATE wallets SET balance = balance + 7.00, version = version + 1 WHERE id = ?`,
+        [walletId],
+      );
+      await em.execute('ALTER TABLE wallets ENABLE TRIGGER wallets_ledger_balance_check');
+    });
 
     const report = await queries.reconcile(walletId);
     const row = await viewRow(walletId);

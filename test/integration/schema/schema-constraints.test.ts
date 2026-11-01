@@ -51,17 +51,46 @@ async function insertWallet(
   overrides: { playerId?: string; currency?: string; balance?: string; version?: number } = {},
 ): Promise<string> {
   const id = randomUUID();
-  await sql(
-    `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, now(), now())`,
-    [
-      id,
-      overrides.playerId ?? `player-${randomUUID()}`,
-      overrides.currency ?? 'BRL',
-      overrides.balance ?? '100.00',
-      overrides.version ?? 1,
-    ],
-  );
+  const playerId = overrides.playerId ?? `player-${randomUUID()}`;
+  const currency = overrides.currency ?? 'BRL';
+  const balance = overrides.balance ?? '100.00';
+  await database.orm.em.fork().transactional(async (em) => {
+    await em.execute(
+      `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, now(), now())`,
+      [id, playerId, currency, balance, overrides.version ?? 1],
+    );
+    if (balance !== '0.00') {
+      const transactionId = randomUUID();
+      const externalId = `opening-${id}`;
+      await em.execute(
+        `INSERT INTO wager_transactions (
+           id, provider_id, external_transaction_id, idempotency_key, payload_hash,
+           wallet_id, player_id, round_id, game_id, kind, amount, currency,
+           status, resulting_balance, processed_at, created_at)
+         VALUES (?, 'system', ?, ?, ?, ?, ?, 'opening', 'opening', 'OPENING', ?, ?,
+                 'PROCESSED', ?, now(), now())`,
+        [
+          transactionId,
+          externalId,
+          externalId,
+          'a'.repeat(64),
+          id,
+          playerId,
+          balance,
+          currency,
+          balance,
+        ],
+      );
+      await em.execute(
+        `INSERT INTO wallet_ledger_entries (
+           id, wallet_id, transaction_id, direction, currency, amount,
+           balance_before, balance_after, created_at)
+         VALUES (?, ?, ?, 'CREDIT', ?, ?, 0.00, ?, now())`,
+        [randomUUID(), id, transactionId, currency, balance, balance],
+      );
+    }
+  });
   return id;
 }
 
@@ -134,22 +163,28 @@ async function insertLedgerEntry(overrides: {
   const [wallet] = (await sql('SELECT currency FROM wallets WHERE id = ?', [
     overrides.walletId,
   ])) as Array<{ currency: string }>;
-  await sql(
-    `INSERT INTO wallet_ledger_entries (
-       id, wallet_id, transaction_id, direction, currency, amount,
-       balance_before, balance_after, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, now())`,
-    [
-      randomUUID(),
-      overrides.walletId,
-      overrides.transactionId,
-      overrides.direction ?? 'DEBIT',
-      overrides.currency ?? wallet?.currency ?? 'BRL',
-      overrides.amount ?? '25.00',
-      overrides.balanceBefore ?? '100.00',
-      overrides.balanceAfter ?? '75.00',
-    ],
-  );
+  await database.orm.em.fork().transactional(async (em) => {
+    await em.execute(
+      `INSERT INTO wallet_ledger_entries (
+         id, wallet_id, transaction_id, direction, currency, amount,
+         balance_before, balance_after, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, now())`,
+      [
+        randomUUID(),
+        overrides.walletId,
+        overrides.transactionId,
+        overrides.direction ?? 'DEBIT',
+        overrides.currency ?? wallet?.currency ?? 'BRL',
+        overrides.amount ?? '25.00',
+        overrides.balanceBefore ?? '100.00',
+        overrides.balanceAfter ?? '75.00',
+      ],
+    );
+    await em.execute(
+      `UPDATE wallets SET balance = ?, version = version + 1, updated_at = now() WHERE id = ?`,
+      [overrides.balanceAfter ?? '75.00', overrides.walletId],
+    );
+  });
 }
 
 describe('wallets constraints', () => {
@@ -202,8 +237,8 @@ describe('wallet_ledger_entries constraints', () => {
     );
     expect(error).not.toBe('NO_ERROR');
     const remaining = await sql(
-      `SELECT amount::text AS amount FROM wallet_ledger_entries WHERE wallet_id = ?`,
-      [walletId],
+      `SELECT amount::text AS amount FROM wallet_ledger_entries WHERE wallet_id = ? AND transaction_id = ?`,
+      [walletId, transactionId],
     );
     expect(remaining).toEqual([{ amount: '25.00' }]);
   });

@@ -36,12 +36,64 @@ async function accepted(sql: string, params: unknown[]): Promise<boolean> {
 
 async function insertWallet(balance = '100.00', version = 1): Promise<string> {
   const id = randomUUID();
-  await database.orm.em.getConnection().execute(
-    `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
-     VALUES (?, ?, 'BRL', ?, ?, now(), now())`,
-    [id, `player-${randomUUID()}`, balance, version],
-  );
+  const playerId = `player-${randomUUID()}`;
+  await database.orm.em.fork().transactional(async (em) => {
+    await em.execute(
+      `INSERT INTO wallets (id, player_id, currency, balance, version, created_at, updated_at)
+       VALUES (?, ?, 'BRL', ?, ?, now(), now())`,
+      [id, playerId, balance, version],
+    );
+    if (balance !== '0.00') {
+      const transactionId = randomUUID();
+      const externalId = `opening-${id}`;
+      await em.execute(
+        `INSERT INTO wager_transactions (
+           id, provider_id, external_transaction_id, idempotency_key, payload_hash,
+           wallet_id, player_id, round_id, game_id, kind, amount, currency,
+           status, resulting_balance, processed_at, created_at)
+         VALUES (?, 'system', ?, ?, ?, ?, ?, 'opening', 'opening', 'OPENING', ?, 'BRL',
+                 'PROCESSED', ?, now(), now())`,
+        [transactionId, externalId, externalId, 'a'.repeat(64), id, playerId, balance, balance],
+      );
+      await em.execute(
+        `INSERT INTO wallet_ledger_entries (
+           id, wallet_id, transaction_id, direction, currency, amount,
+           balance_before, balance_after, created_at)
+         VALUES (?, ?, ?, 'CREDIT', 'BRL', ?, 0.00, ?, now())`,
+        [randomUUID(), id, transactionId, balance, balance],
+      );
+    }
+  });
   return id;
+}
+
+async function applyValidDebit(walletId: string): Promise<void> {
+  const transactionId = randomUUID();
+  const externalId = `guard-${transactionId}`;
+  await database.orm.em.fork().transactional(async (em) => {
+    await em.execute(
+      `INSERT INTO wager_transactions (
+         id, provider_id, external_transaction_id, idempotency_key, payload_hash,
+         wallet_id, player_id, round_id, game_id, kind, amount, currency,
+         status, resulting_balance, processed_at, created_at)
+       SELECT ?, 'provider-a', ?, ?, ?, id, player_id, 'round-1', 'game-1', 'BET',
+              25.00, currency, 'PROCESSED', 75.00, now(), now()
+         FROM wallets WHERE id = ?`,
+      [transactionId, externalId, externalId, 'b'.repeat(64), walletId],
+    );
+    await em.execute(
+      `INSERT INTO wallet_ledger_entries (
+         id, wallet_id, transaction_id, direction, currency, amount,
+         balance_before, balance_after, created_at)
+       SELECT ?, id, ?, 'DEBIT', currency, 25.00, 100.00, 75.00, now()
+         FROM wallets WHERE id = ?`,
+      [randomUUID(), transactionId, walletId],
+    );
+    await em.execute(
+      `UPDATE wallets SET balance = 75.00, version = version + 1, updated_at = now() WHERE id = ?`,
+      [walletId],
+    );
+  });
 }
 
 /** The columns that a status needs, so that the row satisfies wager_status_shape before the test changes it. */
@@ -225,9 +277,13 @@ describe('a transaction keeps its identity and its payload', () => {
 describe('a wallet changes its balance and its version together, by one', () => {
   test('a balance change with the version bumped by one is accepted', async () => {
     const id = await insertWallet('100.00', 1);
-    expect(
-      await accepted(`UPDATE wallets SET balance = 75.00, version = 2 WHERE id = ?`, [id]),
-    ).toBe(true);
+    await applyValidDebit(id);
+    const rows = (await database.orm.em
+      .getConnection()
+      .execute(`SELECT balance::text AS balance, version FROM wallets WHERE id = ?`, [
+        id,
+      ])) as Array<{ balance: string; version: number }>;
+    expect(rows).toEqual([{ balance: '75.00', version: 2 }]);
   });
 
   test('a balance change without a version bump is refused: the optimistic lock would be lost', async () => {

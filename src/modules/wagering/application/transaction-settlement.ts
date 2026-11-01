@@ -9,6 +9,7 @@ import { WagerTransactionProcessed } from '../domain/events/wager-transaction-pr
 import { WagerTransactionRejected } from '../domain/events/wager-transaction-rejected.event';
 import type { FailureCode } from '../domain/failure-code';
 import { referenceRetryDelayMs } from '../domain/reference-retry-policy';
+import { decideAgainstHistory } from '../domain/wager-lifecycle';
 import type { Money } from '../../../shared/domain/money';
 import type { WagerTransaction } from '../domain/wager-transaction';
 import { NO_METRICS, type MetricsSink } from '../../../shared/observability/metrics';
@@ -82,21 +83,15 @@ export class TransactionSettlement {
       return this.reject(repositories, transaction, wallet, evaluation.code, options);
     }
 
-    const outcomes =
+    const history =
       reference === undefined
         ? NO_PROCESSED_OUTCOMES
         : await repositories.wagers.processedOutcomesOf(reference.id);
 
-    // A referenced transaction is reversed at most once, whatever the kind of reversal. A
-    // WIN on a BET that was already refunded or rolled back is refused for the same reason.
-    if (outcomes.reversed) {
-      return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_REVERSED', options);
-    }
-
-    // A BET settles once. A second result, or a REFUND after a result, is refused. ROLLBACK is
-    // not checked here: it applies in every state of the transaction it reverses.
-    if (transaction.requiresUnsettledReference() && outcomes.settled) {
-      return this.reject(repositories, transaction, wallet, 'REFERENCE_ALREADY_SETTLED', options);
+    // The lifecycle rule for the results the reference already has (wager-lifecycle.ts).
+    const decision = decideAgainstHistory(transaction.kind, history);
+    if (decision.outcome === 'REJECT') {
+      return this.reject(repositories, transaction, wallet, decision.code, options);
     }
 
     if (!transaction.affectsBalance()) {

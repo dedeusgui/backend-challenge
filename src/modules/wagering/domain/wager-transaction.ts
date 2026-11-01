@@ -4,18 +4,10 @@ import { Money } from '../../../shared/domain/money';
 import type { FailureCode } from './failure-code';
 import { KIND_RULES, type WagerTransactionKind } from './wager-transaction-kind';
 import { MAX_REFERENCE_ATTEMPTS, referenceRetryDelayMs } from './reference-retry-policy';
+import { canChangeStatus, type WagerTransactionStatus } from './wager-lifecycle';
 
 export type { WagerTransactionKind } from './wager-transaction-kind';
-
-export const WAGER_TRANSACTION_STATUSES = [
-  'PENDING',
-  'PENDING_REFERENCE',
-  'PROCESSED',
-  'REJECTED',
-  'FAILED',
-] as const;
-
-export type WagerTransactionStatus = (typeof WAGER_TRANSACTION_STATUSES)[number];
+export { WAGER_TRANSACTION_STATUSES, type WagerTransactionStatus } from './wager-lifecycle';
 
 const TERMINAL_STATUSES: readonly WagerTransactionStatus[] = ['PROCESSED', 'REJECTED', 'FAILED'];
 
@@ -205,11 +197,6 @@ export class WagerTransaction {
     return KIND_RULES[this.kind].reference?.required === true;
   }
 
-  /** True when the referenced transaction must have no result yet, so that a BET settles once. */
-  requiresUnsettledReference(): boolean {
-    return KIND_RULES[this.kind].reference?.mustBeUnsettled === true;
-  }
-
   isReversal(): boolean {
     return this.kind === 'REFUND' || this.kind === 'ROLLBACK';
   }
@@ -299,7 +286,7 @@ export class WagerTransaction {
    * a replay returns, so a later balance change does not alter the answer to the same request.
    */
   markPendingReference(nextAttemptAt: Date, observedBalance: Money): void {
-    this.assertTransitionFrom(['PENDING']);
+    this.assertTransitionFrom(['PENDING'], 'PENDING_REFERENCE');
     this.currentStatus = 'PENDING_REFERENCE';
     this.currentReferenceNextAttemptAt = nextAttemptAt;
     this.currentResultingBalance = observedBalance;
@@ -307,7 +294,7 @@ export class WagerTransaction {
 
   /** The reference was still missing. Schedules the next lookup, or reports that the limit is reached. */
   recordReferenceMiss(now: Date): { exhausted: boolean } {
-    this.assertTransitionFrom(['PENDING_REFERENCE']);
+    this.assertTransitionFrom(['PENDING_REFERENCE'], 'PENDING_REFERENCE');
     this.currentReferenceAttempts += 1;
     if (this.currentReferenceAttempts >= MAX_REFERENCE_ATTEMPTS) {
       return { exhausted: true };
@@ -328,7 +315,7 @@ export class WagerTransaction {
   }
 
   markProcessed(transition: ProcessedTransition): void {
-    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE']);
+    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE'], 'PROCESSED');
     if (this.requiresReference() && transition.referenceTransactionId === undefined) {
       throw new DomainError(
         'INVALID_TRANSACTION',
@@ -342,14 +329,14 @@ export class WagerTransaction {
   }
 
   reject(rejection: TerminalRejection): void {
-    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE']);
+    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE'], 'REJECTED');
     this.currentStatus = 'REJECTED';
     this.currentFailureCode = rejection.code;
     this.currentResultingBalance = rejection.observedBalance;
   }
 
   fail(failure: TerminalRejection): void {
-    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE']);
+    this.assertTransitionFrom(['PENDING', 'PENDING_REFERENCE'], 'FAILED');
     this.currentStatus = 'FAILED';
     this.currentFailureCode = failure.code;
     this.currentResultingBalance = failure.observedBalance;
@@ -391,11 +378,19 @@ export class WagerTransaction {
     );
   }
 
-  private assertTransitionFrom(allowed: readonly WagerTransactionStatus[]): void {
-    if (!allowed.includes(this.currentStatus)) {
+  /**
+   * A status change is allowed when the method names the starting status and the lifecycle table allows the
+   * pair. The method list is narrower than the table where the meaning requires it: a miss, for example, is
+   * recorded only on a held transaction, although PENDING_REFERENCE may follow PENDING_REFERENCE in the table.
+   */
+  private assertTransitionFrom(
+    allowedFrom: readonly WagerTransactionStatus[],
+    to: WagerTransactionStatus,
+  ): void {
+    if (!allowedFrom.includes(this.currentStatus) || !canChangeStatus(this.currentStatus, to)) {
       throw new DomainError(
         'INVALID_TRANSACTION_TRANSITION',
-        `Cannot move ${this.kind} from ${this.currentStatus}`,
+        `Cannot move ${this.kind} from ${this.currentStatus} to ${to}`,
       );
     }
   }

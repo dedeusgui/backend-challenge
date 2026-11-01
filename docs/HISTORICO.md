@@ -1,0 +1,205 @@
+Gerado por scripts/build-catalogos.ts a partir do commit c8320ea. Não edite à mão; rode `bun run docs:catalogos`.
+
+# Histórico de desenvolvimento
+
+Cada fatia é um commit de implementação com seu teste; os commits de documentação seguem o mesmo ciclo.
+
+Histórico com 72 commits desde o commit base `f12191b` até `c8320ea`. Origem: `git log --reverse f12191b..HEAD`.
+
+## Resumo por tipo
+
+| Tipo     | Quantidade |
+| :------- | ---------: |
+| docs     |         25 |
+| feat     |          8 |
+| fix      |         21 |
+| merge    |          2 |
+| perf     |          1 |
+| refactor |          3 |
+| test     |         12 |
+
+## Commits por tipo
+
+### docs (25 commits)
+
+| Data       | Hash      | Escopo       | Assunto                                                                                                 |
+| :--------- | :-------- | :----------- | :------------------------------------------------------------------------------------------------------ |
+| 2026-10-31 | `faf597c` | api          | docs(api): add an OpenAPI 3.1 contract, checked against the routes and the real answers                 |
+| 2026-10-31 | `0bc7612` | -            | docs: make the Portuguese README the entry point, and add the reviewer guide and the domain glossary    |
+| 2026-10-31 | `bc8a5f9` | tests        | docs(tests): record each suite added in this round, and the failure it produced before its change       |
+| 2026-10-31 | `828822e` | audit        | docs(audit): record what this round validated, what is partial, what is prepared, and what is not built |
+| 2026-10-31 | `472f436` | -            | docs: state where the load evidence comes from, and correct the language claim                          |
+| 2026-10-31 | `af998ff` | review       | docs(review): stop repeating a unit-test count in the reviewer guide                                    |
+| 2026-10-31 | `b052947` | audit        | docs(audit): name the commit that fixes the showcase provenance                                         |
+| 2026-10-31 | `c51940e` | site         | docs(site): name the CI run that produced the showcase counts                                           |
+| 2026-10-31 | `7f20722` | readme       | docs(readme): embed the existing Pages flow diagrams in main                                            |
+| 2026-10-31 | `430f3a3` | readme       | docs(readme): ground performance differentiators in reproducible load evidence                          |
+| 2026-10-31 | `d65a1e7` | readme       | docs(readme): align the performance table so the format check passes                                    |
+| 2026-11-01 | `5f5a880` | audit        | docs(audit): record the baseline, the edge-case matrix and the findings of this round                   |
+| 2026-11-01 | `73c284c` | audit        | docs(audit): record the coverage, the new scenarios, and the owner's rollback proposal                  |
+| 2026-11-01 | `2ad491a` | audit        | docs(audit): index each guarantee to its test, and record this round's measurements                     |
+| 2026-11-01 | `a2ffa50` | -            | docs: documentação principal em pt-BR, com referência em inglês                                         |
+| 2026-11-01 | `40ad8bf` | load         | docs(load): record the local baseline with 13 scenarios                                                 |
+| 2026-11-01 | `7093654` | diagrams     | docs(diagrams): draw the README diagrams in Portuguese from the site spec                               |
+| 2026-11-01 | `2e55a9c` | load         | docs(load): consolidate the local baseline with correctness and latency                                 |
+| 2026-11-01 | `93aef34` | readme       | docs(readme): show the local baseline with its 13 scenarios in both READMEs                             |
+| 2026-11-01 | `7131052` | load         | docs(load): describe the two baselines and point the cloud report to the local one                      |
+| 2026-11-01 | `6da3cb6` | -            | docs: add the evaluator map, rewrite the final audit, and correct the guide                             |
+| 2026-11-01 | `dcb3243` | audit        | docs(audit): registrar baseline e barra da rodada de qualidade                                          |
+| 2026-11-01 | `97839fa` | architecture | docs(architecture): mapear entradas e saídas de dados (pt e en)                                         |
+| 2026-11-01 | `f2218d4` | agents       | docs(agents): delegar implementação ao Codex via Orca e fechar terminais concluídos                     |
+| 2026-11-01 | `0d2aee8` | -            | docs: remover revisão de implementações públicas do repositório                                         |
+
+### feat (8 commits)
+
+| Data       | Hash      | Escopo        | Assunto                                                                                       |
+| :--------- | :-------- | :------------ | :-------------------------------------------------------------------------------------------- |
+| 2026-10-31 | `ebb3e84` | observability | feat(observability): read a running worker's counters through its own internal surface        |
+| 2026-10-31 | `b5b1c6a` | site          | feat(site): build a static showcase from repository data, and prepare its GitHub Pages deploy |
+| 2026-10-31 | `ee2369a` | site          | feat(site): make the architecture diagrams selectable and scrollable                          |
+| 2026-11-01 | `947e30d` | db            | feat(db): row guards in migration 10, checked on every update, with no extra lookup           |
+| 2026-11-01 | `b46915f` | db            | feat(db): a consolidated ledger view, cross-checked against reconciliation                    |
+| 2026-11-01 | `216eb8f` | messaging     | feat(messaging): quarentena de eventos da outbox após N tentativas                            |
+| 2026-11-01 | `c5ddca9` | ledger        | feat(ledger): impedir commit com saldo divergente do ledger                                   |
+| 2026-11-01 | `e7af1dd` | messaging     | feat(messaging): limpar eventos publicados após a retenção                                    |
+
+### fix (21 commits)
+
+| Data       | Hash      | Escopo    | Assunto                                                                                                             |
+| :--------- | :-------- | :-------- | :------------------------------------------------------------------------------------------------------------------ |
+| 2026-10-31 | `a86b5b2` | infra     | fix(infra): bind published ports to loopback, and publish no database or queue port in protected mode               |
+| 2026-10-31 | `7c9b39a` | auth      | fix(auth): accept the Bearer scheme in any case, and pin the adversarial refusals                                   |
+| 2026-10-31 | `a03d8de` | infra     | fix(infra): run the API image as its non-root user, and probe the API and the worker with their own runtime         |
+| 2026-10-31 | `a34ff4d` | ci        | fix(ci): fetch the full history in the checks job, which the showcase test needs                                    |
+| 2026-10-31 | `f4e3dfe` | load      | fix(load): judge each answer against its request and what the client knew, and fail a step with an incorrect answer |
+| 2026-10-31 | `5f80bfb` | load      | fix(load): audit duplicates by the identity the API enforces, per provider                                          |
+| 2026-10-31 | `5cf454c` | load      | fix(load): take the unit of each summary from its name, and report the outbox lag and the drain in theirs           |
+| 2026-10-31 | `c115149` | site      | fix(site): link the showcase counts to the CI run they came from, and name the concurrency conflicts                |
+| 2026-11-01 | `154b52a` | auth      | fix(auth): answer another provider's transaction id exactly like a missing one                                      |
+| 2026-11-01 | `2905535` | outbox    | fix(outbox): refuse an envelope the publisher cannot read, at write time                                            |
+| 2026-11-01 | `2ec4d5e` | inbox     | fix(inbox): refuse a queue message whose idempotencyKey changed under the same messageId                            |
+| 2026-11-01 | `b398e22` | consumer  | fix(consumer): keep the messages of a batch invisible while they wait for their turn                                |
+| 2026-11-01 | `433ebe2` | messaging | fix(messaging): decide outbox leases on the database clock                                                          |
+| 2026-11-01 | `6b3b23e` | messaging | fix(messaging): keep a slow command's message invisible while it runs                                               |
+| 2026-11-01 | `fc3862c` | wagering  | fix(wagering): time held references on the database clock                                                           |
+| 2026-11-01 | `c952ba2` | messaging | fix(messaging): write a refused event's next attempt from the database clock                                        |
+| 2026-11-01 | `c8ffbcc` | wagering  | fix(wagering): record a held transaction that fails permanently as FAILED                                           |
+| 2026-11-01 | `4c58edb` | wagering  | fix(wagering): limitar a espera por trava de carteira                                                               |
+| 2026-11-01 | `98c39ac` | messaging | fix(messaging): devolver mensagens não processadas ao encerrar                                                      |
+| 2026-11-01 | `8b3560a` | infra     | fix(infra): prazos reais para chamadas SQS e readiness                                                              |
+| 2026-11-01 | `4e2d5cd` | ledger    | fix(ledger): amarrar a referência ao id externo da aposta                                                           |
+
+### merge (2 commits)
+
+| Data       | Hash      | Escopo | Assunto                                                             |
+| :--------- | :-------- | :----- | :------------------------------------------------------------------ |
+| 2026-10-31 | `1d7bad9` | -      | Merge remote-tracking branch 'origin/main' into ccr-db6e8d7e-jagf0w |
+| 2026-10-31 | `18f7509` | -      | Merge remote-tracking branch 'origin/main' into ccr-db6e8d7e-jagf0w |
+
+### perf (1 commit)
+
+| Data       | Hash      | Escopo | Assunto                                                                       |
+| :--------- | :-------- | :----- | :---------------------------------------------------------------------------- |
+| 2026-11-01 | `0f4fa19` | ledger | perf(ledger): measure the agreement triggers, reject them from the write path |
+
+### refactor (3 commits)
+
+| Data       | Hash      | Escopo    | Assunto                                                                                       |
+| :--------- | :-------- | :-------- | :-------------------------------------------------------------------------------------------- |
+| 2026-11-01 | `489df8b` | worker    | refactor(worker): keep the fault seams out of production code                                 |
+| 2026-11-01 | `cfcf39f` | wagering  | refactor(wagering): keep the status table and the reference history rule in one domain module |
+| 2026-11-01 | `ef390fe` | messaging | refactor(messaging): separar entrada e saída e mover portas para application/ports            |
+
+### test (12 commits)
+
+| Data       | Hash      | Escopo    | Assunto                                                                                                    |
+| :--------- | :-------- | :-------- | :--------------------------------------------------------------------------------------------------------- |
+| 2026-10-31 | `12bb1c4` | messaging | test(messaging): show the arrival order of a refused event within one wallet, and document the guarantee   |
+| 2026-11-01 | `076389b` | model     | test(model): seeded random sequences through the real use cases, serial and with four applications at once |
+| 2026-11-01 | `821039d` | model     | test(model): rename a parameter that shadowed the count helper                                             |
+| 2026-11-01 | `71e245a` | -         | test: cover the failure branches of configuration, validation, events, adapters and health                 |
+| 2026-11-01 | `8313b8c` | messaging | test(messaging): correct the comment on the backoff clock                                                  |
+| 2026-11-01 | `9a262ee` | load      | test(load): set process counts per run and read affinity at the end                                        |
+| 2026-11-01 | `3620d74` | features  | test(features): executar Gherkin sob Bun com cucumber-js                                                   |
+| 2026-11-01 | `fbe9f2b` | ledger    | test(ledger): alinhar fixtures ao invariante do banco                                                      |
+| 2026-11-01 | `ae67f99` | messaging | test(messaging): alinhar fixtures de carteira ao invariante do ledger                                      |
+| 2026-11-01 | `827fb9a` | e2e       | test(e2e): injetar divergência fora da aplicação com o trigger desligado                                   |
+| 2026-11-01 | `d56594c` | ledger    | test(ledger): alinhar fixtures de referência à FK composta                                                 |
+| 2026-11-01 | `c8320ea` | features  | test(features): alinhar cenários Gherkin ao trigger de saldo e corrigir ordem instável                     |
+
+## Todos os commits em ordem cronológica
+
+| Data       | Hash      | Tipo     | Escopo        | Assunto                                                                                                             |
+| :--------- | :-------- | :------- | :------------ | :------------------------------------------------------------------------------------------------------------------ |
+| 2026-10-31 | `a86b5b2` | fix      | infra         | fix(infra): bind published ports to loopback, and publish no database or queue port in protected mode               |
+| 2026-10-31 | `7c9b39a` | fix      | auth          | fix(auth): accept the Bearer scheme in any case, and pin the adversarial refusals                                   |
+| 2026-10-31 | `12bb1c4` | test     | messaging     | test(messaging): show the arrival order of a refused event within one wallet, and document the guarantee            |
+| 2026-10-31 | `ebb3e84` | feat     | observability | feat(observability): read a running worker's counters through its own internal surface                              |
+| 2026-10-31 | `a03d8de` | fix      | infra         | fix(infra): run the API image as its non-root user, and probe the API and the worker with their own runtime         |
+| 2026-10-31 | `faf597c` | docs     | api           | docs(api): add an OpenAPI 3.1 contract, checked against the routes and the real answers                             |
+| 2026-10-31 | `0bc7612` | docs     | -             | docs: make the Portuguese README the entry point, and add the reviewer guide and the domain glossary                |
+| 2026-10-31 | `b5b1c6a` | feat     | site          | feat(site): build a static showcase from repository data, and prepare its GitHub Pages deploy                       |
+| 2026-10-31 | `bc8a5f9` | docs     | tests         | docs(tests): record each suite added in this round, and the failure it produced before its change                   |
+| 2026-10-31 | `828822e` | docs     | audit         | docs(audit): record what this round validated, what is partial, what is prepared, and what is not built             |
+| 2026-10-31 | `a34ff4d` | fix      | ci            | fix(ci): fetch the full history in the checks job, which the showcase test needs                                    |
+| 2026-10-31 | `f4e3dfe` | fix      | load          | fix(load): judge each answer against its request and what the client knew, and fail a step with an incorrect answer |
+| 2026-10-31 | `5f80bfb` | fix      | load          | fix(load): audit duplicates by the identity the API enforces, per provider                                          |
+| 2026-10-31 | `5cf454c` | fix      | load          | fix(load): take the unit of each summary from its name, and report the outbox lag and the drain in theirs           |
+| 2026-10-31 | `472f436` | docs     | -             | docs: state where the load evidence comes from, and correct the language claim                                      |
+| 2026-10-31 | `af998ff` | docs     | review        | docs(review): stop repeating a unit-test count in the reviewer guide                                                |
+| 2026-10-31 | `c115149` | fix      | site          | fix(site): link the showcase counts to the CI run they came from, and name the concurrency conflicts                |
+| 2026-10-31 | `b052947` | docs     | audit         | docs(audit): name the commit that fixes the showcase provenance                                                     |
+| 2026-10-31 | `ee2369a` | feat     | site          | feat(site): make the architecture diagrams selectable and scrollable                                                |
+| 2026-10-31 | `c51940e` | docs     | site          | docs(site): name the CI run that produced the showcase counts                                                       |
+| 2026-10-31 | `7f20722` | docs     | readme        | docs(readme): embed the existing Pages flow diagrams in main                                                        |
+| 2026-10-31 | `1d7bad9` | merge    | -             | Merge remote-tracking branch 'origin/main' into ccr-db6e8d7e-jagf0w                                                 |
+| 2026-10-31 | `430f3a3` | docs     | readme        | docs(readme): ground performance differentiators in reproducible load evidence                                      |
+| 2026-10-31 | `18f7509` | merge    | -             | Merge remote-tracking branch 'origin/main' into ccr-db6e8d7e-jagf0w                                                 |
+| 2026-10-31 | `d65a1e7` | docs     | readme        | docs(readme): align the performance table so the format check passes                                                |
+| 2026-11-01 | `154b52a` | fix      | auth          | fix(auth): answer another provider's transaction id exactly like a missing one                                      |
+| 2026-11-01 | `2905535` | fix      | outbox        | fix(outbox): refuse an envelope the publisher cannot read, at write time                                            |
+| 2026-11-01 | `2ec4d5e` | fix      | inbox         | fix(inbox): refuse a queue message whose idempotencyKey changed under the same messageId                            |
+| 2026-11-01 | `b398e22` | fix      | consumer      | fix(consumer): keep the messages of a batch invisible while they wait for their turn                                |
+| 2026-11-01 | `489df8b` | refactor | worker        | refactor(worker): keep the fault seams out of production code                                                       |
+| 2026-11-01 | `0f4fa19` | perf     | ledger        | perf(ledger): measure the agreement triggers, reject them from the write path                                       |
+| 2026-11-01 | `5f5a880` | docs     | audit         | docs(audit): record the baseline, the edge-case matrix and the findings of this round                               |
+| 2026-11-01 | `cfcf39f` | refactor | wagering      | refactor(wagering): keep the status table and the reference history rule in one domain module                       |
+| 2026-11-01 | `947e30d` | feat     | db            | feat(db): row guards in migration 10, checked on every update, with no extra lookup                                 |
+| 2026-11-01 | `b46915f` | feat     | db            | feat(db): a consolidated ledger view, cross-checked against reconciliation                                          |
+| 2026-11-01 | `076389b` | test     | model         | test(model): seeded random sequences through the real use cases, serial and with four applications at once          |
+| 2026-11-01 | `821039d` | test     | model         | test(model): rename a parameter that shadowed the count helper                                                      |
+| 2026-11-01 | `71e245a` | test     | -             | test: cover the failure branches of configuration, validation, events, adapters and health                          |
+| 2026-11-01 | `73c284c` | docs     | audit         | docs(audit): record the coverage, the new scenarios, and the owner's rollback proposal                              |
+| 2026-11-01 | `433ebe2` | fix      | messaging     | fix(messaging): decide outbox leases on the database clock                                                          |
+| 2026-11-01 | `6b3b23e` | fix      | messaging     | fix(messaging): keep a slow command's message invisible while it runs                                               |
+| 2026-11-01 | `fc3862c` | fix      | wagering      | fix(wagering): time held references on the database clock                                                           |
+| 2026-11-01 | `c952ba2` | fix      | messaging     | fix(messaging): write a refused event's next attempt from the database clock                                        |
+| 2026-11-01 | `c8ffbcc` | fix      | wagering      | fix(wagering): record a held transaction that fails permanently as FAILED                                           |
+| 2026-11-01 | `2ad491a` | docs     | audit         | docs(audit): index each guarantee to its test, and record this round's measurements                                 |
+| 2026-11-01 | `8313b8c` | test     | messaging     | test(messaging): correct the comment on the backoff clock                                                           |
+| 2026-11-01 | `a2ffa50` | docs     | -             | docs: documentação principal em pt-BR, com referência em inglês                                                     |
+| 2026-11-01 | `9a262ee` | test     | load          | test(load): set process counts per run and read affinity at the end                                                 |
+| 2026-11-01 | `40ad8bf` | docs     | load          | docs(load): record the local baseline with 13 scenarios                                                             |
+| 2026-11-01 | `7093654` | docs     | diagrams      | docs(diagrams): draw the README diagrams in Portuguese from the site spec                                           |
+| 2026-11-01 | `2e55a9c` | docs     | load          | docs(load): consolidate the local baseline with correctness and latency                                             |
+| 2026-11-01 | `93aef34` | docs     | readme        | docs(readme): show the local baseline with its 13 scenarios in both READMEs                                         |
+| 2026-11-01 | `7131052` | docs     | load          | docs(load): describe the two baselines and point the cloud report to the local one                                  |
+| 2026-11-01 | `6da3cb6` | docs     | -             | docs: add the evaluator map, rewrite the final audit, and correct the guide                                         |
+| 2026-11-01 | `dcb3243` | docs     | audit         | docs(audit): registrar baseline e barra da rodada de qualidade                                                      |
+| 2026-11-01 | `97839fa` | docs     | architecture  | docs(architecture): mapear entradas e saídas de dados (pt e en)                                                     |
+| 2026-11-01 | `ef390fe` | refactor | messaging     | refactor(messaging): separar entrada e saída e mover portas para application/ports                                  |
+| 2026-11-01 | `3620d74` | test     | features      | test(features): executar Gherkin sob Bun com cucumber-js                                                            |
+| 2026-11-01 | `4c58edb` | fix      | wagering      | fix(wagering): limitar a espera por trava de carteira                                                               |
+| 2026-11-01 | `f2218d4` | docs     | agents        | docs(agents): delegar implementação ao Codex via Orca e fechar terminais concluídos                                 |
+| 2026-11-01 | `0d2aee8` | docs     | -             | docs: remover revisão de implementações públicas do repositório                                                     |
+| 2026-11-01 | `216eb8f` | feat     | messaging     | feat(messaging): quarentena de eventos da outbox após N tentativas                                                  |
+| 2026-11-01 | `c5ddca9` | feat     | ledger        | feat(ledger): impedir commit com saldo divergente do ledger                                                         |
+| 2026-11-01 | `fbe9f2b` | test     | ledger        | test(ledger): alinhar fixtures ao invariante do banco                                                               |
+| 2026-11-01 | `ae67f99` | test     | messaging     | test(messaging): alinhar fixtures de carteira ao invariante do ledger                                               |
+| 2026-11-01 | `827fb9a` | test     | e2e           | test(e2e): injetar divergência fora da aplicação com o trigger desligado                                            |
+| 2026-11-01 | `98c39ac` | fix      | messaging     | fix(messaging): devolver mensagens não processadas ao encerrar                                                      |
+| 2026-11-01 | `8b3560a` | fix      | infra         | fix(infra): prazos reais para chamadas SQS e readiness                                                              |
+| 2026-11-01 | `4e2d5cd` | fix      | ledger        | fix(ledger): amarrar a referência ao id externo da aposta                                                           |
+| 2026-11-01 | `d56594c` | test     | ledger        | test(ledger): alinhar fixtures de referência à FK composta                                                          |
+| 2026-11-01 | `e7af1dd` | feat     | messaging     | feat(messaging): limpar eventos publicados após a retenção                                                          |
+| 2026-11-01 | `c8320ea` | test     | features      | test(features): alinhar cenários Gherkin ao trigger de saldo e corrigir ordem instável                              |

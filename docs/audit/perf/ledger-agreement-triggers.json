@@ -1,0 +1,362 @@
+{
+  "machine": {
+    "cpus": 4,
+    "model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "platform": "linux",
+    "release": "6.18.44-fc-v185"
+  },
+  "workload": {
+    "HOT_OPERATIONS": 600,
+    "SPREAD_WALLETS": 120,
+    "SPREAD_OPERATIONS_PER_WALLET": 3,
+    "CONCURRENT_WORKERS": 8
+  },
+  "rounds": 6,
+  "results": [
+    {
+      "round": 0,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 7.39,
+          "p95": 10.85,
+          "p99": 13.77,
+          "max": 29.06
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.41,
+          "p95": 8.8,
+          "p99": 10.77,
+          "max": 13.17
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 43.95,
+          "p95": 58.63,
+          "p99": 69.18,
+          "max": 109.61
+        }
+      }
+    },
+    {
+      "round": 0,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.16,
+          "p95": 8.26,
+          "p99": 9.98,
+          "max": 40.61
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 5.72,
+          "p95": 7.91,
+          "p99": 9.24,
+          "max": 10.02
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 39.26,
+          "p95": 48.66,
+          "p99": 57.85,
+          "max": 95.37
+        }
+      }
+    },
+    {
+      "round": 1,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.37,
+          "p95": 8.83,
+          "p99": 10.6,
+          "max": 12.81
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.29,
+          "p95": 8.8,
+          "p99": 9.85,
+          "max": 12.58
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 39.6,
+          "p95": 51.87,
+          "p99": 66.18,
+          "max": 105.01
+        }
+      }
+    },
+    {
+      "round": 1,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.25,
+          "p95": 8.77,
+          "p99": 10.76,
+          "max": 52.61
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.21,
+          "p95": 8.1,
+          "p99": 9.97,
+          "max": 16.77
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 39.96,
+          "p95": 73.99,
+          "p99": 99.97,
+          "max": 129.63
+        }
+      }
+    },
+    {
+      "round": 2,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.41,
+          "p95": 8.81,
+          "p99": 11.27,
+          "max": 70.84
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.1,
+          "p95": 8.15,
+          "p99": 9.49,
+          "max": 18.18
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 42.13,
+          "p95": 54.2,
+          "p99": 65.43,
+          "max": 94.05
+        }
+      }
+    },
+    {
+      "round": 2,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 5.98,
+          "p95": 7.81,
+          "p99": 8.93,
+          "max": 13.14
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 5.77,
+          "p95": 7.24,
+          "p99": 8.85,
+          "max": 10.26
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 38.1,
+          "p95": 48.8,
+          "p99": 62.87,
+          "max": 94.43
+        }
+      }
+    },
+    {
+      "round": 3,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.07,
+          "p95": 8.31,
+          "p99": 10.45,
+          "max": 19.09
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.12,
+          "p95": 8.18,
+          "p99": 9.26,
+          "max": 9.67
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 38.89,
+          "p95": 51.22,
+          "p99": 64.51,
+          "max": 86.62
+        }
+      }
+    },
+    {
+      "round": 3,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 5.68,
+          "p95": 7.49,
+          "p99": 8.8,
+          "max": 11.59
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 5.89,
+          "p95": 7.81,
+          "p99": 8.64,
+          "max": 10.56
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 39.73,
+          "p95": 53.25,
+          "p99": 66.22,
+          "max": 93.77
+        }
+      }
+    },
+    {
+      "round": 4,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6,
+          "p95": 8.26,
+          "p99": 9.09,
+          "max": 11.94
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.78,
+          "p95": 9.63,
+          "p99": 10.38,
+          "max": 14.53
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 41.45,
+          "p95": 53.29,
+          "p99": 61.83,
+          "max": 83.99
+        }
+      }
+    },
+    {
+      "round": 4,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.07,
+          "p95": 7.87,
+          "p99": 9.26,
+          "max": 24.85
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.11,
+          "p95": 7.84,
+          "p99": 9.07,
+          "max": 16.96
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 40.36,
+          "p95": 55.22,
+          "p99": 67.3,
+          "max": 106.21
+        }
+      }
+    },
+    {
+      "round": 5,
+      "withTriggers": false,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.15,
+          "p95": 7.92,
+          "p99": 9.11,
+          "max": 11.34
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.54,
+          "p95": 9.04,
+          "p99": 12.2,
+          "max": 29.91
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 39.47,
+          "p95": 48.07,
+          "p99": 66.69,
+          "max": 89.02
+        }
+      }
+    },
+    {
+      "round": 5,
+      "withTriggers": true,
+      "samples": {
+        "hotSequential": {
+          "count": 600,
+          "p50": 6.17,
+          "p95": 8.26,
+          "p99": 10.29,
+          "max": 13.83
+        },
+        "spreadSequential": {
+          "count": 360,
+          "p50": 6.15,
+          "p95": 8.27,
+          "p99": 9.84,
+          "max": 11.78
+        },
+        "hotConcurrent": {
+          "count": 600,
+          "p50": 40.95,
+          "p95": 51.75,
+          "p99": 61.22,
+          "max": 101.19
+        }
+      }
+    }
+  ],
+  "lookups": [
+    {
+      "total": 1000,
+      "wallets": 10,
+      "millisecondsPerLookup": 0.68,
+      "plan": "Limit  (cost=0.28..0.85 rows=1 width=13) |   ->  Index Scan Backward using ledger_seq_key on wallet_ledger_entries  (cost=0.28..58.27 rows=100 width=13) |         Index Cond: (seq < '9223372036854775807'::bigint) |         Filter: (wallet_id = 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'::uuid)"
+    },
+    {
+      "total": 100000,
+      "wallets": 1000,
+      "millisecondsPerLookup": 0.44,
+      "plan": "Limit  (cost=0.42..4.36 rows=1 width=13) |   ->  Index Scan Backward using ledger_wallet_seq_idx on wallet_ledger_entries  (cost=0.42..394.42 rows=100 width=13) |         Index Cond: ((wallet_id = 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'::uuid) AND (seq < '9223372036854775807'::bigint))"
+    },
+    {
+      "total": 1000000,
+      "wallets": 10000,
+      "millisecondsPerLookup": 0.5,
+      "plan": "Limit  (cost=0.42..4.48 rows=1 width=13) |   ->  Index Scan Backward using ledger_wallet_seq_idx on wallet_ledger_entries  (cost=0.42..406.42 rows=100 width=13) |         Index Cond: ((wallet_id = 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'::uuid) AND (seq < '9223372036854775807'::bigint))"
+    }
+  ],
+  "command": "bun run test/perf/ledger-trigger-cost.ts 6; bun run test/perf/ledger-trigger-cost.ts --lookups"
+}

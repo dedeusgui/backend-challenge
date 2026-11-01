@@ -46,9 +46,12 @@ export class MikroOrmWalletLedgerRepository implements WalletLedgerRepository {
     return rows.map((row) => ({ seq: row.seq, entry: toEntry(row) }));
   }
 
-  /** Recomputes the wallet from its ledger. Every entry is read, so the result is exact, not sampled. */
+  /**
+   * Recomputes the wallet from its ledger. Every entry is read, so the result is exact, not sampled. The read
+   * runs inside the caller's transaction, so it sees the same snapshot as the wallet lock that the caller holds.
+   */
   async summarize(walletId: string, currency: string): Promise<LedgerSummary> {
-    const rows = (await this.em.getConnection().execute(
+    const rows = (await this.em.execute(
       `SELECT direction, currency, amount::text AS amount, balance_before::text AS balance_before,
               balance_after::text AS balance_after
          FROM wallet_ledger_entries WHERE wallet_id = ? ORDER BY seq`,

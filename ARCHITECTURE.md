@@ -151,7 +151,10 @@ Invariants enforced by PostgreSQL, each with a constraint test that tries to bre
   ordering; arithmetic `CHECK` for CREDIT and DEBIT; `amount > 0`; a composite foreign
   key `(transaction_id, wallet_id)`, so an entry must belong to a transaction of the
   same wallet. Append-only: `BEFORE UPDATE OR DELETE` and `BEFORE TRUNCATE` triggers
-  refuse mutation.
+  refuse mutation. The agreement between each balance and its ledger (challenge 6.2) is not a
+  database constraint: it is verified on demand by reconciliation and in every test suite. Two
+  deferred triggers that would enforce it were measured and not adopted, because they extend the
+  wallet lock on every commit (`docs/audit/PERFORMANCE_COMPARISON.md`, experiment 1).
 - `wager_transactions`: `UNIQUE (provider_id, external_transaction_id)`;
   `UNIQUE (provider_id, idempotency_key)`; kind and status are checked; a `REFUND` or
   `ROLLBACK` must carry a reference, a `BET` or `OPENING` must not, and a `WIN` or `LOSS` may carry one (migration 6, challenge 6.3). Status

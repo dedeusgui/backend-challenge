@@ -24,12 +24,18 @@ export interface WagerCommandConsumerOptions {
   deadLetters: MessageQueue;
   process: CommandProcessor;
   visibilityTimeoutSeconds: number;
+  /**
+   * How long a processing may keep its message invisible to other consumers. Past this, the message is released
+   * and may be delivered again, so a processor that hangs cannot hold a message forever.
+   */
+  holdLimitSeconds?: number;
   metrics?: MetricsSink;
   logger?: OperationLogger;
 }
 
 const BATCH_SIZE = 10;
 const MAX_RETRY_DELAY_SECONDS = 300;
+const DEFAULT_HOLD_LIMIT_SECONDS = 300;
 const DEAD_LETTER_GROUP = 'dead-letter';
 
 type Disposition = 'APPLIED' | 'DEAD' | 'RETRY';
@@ -121,13 +127,54 @@ export class WagerCommandConsumer {
     const messageId = command.inbound?.messageId;
 
     try {
-      await this.options.process.execute(command);
+      await this.processHeld(message, command);
       return { disposition: 'APPLIED', messageId };
     } catch (error) {
       const disposition = classifyCommandFailure(error) === 'PERMANENT' ? 'DEAD' : 'RETRY';
       return { disposition, messageId, failure: describeError(error) };
     }
   }
+
+  /**
+   * Runs the command while its message stays invisible. The window is renewed every third of its length, until the
+   * hold limit. A renewal the broker refuses ends the renewals, because the message is no longer this consumer's.
+   * The command still runs to its end, and the transaction identity keeps its effect to one.
+   */
+  private async processHeld(message: ReceivedMessage, command: ProcessWagerCommand): Promise<void> {
+    const { queue, visibilityTimeoutSeconds } = this.options;
+    const holdLimitMs = (this.options.holdLimitSeconds ?? DEFAULT_HOLD_LIMIT_SECONDS) * 1000;
+    const releaseAt = Date.now() + holdLimitMs;
+    const messageId = command.inbound?.messageId;
+    let renewals: Promise<void> = Promise.resolve();
+    const timer = setInterval(() => {
+      if (Date.now() >= releaseAt) {
+        clearInterval(timer);
+        return;
+      }
+      renewals = renewals
+        .then(() => queue.changeVisibility(message.receiptHandle, visibilityTimeoutSeconds))
+        .catch((error: unknown) => {
+          clearInterval(timer);
+          this.logger({
+            operation: 'command.hold',
+            status: 'RENEWAL_REFUSED',
+            messageId,
+            ...describeError(error),
+          });
+        });
+    }, renewalIntervalMs(visibilityTimeoutSeconds));
+    try {
+      await this.options.process.execute(command);
+    } finally {
+      clearInterval(timer);
+      await renewals;
+    }
+  }
+}
+
+/** A third of the window, so one renewal can be lost before the window ends. At least a tenth of a second. */
+function renewalIntervalMs(visibilityTimeoutSeconds: number): number {
+  return Math.max(100, Math.floor((visibilityTimeoutSeconds * 1000) / 3));
 }
 
 /**

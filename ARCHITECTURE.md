@@ -325,8 +325,12 @@ A batch of up to ten messages is processed one at a time. Before each message af
 consumer sets the visibility of the messages still waiting to a full window again (30 s by default), in
 one `ChangeMessageVisibilityBatch` request. Without this, a message at the end of a slow batch became
 visible while the first consumer still held it, and a second consumer received it
-(`test/integration/messaging/visibility-during-batch.test.ts`). Each message must still finish within the
-window; a longer message is the case the window does not cover.
+(`test/integration/messaging/visibility-during-batch.test.ts`). While its own command runs, a message is renewed
+every third of the window, up to a hold limit of 300 s by default. A renewal the broker refuses ends the renewals.
+Past the hold limit the message is released, so a processor that hangs cannot hold it forever; the next delivery
+applies the same effect once, because the transaction identity is the same. Tests: `slow-message-hold.test.ts`
+(LocalStack) and `wager-command-hold.test.ts`. Past the hold limit, two consumers can process one command at the
+same time; the identity keeps its effect to one.
 
 Classification (`failure-classification.ts`). Permanent failures go to the dead-letter
 queue. Transient ones are redelivered with visibility backoff of 2 s, 4 s, 8 s, up to 300 s.

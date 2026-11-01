@@ -21,6 +21,7 @@ Base da rodada: `d65a1e7`. Linha de base: `BASELINE.md`.
 | F-10 | `ROLLBACK` do BET após o `ROLLBACK` do REFUND é recusado                                  | Decisão de contrato (D4)     | Comportamento fixado em teste. **Aguarda o dono**  | Teste existente                                                                              | —                        |
 | F-11 | Resultados sem referência não podem ser limitados a um por BET                            | Decisão de contrato (D1)     | Documentado                                        | Limitação inerente ao enunciado                                                              | —                        |
 | F-12 | A imagem Docker do repositório não constrói no sandbox                                    | Ambiente                     | Contornado para a demonstração                     | `bun install` falha com `SELF_SIGNED_CERT_IN_CHAIN`                                          | —                        |
+| F-14 | Mensagem isolada mais longa que a janela de visibilidade era reentregue                   | P2 (duplicidade de entrega)  | Corrigido, com limite de retenção                  | Teste com LocalStack: o segundo consumidor recebia a mensagem aos 3,5 s                      | —                        |
 
 ---
 
@@ -93,8 +94,7 @@ lote lento podia mandar à DLQ uma mensagem que já tinha sido aplicada.
 esperam, com uma chamada `ChangeMessageVisibilityBatch`. Uma entrada recusada rejeita a chamada, e o lote falha
 fechado. A porta de fila ganhou `extendVisibility`, com a implementação SQS e os dois adaptadores de teste.
 
-**Risco que resta.** Uma mensagem isolada mais longa que a janela ainda é reentregue. Está documentado em
-`ARCHITECTURE`. O custo da chamada extra por mensagem não foi medido (ver `PERFORMANCE_COMPARISON.md`, experimento 2).
+**Risco que resta.** Uma mensagem isolada mais longa que a janela era reentregue; corrigido em F-14. O custo da chamada extra por mensagem não foi medido (ver `PERFORMANCE_COMPARISON.md`, experimento 2).
 
 ## F-05 — ganchos de falha dentro do código de produção
 
@@ -210,6 +210,21 @@ infraestrutura (terminal, auditável)".
 como FAILED hoje. **Decisão do dono do desafio:** manter FAILED como auditoria da falha permanente, o que exige gravar a
 linha num caminho que hoje só manda para a DLQ, ou remover o valor do enum e a transição. A escolha de remover é mais simples,
 e a de gravar é a que a especificação descreve.
+
+## F-14 — mensagem isolada mais longa que a janela de visibilidade era reentregue
+
+**Evidência.** `test/integration/messaging/slow-message-hold.test.ts`, contra LocalStack. Janela de 2 s e processamento de
+6 s: o segundo consumidor, consultando aos 3,5 s, recebia a mensagem que o primeiro ainda processava. A renovação do
+F-04 só cobria as mensagens seguintes do lote.
+
+**Correção.** Enquanto o próprio comando roda, a mensagem é renovada a cada terço da janela, até um limite de retenção
+de 300 s (`holdLimitSeconds`). Uma renovação recusada pelo broker encerra as renovações. Passado o limite, a mensagem é
+liberada, para que um processador travado não a retenha para sempre. Teste unitário sem broker:
+`test/unit/messaging/application/wager-command-hold.test.ts`.
+
+**Limite.** Passado o limite de retenção, dois consumidores podem processar o mesmo comando ao mesmo tempo. A identidade
+da transação mantém o efeito em um: o teste de limite afirma o saldo de 99,00 depois dos dois. Um comando mais lento que
+o limite roda em duplicidade. O custo de uma renovação a cada terço da janela não foi medido.
 
 ## Execução do demo
 

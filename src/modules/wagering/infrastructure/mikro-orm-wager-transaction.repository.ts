@@ -28,13 +28,17 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     try {
       await this.em.insert(WagerTransactionRecord, toRecordData(transaction.toState()));
     } catch (error) {
-      if (error instanceof UniqueConstraintViolationException) {
-        throw new ConcurrencyConflictError(
-          `Transaction ${transaction.id} collides with a committed identity`,
-        );
-      }
-      throw error;
+      this.handleInsertError(error, transaction.id);
     }
+  }
+
+  private handleInsertError(error: unknown, transactionId: string): never {
+    if (error instanceof UniqueConstraintViolationException) {
+      throw new ConcurrencyConflictError(
+        `Transaction ${transactionId} collides with a committed identity`,
+      );
+    }
+    throw error;
   }
 
   async update(transaction: WagerTransaction): Promise<void> {

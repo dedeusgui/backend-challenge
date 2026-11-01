@@ -71,39 +71,65 @@ export class ProcessWagerTransaction {
   }
 
   async execute(command: ProcessWagerCommand): Promise<ProcessWagerOutcome> {
-    if (!WagerTransaction.isExternallySubmittable(command.kind)) {
-      throw new DomainError(
-        'INVALID_TRANSACTION',
-        `${command.kind} is internal and cannot be submitted`,
-      );
-    }
+    this.assertSubmittable(command.kind);
     const hashes = hashesOf(command);
 
     const started = performance.now();
     for (let attempt = 1; ; attempt += 1) {
-      try {
-        const outcome = await this.inTransaction(command, hashes);
-        // A replay is not a new transaction, so it is counted by idempotent_replays_total only.
-        if (!outcome.idempotentReplay) {
-          this.metrics.increment('transactions_total', { status: outcome.transaction.status });
-        }
-        const elapsed = performance.now() - started;
-        this.metrics.observe('processing_latency_ms', elapsed);
-        if (outcome.idempotentReplay) {
-          this.metrics.observe('replay_latency_ms', elapsed);
-        }
+      const outcome = await this.executeAttempt(command, hashes, started, attempt);
+      if (outcome !== undefined) {
         return outcome;
-      } catch (error) {
-        // The failed unit of work has rolled back, so no effect was committed. A retry reads the winner.
-        if (error instanceof ConcurrencyConflictError) {
-          this.metrics.increment('concurrency_conflicts_total');
-          if (attempt < MAX_CONCURRENCY_ATTEMPTS) {
-            continue;
-          }
-        }
-        throw error;
       }
     }
+  }
+
+  private async executeAttempt(
+    command: ProcessWagerCommand,
+    hashes: Hashes,
+    started: number,
+    attempt: number,
+  ): Promise<ProcessWagerOutcome | undefined> {
+    try {
+      const outcome = await this.inTransaction(command, hashes);
+      this.recordOutcomeMetrics(outcome, started);
+      return outcome;
+    } catch (error) {
+      this.rethrowUnlessRetriableConflict(error, attempt);
+      return undefined;
+    }
+  }
+
+  private assertSubmittable(kind: WagerTransactionKind): void {
+    if (!WagerTransaction.isExternallySubmittable(kind)) {
+      throw new DomainError('INVALID_TRANSACTION', `${kind} is internal and cannot be submitted`);
+    }
+  }
+
+  private recordOutcomeMetrics(outcome: ProcessWagerOutcome, started: number): void {
+    // A replay is not a new transaction, so it is counted by idempotent_replays_total only.
+    if (!outcome.idempotentReplay) {
+      this.metrics.increment('transactions_total', { status: outcome.transaction.status });
+    }
+    const elapsed = performance.now() - started;
+    this.metrics.observe('processing_latency_ms', elapsed);
+    if (outcome.idempotentReplay) {
+      this.metrics.observe('replay_latency_ms', elapsed);
+    }
+  }
+
+  private rethrowUnlessRetriableConflict(error: unknown, attempt: number): void {
+    if (!this.canRetryConflict(error, attempt)) {
+      throw error;
+    }
+  }
+
+  private canRetryConflict(error: unknown, attempt: number): boolean {
+    // The failed unit of work has rolled back, so no effect was committed. A retry reads the winner.
+    if (error instanceof ConcurrencyConflictError) {
+      this.metrics.increment('concurrency_conflicts_total');
+      return attempt < MAX_CONCURRENCY_ATTEMPTS;
+    }
+    return false;
   }
 
   /**

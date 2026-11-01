@@ -52,18 +52,23 @@ export class ProcessPendingReferences {
         this.resolveOne(repositories, transactionId, walletId),
       );
     } catch (error) {
-      if (classifyCommandFailure(error) === 'TRANSIENT') {
-        throw error;
-      }
-      // The failed unit of work committed nothing, so the verdict is recorded in a new one.
-      const recorded = await this.context.unitOfWork.run((repositories) =>
-        this.recordFailure(repositories, transactionId),
-      );
-      if (recorded) {
-        this.metrics.increment('reference_resolutions_total', { status: 'FAILED' });
-      }
-      return recorded ? 1 : 0;
+      return this.handleResolutionFailure(error, transactionId);
     }
+  }
+
+  private async handleResolutionFailure(error: unknown, transactionId: string): Promise<number> {
+    if (classifyCommandFailure(error) === 'TRANSIENT') {
+      throw error;
+    }
+    // The failed unit of work committed nothing, so the verdict is recorded in a new one.
+    const recorded = await this.context.unitOfWork.run((repositories) =>
+      this.recordFailure(repositories, transactionId),
+    );
+    if (recorded) {
+      this.metrics.increment('reference_resolutions_total', { status: 'FAILED' });
+      return 1;
+    }
+    return 0;
   }
 
   private async resolveOne(

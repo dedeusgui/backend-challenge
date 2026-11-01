@@ -7,20 +7,20 @@ Base da rodada: `d65a1e7`. Linha de base: `BASELINE.md`.
 
 ## Resumo
 
-| ID   | Título                                                                                    | Severidade                   | Status                                             | Evidência                                                                     | Commit                   |
-| ---- | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------ |
-| F-01 | Um envelope malformado no outbox pára a publicação de todos os eventos atrás dele         | P1 (disponibilidade)         | Corrigido                                          | Teste: 8 casos falhavam antes; a publicação enviava 0 eventos com 3 pendentes | `2905535`                |
-| F-02 | Mesmo `messageId` com `idempotencyKey` diferente era aceito como duplicata                | P2 (integridade da mensagem) | Corrigido, com compatibilidade para linhas antigas | Teste: 1 caso resolvia em vez de recusar                                      | `2ec4d5e`                |
-| F-03 | Transação de outro provedor respondia 403, e o 404 de id inexistente revelava a diferença | P2 (segurança)               | Corrigido. **Mudança de contrato: aguarda o dono** | Teste: esperado 404, recebido 403                                             | `154b52a`                |
-| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor                        | P2 (operação)                | Corrigido                                          | Teste com LocalStack: o segundo consumidor recebeu 2 mensagens em voo         | `b398e22`                |
-| F-05 | Hooks de falha de teste dentro do código de produção                                      | Regra do projeto             | Corrigido                                          | Composição em `assembleWorker`; suítes passam sem alterar as asserções        | `489df8b`                |
-| F-06 | A concordância entre saldo e ledger não é garantida pelo esquema                          | P3 (defesa em profundidade)  | Aberto, com decisão. **Aguarda o dono**            | 3 escritas diretas aceitas pelo esquema atual                                 | experimento em `0f4fa19` |
-| F-07 | O lease do outbox compara expiração com o relógio do chamador                             | P3 (duplicatas de envio)     | Aberto, reprodução pendente                        | Análise do código: `claimDue` recebe `now` do publicador                      | —                        |
-| F-08 | O resumo do ledger na reconciliação era lido fora da transação                            | Robustez                     | Endurecido. Não reproduzido como defeito           | Leitura correta sob o lock; agora na transação                                | `0f4fa19`                |
-| F-09 | O plano de consulta do ledger depende das estatísticas                                    | Observação                   | Monitorar com `EXPLAIN`                            | 1 mil lançamentos: varredura; 100 mil e 1 milhão: índice                      | —                        |
-| F-10 | `ROLLBACK` do BET após o `ROLLBACK` do REFUND é recusado                                  | Decisão de contrato (D4)     | Comportamento fixado em teste. **Aguarda o dono**  | Teste existente                                                               | —                        |
-| F-11 | Resultados sem referência não podem ser limitados a um por BET                            | Decisão de contrato (D1)     | Documentado                                        | Limitação inerente ao enunciado                                               | —                        |
-| F-12 | A imagem Docker do repositório não constrói no sandbox                                    | Ambiente                     | Contornado para a demonstração                     | `bun install` falha com `SELF_SIGNED_CERT_IN_CHAIN`                           | —                        |
+| ID   | Título                                                                                    | Severidade                   | Status                                             | Evidência                                                                                    | Commit                   |
+| ---- | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------ |
+| F-01 | Um envelope malformado no outbox pára a publicação de todos os eventos atrás dele         | P1 (disponibilidade)         | Corrigido                                          | Teste: 8 casos falhavam antes; a publicação enviava 0 eventos com 3 pendentes                | `2905535`                |
+| F-02 | Mesmo `messageId` com `idempotencyKey` diferente era aceito como duplicata                | P2 (integridade da mensagem) | Corrigido, com compatibilidade para linhas antigas | Teste: 1 caso resolvia em vez de recusar                                                     | `2ec4d5e`                |
+| F-03 | Transação de outro provedor respondia 403, e o 404 de id inexistente revelava a diferença | P2 (segurança)               | Corrigido. **Mudança de contrato: aguarda o dono** | Teste: esperado 404, recebido 403                                                            | `154b52a`                |
+| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor                        | P2 (operação)                | Corrigido                                          | Teste com LocalStack: o segundo consumidor recebeu 2 mensagens em voo                        | `b398e22`                |
+| F-05 | Hooks de falha de teste dentro do código de produção                                      | Regra do projeto             | Corrigido                                          | Composição em `assembleWorker`; suítes passam sem alterar as asserções                       | `489df8b`                |
+| F-06 | A concordância entre saldo e ledger não é garantida pelo esquema                          | P3 (defesa em profundidade)  | Aberto, com decisão. **Aguarda o dono**            | 3 escritas diretas aceitas pelo esquema atual                                                | experimento em `0f4fa19` |
+| F-07 | O lease do outbox compara expiração com o relógio do chamador                             | P3 (duplicatas de envio)     | Corrigido. Posse decidida pelo `now()` do banco    | Dois testes, relógio uma hora atrás e uma hora à frente, tomavam 6 eventos de um lease ativo | —                        |
+| F-08 | O resumo do ledger na reconciliação era lido fora da transação                            | Robustez                     | Endurecido. Não reproduzido como defeito           | Leitura correta sob o lock; agora na transação                                               | `0f4fa19`                |
+| F-09 | O plano de consulta do ledger depende das estatísticas                                    | Observação                   | Monitorar com `EXPLAIN`                            | 1 mil lançamentos: varredura; 100 mil e 1 milhão: índice                                     | —                        |
+| F-10 | `ROLLBACK` do BET após o `ROLLBACK` do REFUND é recusado                                  | Decisão de contrato (D4)     | Comportamento fixado em teste. **Aguarda o dono**  | Teste existente                                                                              | —                        |
+| F-11 | Resultados sem referência não podem ser limitados a um por BET                            | Decisão de contrato (D1)     | Documentado                                        | Limitação inerente ao enunciado                                                              | —                        |
+| F-12 | A imagem Docker do repositório não constrói no sandbox                                    | Ambiente                     | Contornado para a demonstração                     | `bun install` falha com `SELF_SIGNED_CERT_IN_CHAIN`                                          | —                        |
 
 ---
 
@@ -136,9 +136,15 @@ desenho depende do relógio do chamador.
 **Efeito.** Duplicata de envio no broker de eventos. A marcação continua protegida pelo token do lease (a
 publicação atrasada não marca como enviada), e os consumidores deduplicam por `eventId`. Não há efeito financeiro.
 
-**Não feito nesta rodada.** Reprodução determinística entre dois hosts. A correção recomendada é usar o `now()` do
-banco para expiração e para o vencimento. Isso obriga a reescrever ~25 pontos de teste que usam tempos sintéticos,
-e não coube nesta rodada. Em `EDGE_CASE_MATRIX.md`, OB-07 está como `NOT_RUN`.
+**Correção.** O `claimDue` passou a usar `now()` do banco para o vencimento, a posse e a expiração
+(`lease_expires_at = now() + make_interval(...)`). O publicador informa apenas o token e a duração. A reprodução é
+`test/integration/messaging/outbox-lease-clock.test.ts`, com dois casos: publicador uma hora atrás e uma hora
+adiantado. Antes da correção, cada um tomava 6 eventos de um lease ativo de outro publicador. Os demais testes de
+tempo avançam o relógio do banco com `advanceOutboxClock`, em vez de passar um `now` sintético.
+
+**Risco que resta.** O agendamento de nova tentativa ainda usa o relógio do publicador. Um publicador com relógio
+atrasado tenta de novo antes, e um adiantado depois. Isso muda quando há tentativa, não quem detém o evento. Os
+marcadores continuam protegidos pelo token do lease.
 
 ## F-08 — leitura do resumo fora da transação
 

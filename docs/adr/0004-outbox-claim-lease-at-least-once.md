@@ -13,7 +13,9 @@ lost once it has committed. Several publishers may run at once.
   change. Nothing is sent to SQS inside the transaction.
 - A publisher claims due rows with one statement that uses `FOR UPDATE SKIP LOCKED`
   and sets a lease token and an expiry (`MikroOrmOutboxStore.claimDue`). Concurrent
-  publishers take disjoint rows.
+  publishers take disjoint rows. The due check and the expiry use the database clock
+  (`now()`), so the clock of a publisher cannot take a lease that another publisher
+  holds.
 - The broker send runs with no transaction open. The publisher then marks the row
   published **only if its lease token still matches** (`complete`). A lease that
   expired and was taken over makes the mark a no-op, which is reported

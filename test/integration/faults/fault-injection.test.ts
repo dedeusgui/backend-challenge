@@ -21,6 +21,7 @@ import type { OutboxStore } from '../../../src/modules/messaging/application/out
 import { MikroOrmOutboxStore } from '../../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import { advanceOutboxClock } from '../support/outbox-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 import { ConcurrencyConflictError } from '../../../src/shared/application/application-errors';
@@ -254,9 +255,10 @@ describe('fault injection', () => {
       ),
     ).toBe('1');
 
-    const afterLeaseExpiry = new Date(NOW.getTime() + LEASE_MS + 1_000);
-    // Drain every due event. The crashed one is due again once its lease has expired.
-    const drain = publisherAt(afterLeaseExpiry, 50);
+    // The lease of the crashed publisher runs out on the database clock. Then every due event is drained, and the
+    // crashed one is due again.
+    await advanceOutboxClock(database, LEASE_MS + 1_000);
+    const drain = publisherAt(new Date(), 50);
     while ((await drain.publishOnce()) > 0) {
       // keep draining
     }

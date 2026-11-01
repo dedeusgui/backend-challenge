@@ -387,6 +387,9 @@ token still matches. Each event the broker refused is rescheduled on its own, wi
 refused and counted. Delivery is at-least-once. The event id is the SQS deduplication id and the consumers'
 deduplication key. Events committed at the same instant have no defined order within a batch: the claim
 orders them by their instant, and the timestamp is the only key. Consumers order by `walletVersion`.
+Lease expiry and due times are decided by the database clock (`now()`), so a publisher whose clock runs
+ahead or behind cannot take an event that another publisher holds. Retry timing still uses the publisher's
+clock: a skewed publisher retries early or late, and the lease still guards its marks.
 Decision: [ADR 0004](docs/adr/0004-outbox-claim-lease-at-least-once.md).
 
 ```mermaid

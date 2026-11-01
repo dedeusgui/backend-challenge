@@ -57,13 +57,11 @@ export class OutboxPublisher {
 
   /** Returns how many events were published successfully in this pass. */
   async publishOnce(): Promise<number> {
-    const now = this.options.clock();
     const token = this.options.newLeaseToken();
     const claimStarted = performance.now();
     const claimed = await this.options.store.claimDue({
-      now,
-      leaseUntil: new Date(now.getTime() + this.options.leaseDurationMs),
       token,
+      leaseMs: this.options.leaseDurationMs,
       limit: this.options.batchSize,
     });
     this.metrics.observe('outbox_claim_ms', performance.now() - claimStarted);

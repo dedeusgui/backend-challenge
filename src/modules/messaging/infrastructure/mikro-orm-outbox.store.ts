@@ -21,24 +21,25 @@ export class MikroOrmOutboxStore implements OutboxStore {
   constructor(private readonly orm: MikroORM) {}
 
   async claimDue(request: ClaimRequest): Promise<OutboxMessage[]> {
-    // The UPDATE returns its rows in no particular order, so the order is applied after it: a batch is
-    // sent in the order its events became due, and the events of one wallet keep their commit order.
+    // Every time in this statement is the database's now(). The UPDATE returns its rows in no particular order, so the
+    // order is applied after it: a batch is sent in the order its events became due, and the events of one wallet keep
+    // their commit order.
     const rows = (await this.orm.em.getConnection().execute(
       `WITH claimed AS (
          UPDATE outbox_messages
-            SET lease_token = ?, lease_expires_at = ?
+            SET lease_token = ?, lease_expires_at = now() + make_interval(secs => ?)
           WHERE id IN (
             SELECT id FROM outbox_messages
              WHERE published_at IS NULL
-               AND next_attempt_at <= ?
-               AND (lease_expires_at IS NULL OR lease_expires_at < ?)
+               AND next_attempt_at <= now()
+               AND (lease_expires_at IS NULL OR lease_expires_at < now())
              ORDER BY next_attempt_at, occurred_at
              LIMIT ?
              FOR UPDATE SKIP LOCKED)
          RETURNING id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at
        )
        SELECT * FROM claimed ORDER BY next_attempt_at, occurred_at`,
-      [request.token, request.leaseUntil, request.now, request.now, request.limit],
+      [request.token, request.leaseMs / 1000, request.limit],
     )) as OutboxRow[];
     return rows.map(toDomain);
   }

@@ -129,12 +129,7 @@ describe('the outbox store', () => {
       );
       const store = new MikroOrmOutboxStore(database.orm);
       const error = await refusedBy(() =>
-        store.claimDue({
-          now: START,
-          leaseUntil: new Date(START.getTime() + LEASE),
-          token: randomUUID(),
-          limit: 50,
-        }),
+        store.claimDue({ token: randomUUID(), leaseMs: LEASE, limit: 50 }),
       );
       expect(error).toBe('Outbox payload is missing eventId');
     } finally {

@@ -16,6 +16,7 @@ import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import { advanceOutboxClock } from '../support/outbox-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 import { required } from '../../support/required';
@@ -164,31 +165,29 @@ describe('OutboxPublisher', () => {
     const pending = await pendingCount();
     expect(pending).toBeGreaterThan(0);
     transport.failuresRemaining = 1;
-    const later = (ms: number) => () => new Date(NOW.getTime() + ms);
+    // The backoff is measured from this publisher's clock, which is the real one, so it agrees with the database clock.
+    const publisher = publisherFor(transport, () => new Date());
 
-    expect(await publisherFor(transport, later(0)).publishOnce()).toBe(0);
-    expect(await publisherFor(transport, later(500)).publishOnce()).toBe(0);
-    expect(await publisherFor(transport, later(1_000)).publishOnce()).toBe(pending);
+    expect(await publisher.publishOnce()).toBe(0);
+    await advanceOutboxClock(database, 500);
+    expect(await publisher.publishOnce()).toBe(0);
+    await advanceOutboxClock(database, 1_000);
+    expect(await publisher.publishOnce()).toBe(pending);
   });
 
   test('an event leased by a crashed publisher is published once its lease expires', async () => {
     await committedEvents();
     const store = new MikroOrmOutboxStore(database.orm);
-    const crashed = await store.claimDue({
-      now: NOW,
-      leaseUntil: new Date(NOW.getTime() + 30_000),
-      token: randomUUID(),
-      limit: 1,
-    });
+    const crashed = await store.claimDue({ token: randomUUID(), leaseMs: 30_000, limit: 1 });
     expect(crashed).toHaveLength(1);
     const transport = transportFor();
 
     const crashedId = required(crashed[0]?.id, 'the crashed event');
-    await publisherFor(transport, () => NOW).publishOnce();
+    await publisherFor(transport).publishOnce();
     expect(transport.sendsByEvent.has(crashedId)).toBe(false);
 
-    const afterExpiry = new Date(NOW.getTime() + 31_000);
-    await publisherFor(transport, () => afterExpiry).publishOnce();
+    await advanceOutboxClock(database, 31_000);
+    await publisherFor(transport).publishOnce();
 
     expect(transport.sendsByEvent.get(crashedId)).toBe(1);
   });
@@ -196,13 +195,12 @@ describe('OutboxPublisher', () => {
   test('a publisher stalled past its lease loses the event to a successor, and its late mark is refused', async () => {
     await committedEvents();
     const transport = transportFor();
-    let now = NOW;
-    const successor = publisherFor(transport, () => now);
+    const successor = publisherFor(transport);
     let successorPublished = -1;
     const stalled: OutboxTransport = {
       publish: async (messages) => {
         // Slow, not crashed: the lease expires while this send is in flight, and a successor takes over.
-        now = new Date(NOW.getTime() + 31_000);
+        await advanceOutboxClock(database, 31_000);
         successorPublished = await successor.publishOnce();
         return transport.publish(messages);
       },
@@ -229,19 +227,10 @@ describe('OutboxPublisher', () => {
     await committedEvents();
     const store = new MikroOrmOutboxStore(database.orm);
     const staleToken = randomUUID();
-    const [event] = await store.claimDue({
-      now: NOW,
-      leaseUntil: new Date(NOW.getTime() + 1_000),
-      token: staleToken,
-      limit: 1,
-    });
+    const [event] = await store.claimDue({ token: staleToken, leaseMs: 1_000, limit: 1 });
     if (!event) throw new Error('an event must be claimable');
-    await store.claimDue({
-      now: new Date(NOW.getTime() + 2_000),
-      leaseUntil: new Date(NOW.getTime() + 32_000),
-      token: randomUUID(),
-      limit: 50,
-    });
+    await advanceOutboxClock(database, 2_000);
+    await store.claimDue({ token: randomUUID(), leaseMs: 32_000, limit: 50 });
 
     const completed = await store.complete([event], staleToken, NOW);
 

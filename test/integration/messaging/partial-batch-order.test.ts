@@ -14,6 +14,7 @@ import {
   type EventBatchSender,
 } from '../../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import { advanceOutboxClock } from '../support/outbox-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
 import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
 import { required } from '../../support/required';
@@ -94,17 +95,17 @@ interface OutboxRow {
 }
 
 /** The outbox rows of one wallet's balance events, in version order, with their state. */
-async function walletEventRows(walletId: string, now: Date): Promise<OutboxRow[]> {
+async function walletEventRows(walletId: string): Promise<OutboxRow[]> {
   const rows = (await database.orm.em.getConnection().execute(
     `SELECT id::text AS id,
             (payload->'data'->>'walletVersion')::int AS wallet_version,
             published_at IS NOT NULL AS published,
             attempts,
-            next_attempt_at > ? AS due_in_future
+            next_attempt_at > now() AS due_in_future
        FROM outbox_messages
       WHERE aggregate_id = ? AND event_type = 'WalletBalanceChanged'
       ORDER BY (payload->'data'->>'walletVersion')::int`,
-    [now, walletId],
+    [walletId],
   )) as OutboxRow[];
   return rows;
 }
@@ -146,7 +147,7 @@ describe('a refused event in a batch, within one wallet', () => {
     // Earlier tests in this file leave nothing pending, but drain anyway, so the batch holds only this test.
     const drainAll = publisherFor(
       new RefuseEntryOnce(new SqsQueue(sqs, queues.eventsQueueUrl), () => ''),
-      () => new Date(NOW.getTime() + ONE_DAY),
+      () => new Date(),
     );
     while ((await drainAll.publishOnce()) > 0) {
       // Each pass publishes what is due. The loop ends when nothing is due.
@@ -179,16 +180,16 @@ describe('a refused event in a batch, within one wallet', () => {
       });
     }
 
-    const before = await walletEventRows(walletId, NOW);
+    const before = await walletEventRows(walletId);
     expect(before.map((row) => row.wallet_version)).toEqual([1, 2, 3]);
     expect(before.every((row) => !row.published)).toBe(true);
     const e2 = required(before[1], 'the second event of the wallet');
 
-    // Pass 1, an hour after the commits. E2 is refused by the broker; E1 and E3 are accepted.
+    // Pass 1. E2 is refused by the broker, so its retry is scheduled from now; E1 and E3 are accepted.
     const sender = new RefuseEntryOnce(new SqsQueue(sqs, queues.eventsQueueUrl), () => e2.id);
     // The pass also sends the transaction events of the two BETs, which belong to other aggregates.
-    await publisherFor(sender, () => new Date(NOW.getTime() + ONE_HOUR)).publishOnce();
-    const afterFirst = await walletEventRows(walletId, NOW);
+    await publisherFor(sender, () => new Date()).publishOnce();
+    const afterFirst = await walletEventRows(walletId);
 
     expect(sender.refused).toBe(1);
     expect(afterFirst.map((row) => [row.wallet_version, row.published])).toEqual([
@@ -199,19 +200,16 @@ describe('a refused event in a batch, within one wallet', () => {
     expect(afterFirst[1]).toMatchObject({ attempts: 1, due_in_future: true });
     expect(await drainWalletVersions(walletId)).toEqual([1, 3]);
 
-    // E2 is not claimed before its backoff ends: a pass at the same instant publishes nothing.
-    const early = await publisherFor(
-      sender,
-      () => new Date(NOW.getTime() + ONE_HOUR),
-    ).publishOnce();
+    // E2 is not claimed before its backoff ends. The drain above takes real time, longer than the one-second
+    // backoff, so the database clock is held back an hour first: the backoff has not ended, and a pass publishes nothing.
+    await advanceOutboxClock(database, -ONE_HOUR);
+    const early = await publisherFor(sender, () => new Date()).publishOnce();
     expect(early).toBe(0);
 
-    // Pass 2, a day later. The retry sends E2, which the broker accepts.
-    const secondPass = await publisherFor(
-      sender,
-      () => new Date(NOW.getTime() + ONE_DAY),
-    ).publishOnce();
-    const afterSecond = await walletEventRows(walletId, NOW);
+    // Pass 2, a day later on the database clock. The retry sends E2, which the broker accepts.
+    await advanceOutboxClock(database, ONE_DAY);
+    const secondPass = await publisherFor(sender, () => new Date()).publishOnce();
+    const afterSecond = await walletEventRows(walletId);
 
     expect(secondPass).toBe(1);
     expect(afterSecond.every((row) => row.published)).toBe(true);

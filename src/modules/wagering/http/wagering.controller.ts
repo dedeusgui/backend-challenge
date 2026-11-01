@@ -18,11 +18,7 @@ import {
 import { CurrentPrincipal, requireProviderScope } from '../../auth/http/access';
 import { canOperateFor, type Principal } from '../../auth/domain/principal';
 import { TransactionNotFoundError } from '../../../shared/application/application-errors';
-
-/** The subset of the Express response this controller needs. Keeps the controller independent of Express types. */
-interface StatusSetter {
-  status(code: number): unknown;
-}
+import type { StatusSetter } from '../../../shared/http/status-setter';
 
 @Controller('wagering/transactions')
 export class WageringController {

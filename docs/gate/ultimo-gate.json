@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-01T22:17:42.145Z",
+  "recordedAt": "2026-11-01T22:26:40.041Z",
   "exitCode": 0,
   "passed": true,
   "suites": [
@@ -20,9 +20,9 @@
     {
       "key": "integration",
       "name": "Integração",
-      "passed": 247,
+      "passed": 248,
       "failed": 0,
-      "total": 247
+      "total": 248
     },
     {
       "key": "concurrency",
@@ -34,9 +34,9 @@
     {
       "key": "e2e",
       "name": "E2E",
-      "passed": 101,
+      "passed": 104,
       "failed": 0,
-      "total": 101
+      "total": 104
     },
     {
       "key": "features",

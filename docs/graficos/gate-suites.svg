@@ -10,14 +10,14 @@
 <rect x="210" y="146" width="3" height="16" fill="#3973a5"/>
 <text x="219.0" y="158.0" text-anchor="start" font-size="11" fill="#1d1f1c">4 passou · 0 falhou</text>
 <text x="24.0" y="200.0" text-anchor="start" font-size="12" fill="#1d1f1c">Integração</text>
-<rect x="210" y="188" width="185.25" height="16" fill="#3973a5"/>
-<text x="401.3" y="200.0" text-anchor="start" font-size="11" fill="#1d1f1c">247 passou · 0 falhou</text>
+<rect x="210" y="188" width="186" height="16" fill="#3973a5"/>
+<text x="402.0" y="200.0" text-anchor="start" font-size="11" fill="#1d1f1c">248 passou · 0 falhou</text>
 <text x="24.0" y="242.0" text-anchor="start" font-size="12" fill="#1d1f1c">Concorrência</text>
 <rect x="210" y="230" width="17.25" height="16" fill="#3973a5"/>
 <text x="233.3" y="242.0" text-anchor="start" font-size="11" fill="#1d1f1c">23 passou · 0 falhou</text>
 <text x="24.0" y="284.0" text-anchor="start" font-size="12" fill="#1d1f1c">E2E</text>
-<rect x="210" y="272" width="75.75" height="16" fill="#3973a5"/>
-<text x="291.8" y="284.0" text-anchor="start" font-size="11" fill="#1d1f1c">101 passou · 0 falhou</text>
+<rect x="210" y="272" width="78" height="16" fill="#3973a5"/>
+<text x="294.0" y="284.0" text-anchor="start" font-size="11" fill="#1d1f1c">104 passou · 0 falhou</text>
 <text x="24.0" y="326.0" text-anchor="start" font-size="12" fill="#1d1f1c">Cenários Gherkin</text>
 <rect x="210" y="314" width="54.75" height="16" fill="#3973a5"/>
 <text x="270.8" y="326.0" text-anchor="start" font-size="11" fill="#1d1f1c">73 cenários · 365 passos</text>

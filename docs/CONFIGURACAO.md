@@ -1,4 +1,4 @@
-Gerado por scripts/build-catalogos.ts a partir do commit d2bb451. Não edite à mão; rode `bun run docs:catalogos`.
+Gerado por scripts/build-catalogos.ts a partir do commit bffe108. Não edite à mão; rode `bun run docs:catalogos`.
 
 # Catálogo de configuração
 

@@ -1,23 +1,23 @@
-Gerado por scripts/build-catalogos.ts a partir do commit d2bb451. Não edite à mão; rode `bun run docs:catalogos`.
+Gerado por scripts/build-catalogos.ts a partir do commit bffe108. Não edite à mão; rode `bun run docs:catalogos`.
 
 # Histórico de desenvolvimento
 
 Cada fatia é um commit de implementação com seu teste; os commits de documentação seguem o mesmo ciclo.
 
-Histórico com 105 commits desde o commit base `f12191b` até `d2bb451`. Origem: `git log --reverse f12191b..HEAD`.
+Histórico com 108 commits desde o commit base `f12191b` até `bffe108`. Origem: `git log --reverse f12191b..HEAD`.
 
 ## Resumo por tipo
 
 | Tipo     | Quantidade |
 | :------- | ---------: |
 | chore    |          1 |
-| docs     |         42 |
+| docs     |         43 |
 | feat     |         12 |
 | fix      |         22 |
 | merge    |          2 |
 | perf     |          1 |
 | refactor |         11 |
-| test     |         14 |
+| test     |         16 |
 
 ## Commits por tipo
 
@@ -27,7 +27,7 @@ Histórico com 105 commits desde o commit base `f12191b` até `d2bb451`. Origem:
 | :--------- | :-------- | :------ | :-------------------------------------------------------------------- |
 | 2026-11-01 | `f8e9c27` | scripts | chore(scripts): expor docs:catalogos, graficos:build e gate:registrar |
 
-### docs (42 commits)
+### docs (43 commits)
 
 | Data       | Hash      | Escopo       | Assunto                                                                                                 |
 | :--------- | :-------- | :----------- | :------------------------------------------------------------------------------------------------------ |
@@ -73,6 +73,7 @@ Histórico com 105 commits desde o commit base `f12191b` até `d2bb451`. Origem:
 | 2026-11-01 | `b389331` | audit        | docs(audit): cobertura dos casos de borda sem tag Gherkin                                               |
 | 2026-11-01 | `2170f16` | matrix       | docs(matrix): linhas desta rodada, com status pela suíte do gate                                        |
 | 2026-11-01 | `37efb09` | readme       | docs(readme): rotas de saúde explícitas e título da primeira seção sem promessa de tempo                |
+| 2026-11-01 | `750bfd6` | gate         | docs(gate): registro do gate final e hash auditada d2bb451                                              |
 
 ### feat (12 commits)
 
@@ -147,24 +148,26 @@ Histórico com 105 commits desde o commit base `f12191b` até `d2bb451`. Origem:
 | 2026-11-01 | `b57d8f6` | -             | refactor: remover else em src                                                                 |
 | 2026-11-01 | `8e720e7` | persistence   | refactor(persistence): trocar casts por estreitamento de unknown                              |
 
-### test (14 commits)
+### test (16 commits)
 
-| Data       | Hash      | Escopo    | Assunto                                                                                                    |
-| :--------- | :-------- | :-------- | :--------------------------------------------------------------------------------------------------------- |
-| 2026-10-31 | `12bb1c4` | messaging | test(messaging): show the arrival order of a refused event within one wallet, and document the guarantee   |
-| 2026-11-01 | `076389b` | model     | test(model): seeded random sequences through the real use cases, serial and with four applications at once |
-| 2026-11-01 | `821039d` | model     | test(model): rename a parameter that shadowed the count helper                                             |
-| 2026-11-01 | `71e245a` | -         | test: cover the failure branches of configuration, validation, events, adapters and health                 |
-| 2026-11-01 | `8313b8c` | messaging | test(messaging): correct the comment on the backoff clock                                                  |
-| 2026-11-01 | `9a262ee` | load      | test(load): set process counts per run and read affinity at the end                                        |
-| 2026-11-01 | `3620d74` | features  | test(features): executar Gherkin sob Bun com cucumber-js                                                   |
-| 2026-11-01 | `fbe9f2b` | ledger    | test(ledger): alinhar fixtures ao invariante do banco                                                      |
-| 2026-11-01 | `ae67f99` | messaging | test(messaging): alinhar fixtures de carteira ao invariante do ledger                                      |
-| 2026-11-01 | `827fb9a` | e2e       | test(e2e): injetar divergência fora da aplicação com o trigger desligado                                   |
-| 2026-11-01 | `d56594c` | ledger    | test(ledger): alinhar fixtures de referência à FK composta                                                 |
-| 2026-11-01 | `c8320ea` | features  | test(features): alinhar cenários Gherkin ao trigger de saldo e corrigir ordem instável                     |
-| 2026-11-01 | `3a84061` | e2e       | test(e2e): readiness com PostgreSQL fora do ar responde 503                                                |
-| 2026-11-01 | `7db9885` | docs      | test(docs): o teste de gráficos não regrava o gate versionado nem lê caminho local                         |
+| Data       | Hash      | Escopo        | Assunto                                                                                                    |
+| :--------- | :-------- | :------------ | :--------------------------------------------------------------------------------------------------------- |
+| 2026-10-31 | `12bb1c4` | messaging     | test(messaging): show the arrival order of a refused event within one wallet, and document the guarantee   |
+| 2026-11-01 | `076389b` | model         | test(model): seeded random sequences through the real use cases, serial and with four applications at once |
+| 2026-11-01 | `821039d` | model         | test(model): rename a parameter that shadowed the count helper                                             |
+| 2026-11-01 | `71e245a` | -             | test: cover the failure branches of configuration, validation, events, adapters and health                 |
+| 2026-11-01 | `8313b8c` | messaging     | test(messaging): correct the comment on the backoff clock                                                  |
+| 2026-11-01 | `9a262ee` | load          | test(load): set process counts per run and read affinity at the end                                        |
+| 2026-11-01 | `3620d74` | features      | test(features): executar Gherkin sob Bun com cucumber-js                                                   |
+| 2026-11-01 | `fbe9f2b` | ledger        | test(ledger): alinhar fixtures ao invariante do banco                                                      |
+| 2026-11-01 | `ae67f99` | messaging     | test(messaging): alinhar fixtures de carteira ao invariante do ledger                                      |
+| 2026-11-01 | `827fb9a` | e2e           | test(e2e): injetar divergência fora da aplicação com o trigger desligado                                   |
+| 2026-11-01 | `d56594c` | ledger        | test(ledger): alinhar fixtures de referência à FK composta                                                 |
+| 2026-11-01 | `c8320ea` | features      | test(features): alinhar cenários Gherkin ao trigger de saldo e corrigir ordem instável                     |
+| 2026-11-01 | `3a84061` | e2e           | test(e2e): readiness com PostgreSQL fora do ar responde 503                                                |
+| 2026-11-01 | `7db9885` | docs          | test(docs): o teste de gráficos não regrava o gate versionado nem lê caminho local                         |
+| 2026-11-01 | `4275a9f` | observability | test(observability): rota /metrics/prometheus com teste HTTP                                               |
+| 2026-11-01 | `bffe108` | wagering      | test(wagering): ROLLBACK retido antes da referência é aplicado uma vez                                     |
 
 ## Todos os commits em ordem cronológica
 
@@ -275,3 +278,6 @@ Histórico com 105 commits desde o commit base `f12191b` até `d2bb451`. Origem:
 | 2026-11-01 | `2170f16` | docs     | matrix        | docs(matrix): linhas desta rodada, com status pela suíte do gate                                                    |
 | 2026-11-01 | `37efb09` | docs     | readme        | docs(readme): rotas de saúde explícitas e título da primeira seção sem promessa de tempo                            |
 | 2026-11-01 | `d2bb451` | feat     | site          | feat(site): benchmark local ao lado do de nuvem na vitrine                                                          |
+| 2026-11-01 | `750bfd6` | docs     | gate          | docs(gate): registro do gate final e hash auditada d2bb451                                                          |
+| 2026-11-01 | `4275a9f` | test     | observability | test(observability): rota /metrics/prometheus com teste HTTP                                                        |
+| 2026-11-01 | `bffe108` | test     | wagering      | test(wagering): ROLLBACK retido antes da referência é aplicado uma vez                                              |

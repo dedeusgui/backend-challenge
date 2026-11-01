@@ -8,9 +8,9 @@ Os dados brutos de execução não são versionados no repositório.
 
 ## 1. Código auditado
 
-- **Commit:** `d2bb451`
+- **Commit:** `bffe108`
 - **Comando de obtenção:** `git log -1 --format=%h -- src test`
-- **Data:** 2026-11-01 (19:12:37 -0300)
+- **Data:** 2026-11-01 (19:21:49 -0300)
 
 Commits posteriores a esse hash alteraram exclusivamente documentação e arquivos de catálogo.
 

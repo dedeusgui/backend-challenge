@@ -123,6 +123,7 @@ export class WagerCommandConsumer {
       await queue.acknowledge(message.receiptHandle);
       return true;
     }
+    this.metrics.increment('retries_total', { subsystem: 'command' });
     await queue.changeVisibility(message.receiptHandle, retryDelaySeconds(message.receiveCount));
     return false;
   }

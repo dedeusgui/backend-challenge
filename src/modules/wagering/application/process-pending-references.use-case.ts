@@ -87,6 +87,9 @@ export class ProcessPendingReferences {
       causationId: undefined,
     });
     this.metrics.increment('reference_resolutions_total', { status: outcome.transaction.status });
+    if (outcome.transaction.status === 'PENDING_REFERENCE') {
+      this.metrics.increment('retries_total', { subsystem: 'reference' });
+    }
     return 1;
   }
 

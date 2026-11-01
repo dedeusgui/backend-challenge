@@ -104,6 +104,7 @@ export class OutboxPublisher {
 
     for (const message of batch.filter((candidate) => failures.has(candidate.id))) {
       this.metrics.increment('outbox_publish_failures_total');
+      this.metrics.increment('retries_total', { subsystem: 'outbox' });
       this.logger({
         operation: 'outbox.publish',
         status: 'failed',

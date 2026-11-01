@@ -81,6 +81,19 @@ describe('docs/openapi.json is a sound OpenAPI 3.1 document', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  test('every operation has a summary and description, and every response has a description', async () => {
+    const document = await loadOpenApi();
+    for (const operations of Object.values(document.paths)) {
+      for (const operation of Object.values(operations)) {
+        expect(operation.summary.trim().length).toBeGreaterThan(0);
+        expect(operation.description.trim().length).toBeGreaterThan(0);
+        for (const response of Object.values(operation.responses)) {
+          expect(response.description.trim().length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
   test('every $ref resolves to a component schema', async () => {
     const document = await loadOpenApi();
     const text = JSON.stringify(document);

@@ -115,7 +115,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "description": "Verifica a conectividade com PostgreSQL e SQS, usada para readiness do processo."
       }
     },
     "/wallets": {
@@ -1001,7 +1002,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "description": "Consulta uma transação pelo identificador externo do provedor autenticado ou autorizado."
       }
     },
     "/metrics": {

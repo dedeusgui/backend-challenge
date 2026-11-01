@@ -23,6 +23,7 @@ import type { ApplicationContext } from './shared/application/application-contex
 import { DatabaseLifecycle, ORM, ormProvider } from './shared/infrastructure/database/orm.provider';
 import { MikroOrmFinancialUnitOfWork } from './shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { HttpErrorFilter } from './shared/http/http-error.filter';
+import { OpenApiController } from './shared/http/openapi.controller';
 import { OpenWallet } from './modules/wallet/application/open-wallet.use-case';
 import { WalletController } from './modules/wallet/http/wallet.controller';
 import { ProcessWagerTransaction } from './modules/wagering/application/process-wager-transaction.use-case';
@@ -53,6 +54,7 @@ export class AppModule {
         WageringController,
         ProvidersController,
         MetricsController,
+        OpenApiController,
       ],
       providers: [
         { provide: METRICS_REGISTRY, useValue: metrics },

@@ -7,8 +7,13 @@ export const OPENAPI_PATH = fileURLToPath(new URL('../../docs/openapi.json', imp
 
 export interface OperationSpec {
   operationId: string;
+  summary: string;
+  description: string;
   tags: string[];
-  responses: Record<string, { content?: Record<string, { schema?: unknown }> }>;
+  responses: Record<
+    string,
+    { description: string; content?: Record<string, { schema?: unknown }> }
+  >;
   parameters?: Array<{ name: string; in: string }>;
 }
 
@@ -51,6 +56,8 @@ function asOperation(method: string, value: unknown): OperationSpec {
   if (
     !isObject(value) ||
     typeof value.operationId !== 'string' ||
+    typeof value.summary !== 'string' ||
+    typeof value.description !== 'string' ||
     !Array.isArray(value.tags) ||
     !isObject(value.responses)
   ) {
@@ -68,6 +75,8 @@ function asOperation(method: string, value: unknown): OperationSpec {
     : undefined;
   return {
     operationId: value.operationId,
+    summary: value.summary,
+    description: value.description,
     tags,
     responses: asResponses(value.responses),
     parameters,
@@ -77,12 +86,15 @@ function asOperation(method: string, value: unknown): OperationSpec {
 function asResponses(value: Record<string, unknown>): OperationSpec['responses'] {
   return Object.fromEntries(
     Object.entries(value).map(([status, response]) => {
-      const content = isObject(response) && isObject(response.content) ? response.content : {};
+      if (!isObject(response) || typeof response.description !== 'string') {
+        throw new Error(`Response ${status} has no description`);
+      }
+      const content = isObject(response.content) ? response.content : {};
       const narrowed: Record<string, { schema?: unknown }> = {};
       for (const [media, entry] of Object.entries(content)) {
         narrowed[media] = { schema: isObject(entry) ? entry.schema : undefined };
       }
-      return [status, { content: narrowed }];
+      return [status, { description: response.description, content: narrowed }];
     }),
   );
 }

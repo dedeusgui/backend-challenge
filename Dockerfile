@@ -7,6 +7,7 @@ RUN bun install --frozen-lockfile --production
 
 COPY tsconfig.json bunfig.toml ./
 COPY src ./src
+COPY docs/openapi.json ./docs/openapi.json
 
 # The process needs no root: it reads the code and talks to the network only.
 USER bun

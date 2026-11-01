@@ -1,107 +1,170 @@
 # Auditoria final
 
-Resumo da auditoria da entrega: o que foi verificado e com que comando, a situação de cada item da matriz de riscos
-desta rodada, o que está aberto e o que depende do dono do desafio. Os detalhes estão nos documentos linkados.
+> Versão principal em português. A cópia de referência em inglês é [AUDITORIA_FINAL.en.md](AUDITORIA_FINAL.en.md).
 
-**Código auditado:** `2e55a9c`. Depois dele, a rodada final mudou só documentação e o texto gerado do relatório de
-carga da nuvem (`test/load/report.ts`).
+Registro final da auditoria da entrega: código auditado, métodos de verificação, estado de cada item da barra de avaliação, situação dos achados, decisões que dependem do dono do desafio, lacunas não cobertas e revisões simuladas.
 
-## 1. Como foi verificado
+Os dados brutos de execução não são versionados no repositório.
 
-| Verificação                   | Como                                                     | Resultado                                                                                                           |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Gate completo                 | `bun run check:all`                                      | 484 unitários, 4 de infraestrutura, 235 de integração, 23 de concorrência e 100 e2e, sem falhas                     |
-| Carga local, 13 cenários      | `bun run test:load` e `bun run load:consolidate`         | Zero requisições perdidas, incorretas e violações no passo acordado: [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md) |
-| Carga na nuvem, 1, 2 e 4 CPUs | registros de execução do commit `b34c198`                | Taxas acordadas de 100, 200 e 400 req/s: [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)                               |
-| Alternativas consideradas     | decisões frente a alternativas, sem comparação detalhada | [README, seção Alternativas consideradas](../README.md#alternativas-consideradas)                                   |
-| Auditoria adversarial         | casos de borda, experimentos e defeitos                  | [audit/](audit/README.md): 15 achados, F-01 a F-15                                                                  |
-| Vitrine publicada             | `GET https://dedeusgui.github.io/backend-challenge/`     | HTTP 200, em 2026-11-01                                                                                             |
+## 1. Código auditado
 
-A CI do GitHub também roda o gate no commit `af998ff`: 362 unitários, 4 de infraestrutura, 151 de integração, 23 de
-concorrência e 100 e2e, com a imagem construída pelo próprio GitHub. A sandbox não consegue construir a imagem.
+- **Commit:** `c151cd7`
+- **Comando de obtenção:** `git log -1 --format=%h -- src test`
+- **Data:** 2026-11-01 (18:07:27 -0300)
 
-## 2. Situação dos itens da matriz de riscos
+Commits posteriores a esse hash alteraram exclusivamente documentação e arquivos de catálogo.
 
-A matriz de riscos desta rodada tinha 15 itens. A situação de cada um, hoje:
+## 2. Como foi verificado
 
-| #   | Item                                                     | Situação                                                                                                                            | Prova                                                                                        |
-| --- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 1   | Financeiro: saldo, ledger, reversões, idempotência       | Validado pelas suítes. Não houve revisão independente por pessoa de fora                                                            | `check:all`; [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md)                                |
-| 2   | Portas publicadas do Compose                             | Validado: todas as portas publicadas ligam em `127.0.0.1`, e o modo protegido não publica a API                                     | `test/infra`; INF-01 a INF-03                                                                |
-| 3   | Esquema `Bearer` sem diferenciar maiúsculas              | Validado                                                                                                                            | AUTH-06                                                                                      |
-| 4   | Transação de outro provedor, `403` ou `404`              | Corrigido em `154b52a`: `404` para ambos. A troca de contrato aguarda o dono (F-03)                                                 | `test/e2e/authorization-adversarial.test.ts`                                                 |
-| 5   | Autorização de carteira, ledger, reconciliação, métricas | Validado                                                                                                                            | AUTH-06                                                                                      |
-| 6   | Ordem de envio no outbox com lote parcialmente recusado  | Validado. Garantia: o consumidor ordena por `walletVersion`, não por FIFO. Ver [ARCHITECTURE.md §8](../ARCHITECTURE.md)             | `test/integration/messaging/partial-batch-order.test.ts`                                     |
-| 7   | Métricas do worker só ao encerrar                        | Corrigido em `ebb3e84`: o worker expõe `/metrics` e a saúde numa porta interna, não publicada                                       | `test/unit/worker/worker-http.test.ts`, `test/concurrency/worker-metrics-live.test.ts`       |
-| 8   | Imagem Docker como `root`                                | Corrigido em `a03d8de`: a imagem roda como `bun`. O build foi verificado no CI, não na sandbox                                      | Execução `41251559996`                                                                       |
-| 9   | Documentação em português                                | Validado. O português é a versão principal; o inglês é a referência                                                                 | `README.md`, `README.en.md`                                                                  |
-| 10  | Contrato OpenAPI                                         | Validado: `docs/openapi.json` é conferido contra as rotas e contra as respostas reais                                               | `test/unit/openapi/openapi-contract.test.ts`, `test/e2e/openapi-responses.test.ts`           |
-| 11  | Alternativas consideradas                                | Decisões frente a alternativas, na seção [Alternativas consideradas](../README.md#alternativas-consideradas) e nos ADRs 0002 e 0007 | Registro de decisões                                                                         |
-| 12  | Benchmarks, soak e backlog                               | **Parcial.** Campanhas local (13 cenários) e na nuvem (1, 2 e 4 CPUs) feitas. Soak de 15 a 30 minutos e teste de backlog não        | [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md), [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md) |
-| 13  | Console de engenharia e laboratório de carga             | Não construído, pelo motivo da seção 5                                                                                              | —                                                                                            |
-| 14  | Prometheus e Grafana                                     | Não construídos, pelo motivo da seção 5                                                                                             | —                                                                                            |
-| 15  | Vitrine estática pública                                 | Publicada: a URL responde HTTP 200 (verificado em 2026-11-01)                                                                       | `test/unit/site/static-showcase.test.ts`, GitHub Pages                                       |
+| Verificação                     | Comando                                                              | Resultado                                                                                                                                                                                                                        |
+| :------------------------------ | :------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gate de validação               | `bun run check:all`                                                  | Registrado em `docs/gate/ultimo-gate.json` (2026-11-01T20:40:46.191Z, exitCode 0). 937 testes sem falhas: 490 unitários, 4 de infraestrutura, 247 de integração, 23 de concorrência, 100 e2e e 73 cenários Gherkin (365 passos). |
+| Verificação estática e unitária | `bun run check:fast`                                                 | Sucesso em 512 testes unitários (0 falhas), `tsc --noEmit` sem erros, `oxlint` sem avisos em 256 arquivos e `prettier --check` aprovado.                                                                                         |
+| Carga e capacidade              | `bun run test:load`                                                  | Benchmarks registrados em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md) (medição na nuvem em 1, 2 e 4 CPUs com 100, 200 e 400 req/s) e em [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md) (medição local com 13 cenários).         |
+| Demonstração financeira         | `bun run demo:finance`                                               | ExitCode 0 contra a pilha de contêineres: validação de BET, WIN, REFUND, ROLLBACK, replay e reconciliação.                                                                                                                       |
+| Contrato da API HTTP            | `bun test test/unit/openapi/` e `test/e2e/openapi-responses.test.ts` | Rotas, esquemas e respostas reais validados contra `docs/openapi.json`.                                                                                                                                                          |
+| Vitrine estática                | `bun test test/unit/site/static-showcase.test.ts`                    | Geração estática validada, publicada e com resposta HTTP 200 via GitHub Pages.                                                                                                                                                   |
 
-## 3. Achados da auditoria adversarial
+## 3. Estado de cada item da barra (docs/CHALLENGE.md §14)
 
-A rodada em [audit/](audit/README.md) encontrou 15 achados. O estado de cada um está em
-[audit/FINDINGS.md](audit/FINDINGS.md). Resumo:
+Estimativas citadas da barra da revisão simulada registrada em [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
 
-- **Corrigidos, ou endurecidos sem reprodução (10):** F-01, F-02, F-03 (com a troca de contrato pendente), F-04, F-05,
-  F-07, F-08, F-13 (com confirmação pendente), F-14 e F-15.
-- **Aberto, com decisão proposta (1):** F-06, a concordância entre saldo e ledger não é garantida pelo esquema.
-- **Documentado ou monitorado (2):** F-09 (plano de consulta do ledger, a acompanhar com `EXPLAIN`) e F-11 (resultado
-  sem referência).
-- **Contornado para a demonstração (1):** F-12, a imagem Docker não constrói na sandbox.
-- **Comportamento fixado em teste, aguardando o dono (1):** F-10, o `ROLLBACK` do BET depois do `ROLLBACK` do REFUND.
+### 3.1 Correção financeira
 
-## 4. Decisões que dependem do dono do desafio
+- **Pontos da barra:** 20 pontos no enunciado (§14). Meta estimada na revisão simulada: 19 pontos.
+- **Evidência:** `src/shared/domain/money.ts` e `test/unit/shared/domain/money.test.ts` (tipo `Money` com precisão decimal exata, sem uso de `number`); `src/shared/infrastructure/database/migrations/Migration20261101000012.ts` (gatilhos `wallets_ledger_balance_check` e `wallet_ledger_entries_balance_check` que recusam no `COMMIT` qualquer divergência entre saldo e ledger); `test/integration/persistence/wallet-persistence.test.ts` e `test/integration/schema/schema-constraints.test.ts` (ledger append-only, recusa `UPDATE`, `DELETE` e `TRUNCATE`); `test/e2e/queries-http.test.ts` (reconciliação entre saldo da carteira e soma dos lançamentos do ledger); `test/concurrency/hot-wallet.test.ts` e `test/unit/wagering/domain/wager-lifecycle.test.ts` (uma reversão por referência, sem crédito duplicado).
+- **Lacuna conhecida:** Decisões D1 e D2 abertas. Pela especificação (§6.3), WIN e LOSS podem omitir a referência à BET, impedindo vincular a aposta ou barrar novo resultado. O ROLLBACK de uma BET devolve a aposta mantendo o ganho creditado por um WIN prévio. Ausência de testes baseados em propriedades com `fast-check`.
 
-Cada item é uma escolha de contrato, não um defeito de implementação. O código segue a proposta até a confirmação.
+### 3.2 Concorrência
 
-- **F-03:** a transação de outro provedor responde `404`, igual à inexistente. Aplicado; confirmar.
-- **F-06:** aceitar que escritas diretas no banco contornem a concordância entre saldo e ledger, ou criar uma
-  verificação no esquema. Aberto.
-- **F-10:** recusar o `ROLLBACK` do BET depois do `ROLLBACK` do REFUND. Fixado em teste; confirmar.
-- **F-13:** a retenção com falha permanente vira `FAILED`, anunciada, sem travar as demais. Confirmar.
-- **D1 a D5:** interpretações do enunciado, em [INVARIANT_REVIEW.md](INVARIANT_REVIEW.md) e
-  [ARCHITECTURE.md §13](../ARCHITECTURE.md).
+- **Pontos da barra:** 20 pontos no enunciado (§14). Meta estimada na revisão simulada: 19 pontos.
+- **Evidência:** `test/concurrency/hot-wallet.test.ts` (50 requisições simultâneas na mesma carteira sob lock pessimista `SELECT FOR UPDATE`, saldo final exato sem saldo negativo); `test/concurrency/three-processes.test.ts` (50 requisições simultâneas distribuídas em 3 processos aplicam o débito uma única vez); `test/concurrency/distributed-contention.test.ts` (dois workers concorrentes com `SIGKILL` em um deles); `test/integration/persistence/wallet-persistence.test.ts` (recusa de escrita quando a versão esperada está desatualizada).
+- **Lacuna conhecida:** O mutante M3 sobreviveu em `test/concurrency/distributed-contention.test.ts` (a cláusula `SKIP LOCKED` no outbox é equivalente quanto à integridade funcional, mas nenhum teste afere tempos de espera de lock). Queda forçada (`SIGKILL`) de processo da API HTTP durante uma transação ativa não é testada em nível de processo de sistema operacional.
 
-## 5. Pendências reais e o que ficou de fora
+### 3.3 Idempotência
 
-**Pendências:**
+- **Pontos da barra:** 15 pontos no enunciado (§14). Meta estimada na revisão simulada: 14 pontos.
+- **Evidência:** Restrição única `UNIQUE (provider_id, idempotency_key)` no banco de dados; `test/integration/wagering/process-wager-transaction.test.ts` (requisição repetida retorna replay do resultado original e saldo observado); `test/integration/messaging/http-and-queue-replay.test.ts` (mesmo comando recebido por HTTP e por SQS, em ambas as ordens, aplica apenas uma vez); `test/integration/messaging/inbox-message-identity.test.ts` (`wagerMessageFingerprint` recusa carga divergente com `MESSAGE_PAYLOAD_CONFLICT`).
+- **Lacuna conhecida:** Mensagens legadas persistidas antes da introdução da impressão digital mantêm apenas o hash de negócio, permitindo reutilização da mesma mensagem com chave de idempotência alterada (janela restrita aos registros legados, F-02).
 
-- Soak de 15 a 30 minutos e teste de backlog de carga: não feitos.
-- Campanha no código final: a nuvem foi medida no código de `b34c198`, e a local no código atual. Não há
-  campanha de nuvem no código final.
-- Revisão adversarial por pessoa de fora: não feita. A rodada de [audit/](audit/README.md) foi conduzida pela própria
-  sessão de desenvolvimento.
-- Construção da imagem a partir do repositório: só no CI (`af998ff`), não na sandbox.
+### 3.4 Mensageria e falhas
 
-**Fora do escopo, com motivo:**
+- **Pontos da barra:** 15 pontos no enunciado (§14). Meta estimada na revisão simulada: 14 pontos.
+- **Evidência:** Gravação transacional da outbox na mesma transação financeira (`test/integration/messaging/wager-command-consumer.test.ts`); lease e reagendamento do outbox decididos por `now()` do banco (`test/integration/messaging/outbox-lease-clock.test.ts` e `test/integration/messaging/outbox-retry-clock.test.ts`); validação estrutural do envelope na tabela do outbox (`test/integration/messaging/outbox-malformed-row.test.ts`, F-01); renovação de visibilidade durante lotes e mensagens demoradas (`test/integration/messaging/visibility-during-batch.test.ts` e `test/integration/messaging/slow-message-hold.test.ts`, F-04 e F-14); recuperação de crash e desligamento com `SIGTERM` (`test/concurrency/process-crash-and-shutdown.test.ts` e `test/concurrency/three-processes.test.ts`); classificação de erros transitórios versus permanentes para DLQ em `test/unit/wagering/domain/events-and-classification.test.ts`.
+- **Lacuna conhecida:** A renovação periódica de visibilidade possui teto de 300 s (`holdLimitSeconds`). Comandos mais lentos que esse limite podem ser reentregues a outro consumidor em duplicidade (o efeito financeiro permanece protegido pela idempotência). O custo computacional de chamadas extras ao SQS não foi medido.
 
-- **Console de engenharia e laboratório de carga.** Dependem de telemetria em operação. O worker expõe agora seus
-  contadores, mas ainda não há coleta por instância validada; um console mostraria pouco.
-- **Prometheus e Grafana.** Mesmo motivo. O §12 do enunciado pede métricas de transações por status, duplicatas,
-  retries, DLQ, conflitos de lock, outbox lag e latência. O código emite todas elas em `/metrics`, por processo e sem
-  agregação: `transactions_total`, `idempotent_replays_total`, `commands_total` (com `RETRY` e `DEAD`),
-  `concurrency_conflicts_total`, `wallet_lock_wait_ms`, `outbox_lag_seconds` e `processing_latency_ms`. Um painel que
-  agregue os processos é o passo seguinte, e não é exigido.
-- **`fast-check`.** A biblioteca não traria prova além das suítes existentes, que comparam com um modelo de
-  referência.
+### 3.5 Modelagem e arquitetura
 
-A próxima rodada é de qualidade de código, conforme combinado com o dono.
+- **Pontos da barra:** 10 pontos no enunciado (§14). Meta estimada na revisão simulada: 9 pontos.
+- **Evidência:** Mapeamento de fluxos em `ARCHITECTURE.md` §1; portas desacopladas em `src/wagering/application/ports/` e `src/shared/application/ports/`; separação em `messaging/application/inbound/` e `messaging/application/outbound/`; invariantes financeiras encapsuladas nas entidades e em `src/wagering/domain/transaction-settlement.ts`; teste de fronteiras em `test/unit/architecture/domain-boundaries.test.ts` (domínio sem dependências de frameworks ou SDKs).
+- **Lacuna conhecida:** Alterações contratuais F-03 (retorno de 404 para transação de outro provedor) e F-13 (persistência de `FAILED` e emissão de `WagerTransactionFailed`) pendentes de validação pelo dono do desafio.
 
-## 6. Correções rastreáveis
+### 3.6 Testes
 
-| Commit    | O que corrigiu                                                                          | Prova                                                                 |
-| --------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `a34ff4d` | CI com checkout raso, que quebrava o teste da vitrine                                   | Clone raso reproduz a falha; a CI `41250517354` passa                 |
-| `f4e3dfe` | Respostas inesperadas não reprovavam um degrau de carga                                 | `test/unit/load/judgement.test.ts`; `historical-verdicts.test.ts`     |
-| `5f80bfb` | Auditoria de duplicatas com escopo errado, por `external_transaction_id` sozinho        | `test/integration/load/duplicate-audit.test.ts`                       |
-| `5cf454c` | Unidade do lag do outbox trocada, e fases fora do relatório                             | `test/unit/load/phases.test.ts`                                       |
-| `472f436` | Idioma de documentação apresentado como exigência, e limites antigos na matriz de carga | Linha 9 da matriz; `README.en.md`                                     |
-| `c115149` | Contagens da vitrine sem origem verificável                                             | `static-showcase.test.ts`: o link da execução de CI é checado         |
-| `154b52a` | `403` revelava a existência de transação de outro provedor                              | `test/e2e/authorization-adversarial.test.ts`                          |
-| `a03d8de` | Imagem da API rodando como `root`                                                       | Dockerfile com `USER bun`                                             |
-| `ebb3e84` | Métricas do worker só impressas ao encerrar                                             | Superfície interna do worker; `/metrics` na porta 3001, não publicada |
+- **Pontos da barra:** 10 pontos no enunciado (§14). Meta estimada na revisão simulada: 9 pontos.
+- **Evidência:** 937 testes sem mocks de PostgreSQL ou LocalStack nas suítes de integração, concorrência e e2e (`docs/gate/ultimo-gate.json`); 73 cenários Gherkin executáveis cobrindo 365 passos (`test/features/`); injeção de falhas com encerramento de processos reais via `SIGKILL` e `SIGTERM` (`test/concurrency/three-processes.test.ts` e `test/concurrency/process-crash-and-shutdown.test.ts`).
+- **Lacuna conhecida:** Dois cenários com tag `@bloqueado` em `test/features/mensageria.feature` não rodam no gate de features; 22 IDs da matriz `docs/audit/EDGE_CASE_MATRIX.md` não possuem a tag `@edge:` nos arquivos de feature; não há teste cobrindo ROLLBACK antes do BET com aplicação posterior (§13.7); sem testes contínuos de mutação no CI.
+
+### 3.7 Observabilidade
+
+- **Pontos da barra:** 5 pontos no enunciado (§14). Meta estimada na revisão simulada: 5 pontos.
+- **Evidência:** Logs estruturados em JSON sem dados confidenciais de payload ou valores monetários (`src/shared/observability/structured-log.ts`); rota `/metrics` no formato do Prometheus (`src/metrics/metrics.controller.ts`) com as métricas exigidas pela §12: `transactions_total`, `idempotent_replays_total`, `commands_total`, `retries_total`, `concurrency_conflicts_total`, `wallet_lock_wait_ms`, `outbox_lag_seconds` e `processing_latency_ms`; testes em `test/e2e/metrics-prometheus.test.ts` e `test/unit/metrics/metrics-collector.test.ts`; probes independentes `/health/liveness` e `/health/readiness` (`test/e2e/readiness.test.ts`).
+- **Lacuna conhecida:** As métricas são expostas por processo sem agregação externa. Prometheus e Grafana não foram incluídos no Compose por decisão de escopo.
+
+### 3.8 Documentação
+
+- **Pontos da barra:** 5 pontos no enunciado (§14). Meta estimada na revisão simulada: 5 pontos.
+- **Evidência:** `README.md` com instruções de execução, decisões, comandos e mapa do repositório; par em inglês `README.en.md`; `ARCHITECTURE.md` e `ARCHITECTURE.en.md` descrevendo arquitetura, concorrência, idempotência e limitações; catálogo consolidado em `DECISIONS.md` e `DECISIONS.en.md`; registros de decisão em `docs/adr/`; convenções em `docs/CONVENCOES_DOCUMENTACAO.md`; contrato OpenAPI servido em `/openapi.json` e documentação Swagger UI em `/docs`.
+- **Lacuna conhecida:** O documento [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md) é gerado exclusivamente em inglês pelo script `test/load/report.ts`.
+
+## 4. Achados
+
+Fonte: [FINDINGS.md](audit/FINDINGS.md). Total de 15 achados avaliados: 11 fechados no código e 4 abertos.
+
+### 4.1 Achados fechados no código (11)
+
+| ID   | Descrição                                                             | Status no código | Evidência de fechamento                                                                                                                                                                                   |
+| :--- | :-------------------------------------------------------------------- | :--------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-01 | Envelope malformado no outbox interrompia publicação do lote          | Fechado          | Commit `2905535` (migração 9 com restrição `CHECK outbox_envelope_shape`). Teste: `test/integration/messaging/outbox-malformed-row.test.ts`.                                                              |
+| F-02 | Mesmo `messageId` com `idempotencyKey` distinta aceito como duplicata | Fechado          | Commit `2ec4d5e` (inclusão da chave na impressão digital `wagerMessageFingerprint`). Teste: `test/integration/messaging/inbox-message-identity.test.ts`.                                                  |
+| F-03 | Resposta 403 para transação de outro provedor revelava sua existência | Fechado          | Commit `154b52a` (resposta 404 uniforme). Teste: `test/e2e/authorization-adversarial.test.ts`. Confirmação de contrato pendente do dono do desafio.                                                       |
+| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor    | Fechado          | Commit `b398e22` (chamada `ChangeMessageVisibilityBatch` antes de cada mensagem). Teste: `test/integration/messaging/visibility-during-batch.test.ts`.                                                    |
+| F-05 | Ganchos de falha de teste dentro do código de produção                | Fechado          | Commit `489df8b` (extração para `assembleWorker` e seams em `test/support/worker-seams.ts`). Suítes passam sem alteração de asserções.                                                                    |
+| F-06 | Concordância entre saldo e ledger não era garantida pelo esquema      | Fechado          | Migração 12 no commit `c5ddca9` (gatilhos `wallets_ledger_balance_check` e `wallet_ledger_entries_balance_check`). Teste: `test/integration/schema/ledger-agreement-trigger.test.ts`.                     |
+| F-07 | Lease do outbox comparava expiração com relógio local do chamador     | Fechado          | Commits `433ebe2` e `c952ba2` (posse e reagendamento via `now()` do banco). Testes: `test/integration/messaging/outbox-lease-clock.test.ts` e `test/integration/messaging/outbox-retry-clock.test.ts`.    |
+| F-08 | Resumo do ledger na reconciliação era lido fora da transação          | Fechado          | Commit `0f4fa19` (leitura via `em.execute` dentro da transação sob lock). Teste: `test/integration/schema/wallet-ledger-summary.test.ts`.                                                                 |
+| F-13 | Transação com falha permanente travava worker; `FAILED` sem caminho   | Fechado          | Commit `c8ffbcc` (registro de `FAILED` e evento `WagerTransactionFailed`). Teste: `test/integration/wagering/held-failure.test.ts`. Confirmação de contrato pendente do dono do desafio.                  |
+| F-14 | Mensagem com tempo maior que a janela de visibilidade era reentregue  | Fechado          | Commit `6b3b23e` (renovação a cada terço da janela até o limite de 300 s). Testes: `test/integration/messaging/slow-message-hold.test.ts` e `test/unit/messaging/application/wager-command-hold.test.ts`. |
+| F-15 | Worker decidia prazo de referência pelo próprio relógio               | Fechado          | Commit `fc3862c` (`DatabaseClock` lendo `now()` do banco na transação). Teste: `test/integration/wagering/database-clock-references.test.ts`.                                                             |
+
+A confirmação do fechamento de F-06 consta no histórico do arquivo da migração 12 (`git log --oneline -- src/shared/infrastructure/database/migrations/Migration20261101000012.ts`): commit `c5ddca9`.
+
+### 4.2 Achados abertos (4)
+
+| ID   | Descrição                                                          | Status | Detalhes                                                                                                                                                                                                          |
+| :--- | :----------------------------------------------------------------- | :----- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-09 | Plano de consulta do ledger depende das estatísticas do PostgreSQL | Aberto | Requer monitoramento com `EXPLAIN` em produção. Testes medidos: varredura em 1.000 lançamentos (0,68 ms), índice em 100.000 (0,44 ms) e 1.000.000 (0,50 ms).                                                      |
+| F-10 | `ROLLBACK` do BET após `ROLLBACK` do REFUND é recusado             | Aberto | Decisão de contrato (D4) pendente do dono do desafio. O código aplica a recusa com `REFERENCE_ALREADY_REVERSED`, fixada em teste.                                                                                 |
+| F-11 | Resultados sem referência não podem ser limitados a um por BET     | Aberto | Decisão de contrato (D1) decorrente da especificação (§6.3, §7). Documentado em `ARCHITECTURE.md` §13 e `docs/INVARIANT_REVIEW.md`.                                                                               |
+| F-12 | A imagem Docker do repositório não constrói no ambiente de sandbox | Aberto | O proxy TLS do sandbox emite certificado autoassinado (`SELF_SIGNED_CERT_IN_CHAIN`) no `bun install`. Contornado no sandbox por imagem externa de teste; o build foi verificado com sucesso no CI GitHub Actions. |
+
+## 5. Decisões do dono do desafio que continuam abertas
+
+Oito decisões permanecem abertas aguardando confirmação do dono do desafio. O código implementa a alternativa documentada em cada caso.
+
+- **F-03 (Status HTTP para transação de outro provedor):** Na rota `GET /wagering/transactions/:id`, transação de outro provedor responde `404 TRANSACTION_NOT_FOUND`, idêntico ao identificador inexistente, para evitar a sondagem de transações alheias. Pendente de decisão do dono do desafio: confirmar o status 404 uniforme ou reverter para 403.
+- **F-10 (ROLLBACK de BET após ROLLBACK de REFUND):** Quando um REFUND é desfeito por ROLLBACK, o posterior ROLLBACK da BET é recusado com `REFERENCE_ALREADY_REVERSED`. Pendente de decisão do dono do desafio: confirmar se uma referência admite no máximo uma reversão no total (evitando duplo retorno da aposta) ou se deve admitir reversões líquidas.
+- **F-13 (Caminho de execução para FAILED e novo evento):** Uma transação retida com erro irrecuperável é registrada como `FAILED` e anuncia o evento `WagerTransactionFailed` (evento não listado no enunciado §6.3). Pendente de decisão do dono do desafio: confirmar a persistência do status `FAILED` e a introdução desse evento.
+- **D1 (Resultados sem referência):** O enunciado (§6.3 e §7) permite que WIN e LOSS omitam a referência à aposta. Sem referência, o sistema não pode associar o resultado à BET nem barrar um REFUND posterior ou segundo resultado. Pendente de decisão do dono do desafio: aceitar o risco de duplicidade de resultado não vinculado ou exigir a referência à BET em todo resultado.
+- **D2 (ROLLBACK em qualquer estado da aposta):** O ROLLBACK é processado em qualquer estado da transação de origem, inclusive após um WIN processado, devolvendo a aposta enquanto o ganho permanece creditado. Pendente de decisão do dono do desafio: confirmar se o cancelamento da aposta pode manter o ganho ou se o ROLLBACK da BET com WIN prévio deve ser recusado até a reversão do WIN.
+- **D3 (REFUND apenas para BET sem resultado):** Um REFUND é aceito apenas se a aposta não possuir resultado processado (WIN ou LOSS). Havendo resultado, é recusado com `REFERENCE_ALREADY_SETTLED`. Pendente de decisão do dono do desafio: confirmar a restrição que obriga o provedor a reverter o resultado antes de pedir estorno.
+- **D4 (Uma reversão no máximo por referência):** O sistema restringe qualquer referência a no máximo uma reversão, seja ela REFUND ou ROLLBACK. A regra 4 do enunciado ("não pode ser revertida duas vezes pelo mesmo tipo de operação"), se aplicada literalmente, permitiria um REFUND e depois um ROLLBACK na mesma aposta, creditando o valor duas vezes. Pendente de decisão do dono do desafio: confirmar a restrição contra crédito duplicado.
+- **D5 (Autenticação por chave de API estática):** Implementação via chaves estáticas com escopo por provedor e papéis (`operator` e `provider`), conforme ADR 0007, em vez de um provedor de identidade externo (IdP) mencionado no enunciado (§2). Pendente de decisão do dono do desafio: confirmar a simplificação de autenticação adotada para o escopo do projeto.
+
+## 6. Lacunas que a prova não cobre
+
+Limitações técnicas da suíte de testes e das medições realizadas:
+
+- **§13.7 (ROLLBACK antes da referência):** Para a chegada de REFUND antes do BET, existe teste automatizado em `test/integration/wagering/pending-reference.test.ts`. Para a chegada de ROLLBACK antes do BET com posterior liquidação bem-sucedida após a chegada da aposta, não existe teste no repositório. O teste existente em `test/integration/wagering/database-clock-references.test.ts` (linhas 158 a 191) cobre apenas a retenção e a rejeição após o esgotamento de tentativas.
+- **Cenários Gherkin com tag `@bloqueado`:** O comando `grep -c "@bloqueado" test/features/*.feature` registra 2 cenários no arquivo `test/features/mensageria.feature`:
+  1. Linha 71: "Uma mensagem que falha em dez entregas vai para a DLQ pelo redrive" (`@edge:QU-04`). Motivo: o harness BDD isolado não recebe a política de redrive do SQS. A cobertura real é provada em `test/integration/messaging/broker-redrive.test.ts`.
+  2. Linha 91: "SIGTERM durante um lote conclui o item atual e devolve o restante" (`@edge:QU-07`). Motivo: o harness BDD não controla processos do sistema operacional. A cobertura real é provada em `test/concurrency/process-crash-and-shutdown.test.ts`.
+- **Identificadores da matriz de borda sem tag `@edge:`:** A matriz [EDGE_CASE_MATRIX.md](audit/EDGE_CASE_MATRIX.md) define 92 identificadores. Nos arquivos `test/features/*.feature`, 70 identificadores possuem a marcação `@edge:`. Os 22 identificadores sem a tag são: `CF-01`, `CL-01`, `DB-01`, `DB-02`, `DB-03`, `DB-04`, `DB-05`, `EV-01`, `FA-01`, `LC-01`, `LC-02`, `LC-03`, `RS-01`, `RS-02`, `SC-01`, `SC-02`, `SC-03`, `SC-04`, `SC-05`, `SC-06`, `SC-07` e `VW-01`. Cada um desses casos é testado por suítes unitárias, de integração ou de concorrência, mas não foi estruturado em formato Gherkin.
+- **Ambientes de medição de carga:** A linha de base da nuvem ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) foi medida em máquina virtual por um agente. A linha de base local ([LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md)) foi medida em outra máquina física. As medições foram realizadas em ambientes computacionais distintos com hardwares diferentes. Não compare uma medição com a outra.
+- **Testes de mutação:** Resultados dos mutantes avaliados contra `test/concurrency/distributed-contention.test.ts` (registrados em [TEST_STRATEGY.md](TEST_STRATEGY.md), seção "Evidência de mutação"):
+  - Mutante M1 (remoção do lock pessimista `FOR UPDATE` em `findForUpdate`): Eliminado. O teste sem retentativas falhou com três disputas perdidas.
+  - Mutante M2 (remoção da guarda de reversão única em `TransactionSettlement`): Eliminado. Os testes de reembolso com rollbacks e o teste sem retentativas falharam.
+  - Mutante M3 (remoção da cláusula `SKIP LOCKED` na busca do outbox): Sobreviveu. O mutante é equivalente em termos de segurança, pois o segundo publicador aguarda o lock e reavalia a condição de lease sem gerar duplicatas. Nenhum teste mede tempos de espera, constituindo lacuna conhecida.
+  - Mutante M4 (remoção da verificação de lease expirado no outbox): Eliminado. O teste com dois publicadores falhou com 61 reivindicações duplicadas.
+
+## 7. Revisões simuladas
+
+Histórico das revisões simuladas com notas estimadas internas (não constituem nota da banca avaliadora):
+
+### 7.1 Rodada 1 (Revisão de Invariantes e Auditoria Adversarial)
+
+- **Nota estimada:** 80/100 na revisão de invariantes ([INVARIANT_REVIEW.md](INVARIANT_REVIEW.md)) e 85/100 na auditoria adversarial ([FINDINGS.md](audit/FINDINGS.md)), ambas marcadas como estimativa interna.
+- **Achados de maior severidade e correções:**
+  - Duplo crédito em apostas com múltiplos WINs ou REFUND após resultado: corrigido com índice único no commit `ce1cb62`.
+  - Ausência de validação relacional de moeda e rodada no banco: corrigido com chaves estrangeiras e restrições no commit `f9eb95b`.
+  - API sem controle de acesso por provedor: corrigido com autenticação via chaves de API no commit `6ff6891`.
+  - F-01 (envelope malformado parando outbox): corrigido pela migração 9 no commit `2905535`.
+  - F-02 (falta da chave de idempotência na identidade da mensagem): corrigido pela impressão digital no commit `2ec4d5e`.
+  - F-04 (lote lento reexpondo mensagens em voo): corrigido com renovação em lote no commit `b398e22`.
+  - F-05 (hooks de teste no código de produção): corrigido pela composição de dependências no commit `489df8b`.
+  - F-13 (retenção com falha permanente travando worker): corrigido com transição para `FAILED` no commit `c8ffbcc`.
+  - F-14 (mensagem demorada reentregue após janela): corrigido com renovação contínua de visibilidade no commit `6b3b23e`.
+  - F-15 e F-07 (prazos e leases usando relógio local do chamador): corrigido com uso de `now()` do banco nos commits `fc3862c` e `433ebe2`.
+
+### 7.2 Rodada 2 (Revisão Simulada e Rodada de Qualidade)
+
+- **Nota estimada:** 90/100, marcada como meta estimada interna em [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
+- **Achados de maior severidade e correções:**
+  - F-06 (saldo divergente do ledger aceito em escrita direta no banco): corrigido pela migração 12 com gatilhos de concordância no commit `c5ddca9`.
+  - Acoplamento em portas de infraestrutura: corrigido pela segregação de portas em `application/ports/` e separação dos fluxos de entrada e saída no commit `ef390fe`.
+  - Métrica `retries_total` ausente (§12): implementada e exposta em `/metrics` no commit `4ee8f72`.
+  - Ausência de suíte BDD executável rastreável à matriz de borda: implementada com 73 cenários Gherkin em `test/features/` nos commits `3620d74` e `c8320ea`.
+
+### 7.3 Rodada 3
+
+A rodada 3 da revisão simulada ainda não foi realizada.

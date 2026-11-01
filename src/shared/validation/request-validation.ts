@@ -11,11 +11,15 @@ export class RequestValidationError extends Error {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function expectObject(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new RequestValidationError(`${label} must be a JSON object`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 /** Rejects keys outside the contract, so that a misspelled or extra field is visible to the caller. */

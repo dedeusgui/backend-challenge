@@ -8,10 +8,60 @@ interface OutboxRow {
   aggregate_id: string;
   event_type: string;
   payload: unknown;
-  occurred_at: Date;
+  occurred_at: Date | string;
   attempts: number;
-  next_attempt_at: Date;
+  next_attempt_at: Date | string;
   status: 'PENDING' | 'PUBLISHED' | 'QUARANTINED';
+}
+
+interface IdRow {
+  id: string;
+}
+
+function isOutboxRow(row: unknown): row is OutboxRow {
+  if (typeof row !== 'object' || row === null) {
+    return false;
+  }
+  return (
+    'id' in row &&
+    typeof row.id === 'string' &&
+    'aggregate_id' in row &&
+    typeof row.aggregate_id === 'string' &&
+    'event_type' in row &&
+    typeof row.event_type === 'string' &&
+    'payload' in row &&
+    'occurred_at' in row &&
+    (row.occurred_at instanceof Date || typeof row.occurred_at === 'string') &&
+    'attempts' in row &&
+    typeof row.attempts === 'number' &&
+    'next_attempt_at' in row &&
+    (row.next_attempt_at instanceof Date || typeof row.next_attempt_at === 'string') &&
+    'status' in row &&
+    (row.status === 'PENDING' || row.status === 'PUBLISHED' || row.status === 'QUARANTINED')
+  );
+}
+
+function isIdRow(row: unknown): row is IdRow {
+  return typeof row === 'object' && row !== null && 'id' in row && typeof row.id === 'string';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isEnvelope(record: Record<string, unknown>): record is IntegrationEnvelope<unknown> {
+  return (
+    typeof record.eventId === 'string' &&
+    typeof record.eventType === 'string' &&
+    typeof record.aggregateId === 'string' &&
+    typeof record.correlationId === 'string' &&
+    typeof record.occurredAt === 'string' &&
+    typeof record.version === 'number' &&
+    'data' in record &&
+    (!('causationId' in record) ||
+      record.causationId === undefined ||
+      typeof record.causationId === 'string')
+  );
 }
 
 /**
@@ -25,7 +75,7 @@ export class MikroOrmOutboxStore implements OutboxStore {
     // Every time in this statement is the database's now(). The UPDATE returns its rows in no particular order, so the
     // order is applied after it: a batch is sent in the order its events became due, and the events of one wallet keep
     // their commit order.
-    const rows = (await this.orm.em.getConnection().execute(
+    const result: unknown = await this.orm.em.getConnection().execute(
       `WITH claimed AS (
          UPDATE outbox_messages
             SET lease_token = ?, lease_expires_at = now() + make_interval(secs => ?)
@@ -42,8 +92,11 @@ export class MikroOrmOutboxStore implements OutboxStore {
        )
        SELECT * FROM claimed ORDER BY next_attempt_at, occurred_at`,
       [request.token, request.leaseMs / 1000, request.limit],
-    )) as OutboxRow[];
-    return rows.map(toDomain);
+    );
+    if (!Array.isArray(result) || !result.every(isOutboxRow)) {
+      throw new Error('Unexpected query result: expected OutboxRow[]');
+    }
+    return result.map(toDomain);
   }
 
   async complete(
@@ -56,18 +109,21 @@ export class MikroOrmOutboxStore implements OutboxStore {
     }
     // One placeholder per id: the driver expands an array parameter into a list, not into an array value.
     const placeholders = messages.map(() => '?').join(', ');
-    const rows = (await this.orm.em.getConnection().execute(
+    const result: unknown = await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
           SET published_at = ?, status = 'PUBLISHED', lease_token = NULL, lease_expires_at = NULL
         WHERE lease_token = ? AND id IN (${placeholders})
        RETURNING id`,
       [at, token, ...messages.map((message) => message.id)],
-    )) as Array<{ id: string }>;
-    return rows.map((row) => row.id);
+    );
+    if (!Array.isArray(result) || !result.every(isIdRow)) {
+      throw new Error('Unexpected query result: expected IdRow[]');
+    }
+    return result.map((row) => row.id);
   }
 
   async reschedule(message: OutboxMessage, token: string, maxAttempts = 10): Promise<boolean> {
-    const rows = (await this.orm.em.getConnection().execute(
+    const result: unknown = await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages
           SET attempts = ?, status = CASE WHEN ? >= ? THEN 'QUARANTINED' ELSE 'PENDING' END,
               next_attempt_at = CASE WHEN ? >= ? THEN next_attempt_at ELSE now() + make_interval(secs => ?) END,
@@ -84,18 +140,24 @@ export class MikroOrmOutboxStore implements OutboxStore {
         message.id,
         token,
       ],
-    )) as Array<{ id: string }>;
-    return rows.length === 1;
+    );
+    if (!Array.isArray(result) || !result.every(isIdRow)) {
+      throw new Error('Unexpected query result: expected IdRow[]');
+    }
+    return result.length === 1;
   }
 
   async requeue(id: string): Promise<boolean> {
-    const rows = (await this.orm.em.getConnection().execute(
+    const result: unknown = await this.orm.em.getConnection().execute(
       `UPDATE outbox_messages SET status = 'PENDING', attempts = 0, next_attempt_at = now(),
                                   lease_token = NULL, lease_expires_at = NULL
         WHERE id = ? AND status = 'QUARANTINED' RETURNING id`,
       [id],
-    )) as Array<{ id: string }>;
-    return rows.length === 1;
+    );
+    if (!Array.isArray(result) || !result.every(isIdRow)) {
+      throw new Error('Unexpected query result: expected IdRow[]');
+    }
+    return result.length === 1;
   }
 
   async deletePublishedBefore(cutoff: Date, limit: number): Promise<number> {
@@ -104,7 +166,7 @@ export class MikroOrmOutboxStore implements OutboxStore {
     }
     let deleted = 0;
     while (true) {
-      const rows = (await this.orm.em.getConnection().execute(
+      const result: unknown = await this.orm.em.getConnection().execute(
         `WITH expired AS (
            SELECT id FROM outbox_messages
             WHERE status = 'PUBLISHED' AND published_at IS NOT NULL AND published_at < ?
@@ -117,9 +179,12 @@ export class MikroOrmOutboxStore implements OutboxStore {
           WHERE messages.id = expired.id
          RETURNING messages.id`,
         [cutoff, limit],
-      )) as Array<{ id: string }>;
-      deleted += rows.length;
-      if (rows.length < limit) {
+      );
+      if (!Array.isArray(result) || !result.every(isIdRow)) {
+        throw new Error('Unexpected query result: expected IdRow[]');
+      }
+      deleted += result.length;
+      if (result.length < limit) {
         return deleted;
       }
     }
@@ -142,10 +207,10 @@ function toDomain(row: OutboxRow): OutboxMessage {
 
 /** The payload was written by this system, but it is still read from the database as unknown and checked. */
 function parseEnvelope(value: unknown): IntegrationEnvelope<unknown> {
-  if (typeof value !== 'object' || value === null) {
+  if (!isRecord(value)) {
     throw new Error('Outbox payload is not an object');
   }
-  const envelope = value as Record<string, unknown>;
+  const envelope = value;
   for (const key of ['eventId', 'eventType', 'aggregateId', 'correlationId', 'occurredAt']) {
     if (typeof envelope[key] !== 'string') {
       throw new Error(`Outbox payload is missing ${key}`);
@@ -154,5 +219,8 @@ function parseEnvelope(value: unknown): IntegrationEnvelope<unknown> {
   if (typeof envelope.version !== 'number' || !('data' in envelope)) {
     throw new Error('Outbox payload has an invalid version or data');
   }
-  return envelope as IntegrationEnvelope<unknown>;
+  if (!isEnvelope(envelope)) {
+    throw new Error('Outbox payload has an invalid version or data');
+  }
+  return envelope;
 }

@@ -33,7 +33,7 @@ export class MikroOrmWalletLedgerRepository implements WalletLedgerRepository {
     afterSeq: string | undefined,
     limit: number,
   ): Promise<LedgerPageEntry[]> {
-    const rows = (await this.em.getConnection().execute(
+    const raw: unknown = await this.em.getConnection().execute(
       `SELECT seq::text AS seq, id, wallet_id, transaction_id, direction, currency,
               amount::text AS amount, balance_before::text AS balance_before,
               balance_after::text AS balance_after, created_at
@@ -42,8 +42,11 @@ export class MikroOrmWalletLedgerRepository implements WalletLedgerRepository {
         ORDER BY seq
         LIMIT ?`,
       [walletId, afterSeq ?? null, afterSeq ?? null, limit],
-    )) as LedgerRow[];
-    return rows.map((row) => ({ seq: row.seq, entry: toEntry(row) }));
+    );
+    if (!Array.isArray(raw) || !raw.every(isLedgerRow)) {
+      throw new Error('Unexpected query result: expected LedgerRow[]');
+    }
+    return raw.map((row) => ({ seq: row.seq, entry: toEntry(row) }));
   }
 
   /**
@@ -51,14 +54,16 @@ export class MikroOrmWalletLedgerRepository implements WalletLedgerRepository {
    * runs inside the caller's transaction, so it sees the same snapshot as the wallet lock that the caller holds.
    */
   async summarize(walletId: string, currency: string): Promise<LedgerSummary> {
-    const rows = (await this.em.execute(
+    const raw: unknown = await this.em.execute(
       `SELECT direction, currency, amount::text AS amount, balance_before::text AS balance_before,
               balance_after::text AS balance_after
          FROM wallet_ledger_entries WHERE wallet_id = ? ORDER BY seq`,
       [walletId],
-    )) as Array<
-      Pick<LedgerRow, 'direction' | 'currency' | 'amount' | 'balance_before' | 'balance_after'>
-    >;
+    );
+    if (!Array.isArray(raw) || !raw.every(isLedgerSummaryRow)) {
+      throw new Error('Unexpected query result: expected LedgerSummaryRow[]');
+    }
+    const rows = raw;
 
     let calculated = Money.zero(currency);
     let chainIntact = true;
@@ -111,7 +116,58 @@ interface LedgerRow {
   amount: string;
   balance_before: string;
   balance_after: string;
-  created_at: Date;
+  created_at: Date | string;
+}
+
+type LedgerSummaryRow = Pick<
+  LedgerRow,
+  'direction' | 'currency' | 'amount' | 'balance_before' | 'balance_after'
+>;
+
+function isLedgerRow(row: unknown): row is LedgerRow {
+  if (typeof row !== 'object' || row === null) {
+    return false;
+  }
+  return (
+    'seq' in row &&
+    typeof row.seq === 'string' &&
+    'id' in row &&
+    typeof row.id === 'string' &&
+    'wallet_id' in row &&
+    typeof row.wallet_id === 'string' &&
+    'transaction_id' in row &&
+    typeof row.transaction_id === 'string' &&
+    'direction' in row &&
+    typeof row.direction === 'string' &&
+    'currency' in row &&
+    typeof row.currency === 'string' &&
+    'amount' in row &&
+    typeof row.amount === 'string' &&
+    'balance_before' in row &&
+    typeof row.balance_before === 'string' &&
+    'balance_after' in row &&
+    typeof row.balance_after === 'string' &&
+    'created_at' in row &&
+    (row.created_at instanceof Date || typeof row.created_at === 'string')
+  );
+}
+
+function isLedgerSummaryRow(row: unknown): row is LedgerSummaryRow {
+  if (typeof row !== 'object' || row === null) {
+    return false;
+  }
+  return (
+    'direction' in row &&
+    typeof row.direction === 'string' &&
+    'currency' in row &&
+    typeof row.currency === 'string' &&
+    'amount' in row &&
+    typeof row.amount === 'string' &&
+    'balance_before' in row &&
+    typeof row.balance_before === 'string' &&
+    'balance_after' in row &&
+    typeof row.balance_after === 'string'
+  );
 }
 
 function toEntry(row: LedgerRow): WalletLedgerEntry {

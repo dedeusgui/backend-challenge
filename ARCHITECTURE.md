@@ -115,6 +115,11 @@ stateDiagram-v2
 reaches it, because a transaction is written atomically. It is kept for a future
 permanent-failure path, and nothing claims otherwise.
 
+The table above is `STATUS_TRANSITIONS` in `src/modules/wagering/domain/wager-lifecycle.ts`, and the rule that
+decides whether a new operation may apply, given the results its reference already has, is `decideAgainstHistory`
+in the same module. The database trigger of migration 10 copies the status table, and
+`test/integration/schema/row-guards.test.ts` checks every pair of statuses against both places.
+
 ## 3. Rejection taxonomy (`failureCode`)
 
 Stable, machine-readable, and persisted with the rejected transaction:

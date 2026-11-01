@@ -171,6 +171,12 @@ literal, REFUND seguido de ROLLBACK creditaria a aposta duas vezes. Desfazer o R
 **O dono deve confirmar.** Se a leitura for outra, a mudança é em `processedOutcomesOf`, e o teste precisa mudar
 junto.
 
+**Proposta do dono desta rodada.** "Se houve rollback e uma operação final, o refund seria recusado, porque a operação já
+foi revertida." O comportamento atual é esse: `decideAgainstHistory` em `wager-lifecycle.ts` recusa qualquer
+operação contra uma referência já revertida, com `REFERENCE_ALREADY_REVERSED`. A tabela de decisão de cada tipo
+contra cada histórico está testada (16 casos). O que resta em aberto é só o caso de ROLLBACK depois de desfazer um
+REFUND, que a proposta não cobre. A leitura atual (recusar) é a mesma do caso de REFUND depois de rollback.
+
 ## F-11 — resultado sem referência
 
 **Limitação inerente.** WIN e LOSS podem omitir a referência ao BET (§6.3, §7). Sem ela não há como saber qual

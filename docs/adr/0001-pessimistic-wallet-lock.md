@@ -1,50 +1,50 @@
-# ADR 0001: Pessimistic row lock on the wallet
+# ADR 0001: Bloqueio pessimista de linha na carteira
 
-**Status:** accepted
+**Status:** aceito
 
-## Context
+## Contexto
 
-The unit of concurrency is the wallet (challenge §8). Two bets of 80.00 against a
-balance of 100.00 must produce one debit, one rejection and a final balance of
-20.00, with several instances running.
+A unidade de concorrência é a carteira (desafio §8). Duas apostas de 80.00 contra um
+saldo de 100.00 devem produzir um débito, uma recusa e um saldo final de
+20.00, com várias instâncias em execução.
 
-## Decision
+## Decisão
 
-Every financial operation first reads the wallet with `SELECT ... FOR UPDATE`
-(`MikroOrmWalletRepository.findForUpdate`, `LockMode.PESSIMISTIC_WRITE`). The
-idempotency check of a new operation repeats under that lock, and the balance decision happens there.
-A replay of a stored transaction is answered before the lock, because it writes nothing (ARCHITECTURE
-section 5). The write
-of the new balance is also guarded by `WHERE version = expected`, so a lost lock
-is detected instead of silently overwriting.
+Toda operação financeira primeiro lê a carteira com `SELECT ... FOR UPDATE`
+(`MikroOrmWalletRepository.findForUpdate`, `LockMode.PESSIMISTIC_WRITE`). A
+verificação de idempotência de uma nova operação se repete sob esse bloqueio, e a decisão de saldo acontece ali.
+Um replay de uma transação armazenada é respondido antes do bloqueio, porque não escreve nada (ARCHITECTURE
+seção 5). A escrita
+do novo saldo também é guardada por `WHERE version = expected`, de modo que um bloqueio perdido
+seja detectado em vez de sobrescrever silenciosamente.
 
-## Alternatives
+## Alternativas
 
-- **Optimistic version with bounded retry.** Fewer waits under low contention, but
-  under a hot wallet every losing attempt repeats the whole decision. We measured
-  this: with the row lock removed and the version guard kept, the mixed hot-wallet
-  case exhausts its three attempts and fails with CONCURRENCY_CONFLICT
-  (`test/concurrency/hot-wallet.test.ts`). No balance was corrupted.
-- **Conditional atomic UPDATE** (`SET balance = balance - ? WHERE balance >= ?`).
-  Correct for the balance alone, but the idempotency and ledger decisions would
-  still need coordination, so the lock is kept for the whole decision.
-- **Redis or another external lock.** Adds a failure mode while PostgreSQL already
-  owns consistency (ARCHITECTURE §5).
+- **Versão otimista com retentativa limitada.** Menos esperas sob baixa contenção, mas
+  sob uma carteira disputada toda tentativa perdedora repete a decisão inteira. Medimos
+  isso: com o bloqueio de linha removido e a guarda de versão mantida, o caso misto
+  de carteira disputada esgota suas três tentativas e falha com CONCURRENCY_CONFLICT
+  (`test/concurrency/hot-wallet.test.ts`). Nenhum saldo foi corrompido.
+- **UPDATE atômico condicional** (`SET balance = balance - ? WHERE balance >= ?`).
+  Correto apenas para o saldo, mas as decisões de idempotência e do ledger
+  ainda precisariam de coordenação, portanto o bloqueio é mantido para toda a decisão.
+- **Redis ou outro bloqueio externo.** Adiciona um modo de falha enquanto o PostgreSQL já
+  é o dono da consistência (ARCHITECTURE §5).
 
-## Consequences
+## Consequências
 
-- Operations on one wallet are serialized. A hot wallet has a throughput ceiling
-  set by the transaction time. This is accepted and is the main trade-off.
-- Operations on different wallets never block each other (`test/concurrency`).
-- Locks are held for the duration of one short transaction. No SQS I/O happens
-  inside it (ADR 0004).
-- Lock wait time is not yet exported as a metric (`OBS-03` remains partial).
+- As operações em uma carteira são serializadas. Uma carteira disputada tem um teto de vazão
+  definido pelo tempo de transação. Isso é aceito e é o principal trade-off.
+- Operações em carteiras diferentes nunca bloqueiam umas às outras (`test/concurrency`).
+- Bloqueios são mantidos pela duração de uma transação curta. Nenhum I/O de SQS acontece
+  dentro dela (ADR 0004).
+- O tempo de espera de bloqueio ainda não é exportado como métrica (`OBS-03` permanece parcial).
 
-## Evidence
+## Evidências
 
-- `test/concurrency/hot-wallet.test.ts`: 80/80 on 100, 50 identical requests, 40
-  mixed operations on one wallet, two competing refunds.
-- `test/concurrency/three-processes.test.ts`: the same races across three API
-  processes and one worker.
-- Mutation checks recorded in the commit messages: without the lock and the guard,
-  the 80/80 case double-debits.
+- `test/concurrency/hot-wallet.test.ts`: 80/80 em 100, 50 requisições idênticas, 40
+  operações mistas em uma carteira, dois reembolsos concorrentes.
+- `test/concurrency/three-processes.test.ts`: as mesmas disputas em três processos
+  de API e um worker.
+- Verificações de mutação registradas nas mensagens de commit: sem o bloqueio e a guarda,
+  o caso 80/80 debita em duplicidade.

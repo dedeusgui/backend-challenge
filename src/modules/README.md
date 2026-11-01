@@ -1,10 +1,10 @@
-# Module boundaries
+# Limites dos módulos
 
-The folders below are intentional seams, not implemented features.
+As pastas abaixo são separações intencionais, não funcionalidades implementadas.
 
-- **wallet** owns Wallet, Money-facing operations, the immutable wallet ledger and reconciliation. HTTP endpoints live in `http`; persistence adapters in `infrastructure`.
-- **wagering** owns the WagerTransaction lifecycle and the central ProcessWagerTransaction use case. HTTP and SQS must invoke this same application use case.
-- **messaging** owns Inbox deduplication, transactional Outbox records and SQS adapters. It does not decide whether a BET or REFUND is valid.
-- **shared** is reserved for genuinely cross-module concepts (e.g. the immutable Money value object, database transaction boundary and provider identity port), never a general-purpose dumping ground.
+- **wallet** é responsável por Wallet, operações voltadas a Money, o ledger imutável de carteira e reconciliação. Endpoints HTTP ficam em `http`; adaptadores de persistência em `infrastructure`.
+- **wagering** é responsável pelo ciclo de vida de WagerTransaction e pelo caso de uso central ProcessWagerTransaction. HTTP e SQS devem invocar este mesmo caso de uso da aplicação.
+- **messaging** é responsável pela deduplicação de Inbox, registros transacionais de Outbox e adaptadores SQS. Não decide se uma BET ou REFUND é válida.
+- **shared** é reservado para conceitos genuinamente transversais (por exemplo, o value object imutável Money, o limite de transação do banco de dados e a porta de identidade do provedor), nunca um depósito de uso geral.
 
-Use cases coordinate; domain objects enforce invariants; repositories map data and participate in a caller-owned transaction. Keep NestJS, MikroORM and AWS imports outside `domain`.
+Casos de uso coordenam; objetos de domínio aplicam invariantes; repositórios mapeiam dados e participam de uma transação pertencente ao chamador. Mantenha imports de NestJS, MikroORM e AWS fora de `domain`.

@@ -1,44 +1,44 @@
-# ADR 0005: Hold transactions for missing references, with bounded retries
+# ADR 0005: Retenção de transações para referências ausentes, com retentativas limitadas
 
-**Status:** accepted
+**Status:** aceito
 
-## Context
+## Contexto
 
-Providers can send a REFUND or ROLLBACK before the BET it reverses (challenge
-§7.1). Such a transaction must neither be lost nor applied before its reference.
+Provedores podem enviar um REFUND ou ROLLBACK antes da BET que ele reverte (desafio
+§7.1). Tal transação não deve nem ser perdida nem aplicada antes de sua referência.
 
-## Decision
+## Decisão
 
-- A transaction whose reference is missing is stored as `PENDING_REFERENCE`, with
-  its attempt count and next lookup time in the row. A `WagerTransactionPendingReference`
-  event is written.
-- `ProcessPendingReferences` (in the worker) resolves each due row under the
-  **wallet lock**, and re-reads it there. Two workers therefore never apply the same
-  row. The decision is the same `TransactionSettlement` the HTTP path uses.
-- Retries back off from 1 s, doubling, capped at 5 minutes. The limit is six misses
-  (`MAX_REFERENCE_ATTEMPTS`). After that the row is `REJECTED` with
-  `REFERENCE_NOT_FOUND`, and the rejection is announced.
-- A reference that is itself still pending makes the dependent row wait. A reference
-  that was rejected makes it `REFERENCE_NOT_PROCESSED`.
+- Uma transação cuja referência está ausente é armazenada como `PENDING_REFERENCE`, com
+  sua contagem de tentativas e próximo horário de consulta na linha. Um evento
+  `WagerTransactionPendingReference` é gravado.
+- `ProcessPendingReferences` (no worker) resolve cada linha devida sob o
+  **bloqueio de carteira**, e a relê ali. Dois workers, portanto, nunca aplicam a mesma
+  linha. A decisão é a mesma `TransactionSettlement` que o fluxo HTTP usa.
+- As retentativas fazem backoff a partir de 1 s, dobrando, limitadas a 5 minutos. O limite é de seis ausências
+  (`MAX_REFERENCE_ATTEMPTS`). Depois disso, a linha é `REJECTED` com
+  `REFERENCE_NOT_FOUND`, e a recusa é anunciada.
+- Uma referência que ainda está pendente faz a linha dependente esperar. Uma referência
+  que foi recusada a torna `REFERENCE_NOT_PROCESSED`.
 
-## Alternatives
+## Alternativas
 
-- **Reject immediately.** Loses valid reversals that only arrive out of order.
-- **Unbounded retries.** A reference that never arrives would be retried forever,
-  with no audit outcome.
-- **A separate queue for holds.** More infrastructure, and the schedule would live
-  outside the transaction it belongs to.
+- **Recusar imediatamente.** Perde reversões válidas que apenas chegaram fora de ordem.
+- **Retentativas ilimitadas.** Uma referência que nunca chega seria tentada novamente para sempre,
+  sem nenhum desfecho de auditoria.
+- **Uma fila separada para retenções.** Mais infraestrutura, e o agendamento viveria
+  fora da transação à qual pertence.
 
-## Consequences
+## Consequências
 
-- A held transaction is not visible as applied, and its balance is not changed.
-  Its status states why.
-- The schedule is in PostgreSQL, so a restarted worker resumes it (`REF-04`).
+- Uma transação retida não é visível como aplicada, e seu saldo não é alterado.
+  Seu estado indica o motivo.
+- O agendamento está no PostgreSQL, portanto um worker reiniciado o retoma (`REF-04`).
 
-## Evidence
+## Evidências
 
-- `test/integration/wagering/pending-reference.test.ts`: applied once the reference
-  arrives, backoff respected, exhaustion to REFERENCE_NOT_FOUND, continuation after
-  a restart, and six workers racing over six refunds of one wallet.
-- `test/integration/faults/fault-injection.test.ts`: a crash while resolving rolls
-  back, and the next pass applies the refund exactly once.
+- `test/integration/wagering/pending-reference.test.ts`: aplicada assim que a referência
+  chega, backoff respeitado, esgotamento para REFERENCE_NOT_FOUND, continuação após
+  uma reinicialização, e seis workers disputando seis reembolsos de uma carteira.
+- `test/integration/faults/fault-injection.test.ts`: uma queda durante a resolução faz
+  rollback, e a próxima passagem aplica o reembolso exatamente uma vez.

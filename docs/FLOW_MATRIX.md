@@ -1,63 +1,63 @@
-# Flow matrix
+# Matriz de fluxos
 
-> **Appendix.** A reference for a reviewer who traces one operation through the code. The overview is in
-> [ARCHITECTURE.md](../ARCHITECTURE.md), sections 1 and 5.
+> **Apêndice.** Uma referência para o revisor que rastreia uma operação através do código. A visão geral está em
+> [ARCHITECTURE.md](../ARCHITECTURE.md), seções 1 e 5.
 
-One document for the flow of data through the system: which entity each step touches, which
-function does it, what the step decides, and what response or record each outcome leaves behind.
-The graphs are coloured by outcome, so a reader can follow one request from its entry point to
-the response, and see which entities that outcome writes.
+Um documento único para o fluxo de dados através do sistema: qual entidade cada etapa acessa, qual
+função a executa, o que a etapa decide e qual resposta ou registro cada desfecho deixa para trás.
+Os diagramas são coloridos por desfecho, permitindo ao leitor acompanhar uma requisição desde seu ponto de entrada até
+a resposta, e verificar quais entidades aquele desfecho grava.
 
-It replaces the earlier entity map. The inventory was generated from `src/`, and each function
-name was checked against its file.
+Substitui o mapa de entidades anterior. O inventário foi gerado a partir de `src/`, e o nome de cada
+função foi verificado contra seu arquivo.
 
-## How to read it
+## Como ler este documento
 
-1. **Colours.** Every terminal outcome has a colour. The same colour is used for the entities
-   that outcome writes.
-2. **Response table.** Each outcome maps to one HTTP status and one failure code, or to one queue
-   disposition.
-3. **Graphs.** Diamonds are decisions. Boxes are steps. Coloured boxes are outcomes.
-4. **Matrix.** Rows are functions, in the order they run. Columns are the entities. A cell says
-   what the function does to that entity.
-5. **Entities.** Each entity has its table, its record class, its repository, its domain class, and
-   the functions that write and read it.
+1. **Cores.** Todo desfecho terminal possui uma cor. A mesma cor é utilizada para as entidades
+   que esse desfecho grava.
+2. **Tabela de respostas.** Cada desfecho mapeia para um status HTTP e um código de falha, ou para uma
+   disposição na fila.
+3. **Diagramas.** Losangos são decisões. Retângulos são etapas. Retângulos coloridos são desfechos.
+4. **Matriz.** As linhas são funções, na ordem em que executam. As colunas são as entidades. Uma célula informa
+   o que a função faz com aquela entidade.
+5. **Entidades.** Cada entidade possui sua tabela, sua classe de registro, seu repositório, sua classe de domínio e
+   as funções que a gravam e leem.
 
-| Colour        | Outcome                                                         | Style in the graphs |
-| ------------- | --------------------------------------------------------------- | ------------------- |
-| Green         | applied: the balance, the ledger and the outbox changed         | `applied`           |
-| Blue          | replay: the stored result came back, nothing changed            | `replay`            |
-| Amber         | held: waiting for a reference, nothing changed yet              | `held`              |
-| Red           | rejected by a business rule: a row is written, no balance moves | `rejected`          |
-| Purple        | conflict: the same key with another payload, nothing written    | `conflict`          |
-| Grey          | denied before the domain: authentication, scope or validation   | `denied`            |
-| Dark red      | infrastructure failure: the transaction rolls back              | `failure`           |
-| White, dashed | an entity this outcome does not touch                           | `untouched`         |
+| Cor               | Desfecho                                                           | Estilo nos diagramas |
+| ----------------- | ------------------------------------------------------------------ | -------------------- |
+| Verde             | aplicada: saldo, ledger e outbox foram alterados                   | `applied`            |
+| Azul              | replay: o resultado armazenado retornou, nada mudou                | `replay`             |
+| Âmbar             | retida: aguardando uma referência, nada mudou ainda                | `held`               |
+| Vermelho          | recusada por regra de negócio: uma linha é gravada, saldo não move | `rejected`           |
+| Roxo              | conflito: mesma chave com outro payload, nada gravado              | `conflict`           |
+| Cinza             | negada antes do domínio: autenticação, escopo ou validação         | `denied`             |
+| Vermelho escuro   | falha de infraestrutura: a transação sofre rollback                | `failure`            |
+| Branco, tracejado | uma entidade não tocada por este desfecho                          | `untouched`          |
 
-## Response table
+## Tabela de respostas
 
-| Outcome                          | Colour   | HTTP status             | Body code or failure code                                                                                                                                                                                                                                                                                                    | Queue disposition (SQS)          | Written                                      |
-| -------------------------------- | -------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------- |
-| Applied                          | green    | `201`                   | `status: PROCESSED`                                                                                                                                                                                                                                                                                                          | ACK after commit                 | wallet, ledger, wager row, two outbox events |
-| Replay                           | blue     | `200`                   | `idempotentReplay: true`                                                                                                                                                                                                                                                                                                     | ACK after commit (the inbox row) | nothing                                      |
-| Held for a reference             | amber    | `202`                   | `status: PENDING_REFERENCE`                                                                                                                                                                                                                                                                                                  | ACK after commit                 | wager row (held), one outbox event           |
-| Rejected by a business rule      | red      | `422`                   | `failureCode`: `INSUFFICIENT_BALANCE`, `REVERSAL_WOULD_OVERDRAW`, `REFERENCE_NOT_FOUND`, `REFERENCE_NOT_PROCESSED`, `REFERENCE_CONTEXT_MISMATCH`, `REFERENCE_KIND_NOT_ALLOWED`, `REFERENCE_AMOUNT_MISMATCH`, `REFERENCE_ALREADY_REVERSED`, `REFERENCE_ALREADY_SETTLED`, `WALLET_PLAYER_MISMATCH`, `WALLET_CURRENCY_MISMATCH` | ACK after commit                 | wager row (rejected), one outbox event       |
-| Same key, other payload          | purple   | `409`                   | `IDEMPOTENCY_CONFLICT`                                                                                                                                                                                                                                                                                                       | dead-lettered (permanent)        | nothing                                      |
-| No valid bearer key              | grey     | `401`                   | `UNAUTHENTICATED`, with `WWW-Authenticate`                                                                                                                                                                                                                                                                                   | not applicable                   | nothing                                      |
-| Key may not act for the provider | grey     | `403`                   | `FORBIDDEN`                                                                                                                                                                                                                                                                                                                  | not applicable                   | nothing                                      |
-| Invalid body, or missing key     | grey     | `400`                   | `INVALID_REQUEST`, `IDEMPOTENCY_KEY_REQUIRED`, `INVALID_TRANSACTION` (OPENING, zero amount, negative amount, missing reference)                                                                                                                                                                                              | dead-lettered (permanent)        | nothing                                      |
-| Unknown wallet or transaction    | grey     | `404`                   | `WALLET_NOT_FOUND`, `TRANSACTION_NOT_FOUND`                                                                                                                                                                                                                                                                                  | dead-lettered (permanent)        | nothing                                      |
-| Wallet already exists            | purple   | `409`                   | `WALLET_ALREADY_EXISTS`                                                                                                                                                                                                                                                                                                      | not applicable                   | nothing                                      |
-| Lost lock race, retries used up  | dark red | `503`, `retry-after: 1` | `CONCURRENCY_CONFLICT`                                                                                                                                                                                                                                                                                                       | retried with backoff             | nothing (rolled back)                        |
-| Anything unexpected              | dark red | `500`                   | `INTERNAL_ERROR`, no message                                                                                                                                                                                                                                                                                                 | retried with backoff             | nothing (rolled back)                        |
-| Readiness, a dependency is down  | dark red | `503`                   | `checks` names the failing dependency                                                                                                                                                                                                                                                                                        | not applicable                   | nothing                                      |
+| Desfecho                                        | Cor             | Status HTTP             | Código no corpo ou código de falha                                                                                                                                                                                                                                                                                           | Disposição na fila (SQS)         | Gravado                                                  |
+| ----------------------------------------------- | --------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------- |
+| Aplicada                                        | verde           | `201`                   | `status: PROCESSED`                                                                                                                                                                                                                                                                                                          | ACK após commit                  | carteira, ledger, linha de wager, dois eventos de outbox |
+| Replay                                          | azul            | `200`                   | `idempotentReplay: true`                                                                                                                                                                                                                                                                                                     | ACK após commit (linha da inbox) | nada                                                     |
+| Retida por referência                           | âmbar           | `202`                   | `status: PENDING_REFERENCE`                                                                                                                                                                                                                                                                                                  | ACK após commit                  | linha de wager (retida), um evento de outbox             |
+| Recusada por regra de negócio                   | vermelho        | `422`                   | `failureCode`: `INSUFFICIENT_BALANCE`, `REVERSAL_WOULD_OVERDRAW`, `REFERENCE_NOT_FOUND`, `REFERENCE_NOT_PROCESSED`, `REFERENCE_CONTEXT_MISMATCH`, `REFERENCE_KIND_NOT_ALLOWED`, `REFERENCE_AMOUNT_MISMATCH`, `REFERENCE_ALREADY_REVERSED`, `REFERENCE_ALREADY_SETTLED`, `WALLET_PLAYER_MISMATCH`, `WALLET_CURRENCY_MISMATCH` | ACK após commit                  | linha de wager (recusada), um evento de outbox           |
+| Mesma chave, outro payload                      | roxo            | `409`                   | `IDEMPOTENCY_CONFLICT`                                                                                                                                                                                                                                                                                                       | dead-lettered (permanente)       | nada                                                     |
+| Nenhuma chave bearer válida                     | cinza           | `401`                   | `UNAUTHENTICATED`, com `WWW-Authenticate`                                                                                                                                                                                                                                                                                    | não aplicável                    | nada                                                     |
+| Chave não pode agir pelo provedor               | cinza           | `403`                   | `FORBIDDEN`                                                                                                                                                                                                                                                                                                                  | não aplicável                    | nada                                                     |
+| Corpo inválido, ou chave ausente                | cinza           | `400`                   | `INVALID_REQUEST`, `IDEMPOTENCY_KEY_REQUIRED`, `INVALID_TRANSACTION` (OPENING, valor zero, valor negativo, referência ausente)                                                                                                                                                                                               | dead-lettered (permanente)       | nada                                                     |
+| Carteira ou transação desconhecida              | cinza           | `404`                   | `WALLET_NOT_FOUND`, `TRANSACTION_NOT_FOUND`                                                                                                                                                                                                                                                                                  | dead-lettered (permanente)       | nada                                                     |
+| Carteira já existe                              | roxo            | `409`                   | `WALLET_ALREADY_EXISTS`                                                                                                                                                                                                                                                                                                      | não aplicável                    | nada                                                     |
+| Disputa de lock perdida, retentativas esgotadas | vermelho escuro | `503`, `retry-after: 1` | `CONCURRENCY_CONFLICT`                                                                                                                                                                                                                                                                                                       | retentado com backoff            | nada (rollback realizado)                                |
+| Qualquer erro inesperado                        | vermelho escuro | `500`                   | `INTERNAL_ERROR`, sem mensagem                                                                                                                                                                                                                                                                                               | retentado com backoff            | nada (rollback realizado)                                |
+| Prontidão, dependência indisponível             | vermelho escuro | `503`                   | `checks` lista a dependência com falha                                                                                                                                                                                                                                                                                       | não aplicável                    | nada                                                     |
 
-The status mapping lives in `src/modules/wagering/http/wagering.controller.ts` (`statusOf`) and
-`src/shared/http/error-response.ts` (`toErrorResponse`). A test asserts each row.
+O mapeamento de status reside em `src/modules/wagering/http/wagering.controller.ts` (`statusOf`) e
+`src/shared/http/error-response.ts` (`toErrorResponse`). Um teste valida cada linha.
 
-## Graph 1: a BET over HTTP, coloured by outcome
+## Diagrama 1: uma BET via HTTP, colorida por desfecho
 
-Rendered as an image: [`docs/diagrams/bet-over-http.svg`](diagrams/bet-over-http.svg), so it can be shown without GitHub.
+Renderizado como imagem: [`docs/diagrams/bet-over-http.svg`](diagrams/bet-over-http.svg), para visualização fora do GitHub.
 
 ```mermaid
 flowchart TD
@@ -92,12 +92,12 @@ flowchart TD
   classDef step fill:#ffffff,stroke:#455a64,color:#000
 ```
 
-## Graph 2: a queued command, and the same path
+## Diagrama 2: um comando em fila e o mesmo caminho
 
-Rendered as an image: [`docs/diagrams/queued-command.svg`](diagrams/queued-command.svg), so it can be shown without GitHub.
+Renderizado como imagem: [`docs/diagrams/queued-command.svg`](diagrams/queued-command.svg), para visualização fora do GitHub.
 
-The queue reaches the same decision code as HTTP, from the lock onwards. Only the entry and the
-acknowledgement differ.
+A fila atinge o mesmo código de decisão do HTTP, a partir do lock em diante. Apenas a entrada e a
+confirmação diferem.
 
 ```mermaid
 flowchart TD
@@ -120,12 +120,12 @@ flowchart TD
   classDef step fill:#ffffff,stroke:#455a64,color:#000
 ```
 
-A replay from the queue is an APPLIED disposition too: the inbox row shows the message was seen,
-and the stored result is returned without a second effect.
+Um replay vindo da fila também é uma disposição APPLIED: a linha da inbox mostra que a mensagem foi vista,
+e o resultado armazenado é devolvido sem um segundo efeito.
 
-## Graph 3: which entities each outcome writes
+## Diagrama 3: quais entidades cada desfecho grava
 
-Rendered as an image: [`docs/diagrams/outcome-entities.svg`](diagrams/outcome-entities.svg), so it can be shown without GitHub.
+Renderizado como imagem: [`docs/diagrams/outcome-entities.svg`](diagrams/outcome-entities.svg), para visualização fora do GitHub.
 
 ```mermaid
 flowchart LR
@@ -160,117 +160,117 @@ flowchart LR
   classDef untouched fill:#ffffff,stroke:#9e9e9e,stroke-dasharray: 4 3,color:#616161
 ```
 
-## Matrix: functions against entities
+## Matriz: funções contra entidades
 
-Legend: **L** the wallet row lock, **R** read, **W** write (insert or update), **C** created in
-memory and returned, **E** enqueued in the outbox in the same transaction, **—** not touched.
+Legenda: **L** bloqueio de linha da carteira, **R** leitura, **W** escrita (inserção ou atualização), **C** criado em
+memória e retornado, **E** enfileirado na outbox na mesma transação, **—** não tocado.
 
-| #   | Function (in run order)                                                                             | Wallet                     | Ledger | Wager transaction | Inbox | Outbox                     | API client                | Event | Flow                      |
-| --- | --------------------------------------------------------------------------------------------------- | -------------------------- | ------ | ----------------- | ----- | -------------------------- | ------------------------- | ----- | ------------------------- |
-| 1   | `ApiKeyGuard.canActivate` → `AuthenticateApiKey.execute`                                            | —                          | —      | —                 | —     | —                          | R (`findActiveByKeyHash`) | —     | HTTP                      |
-| 2   | `WageringController.submit` → `requireProviderScope`                                                | —                          | —      | —                 | —     | —                          | —                         | —     | HTTP                      |
-| 3   | `parseProcessWagerRequest` (or `parseWagerCommandMessage`)                                          | —                          | —      | —                 | —     | —                          | —                         | —     | HTTP, queue               |
-| 4   | `ProcessWagerTransaction.execute` → `WagerTransaction.create`                                       | —                          | —      | C                 | —     | —                          | —                         | —     | HTTP, queue               |
-| 5   | `process` → `MikroOrmWalletRepository.findForUpdate`                                                | L                          | —      | —                 | —     | —                          | —                         | —     | HTTP, queue, reference    |
-| 6   | `isInboundRecorded` → `MikroOrmInboxRepository.find`                                                | —                          | —      | —                 | R     | —                          | —                         | —     | queue                     |
-| 7   | `MikroOrmWagerTransactionRepository.findByIdentity`                                                 | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue               |
-| 8   | `replay` (when the key was seen)                                                                    | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue               |
-| 9   | `TransactionSettlement.settle` → `findByExternalId` (reference)                                     | —                          | —      | R                 | —     | —                          | —                         | —     | HTTP, queue, reference    |
-| 10  | `WagerTransaction.walletMismatch`, `WagerTransaction.evaluateReference`                             | —                          | —      | —                 | —     | —                          | —                         | —     | all                       |
-| 11  | `processedOutcomesOf`                                                                               | —                          | —      | R                 | —     | —                          | —                         | —     | all                       |
-| 12  | `Wallet.canDebit`, `Wallet.debit` or `Wallet.credit`                                                | —                          | C      | —                 | —     | —                          | —                         | —     | all                       |
-| 13  | `WagerTransaction.markProcessed`, `reject`, `markPendingReference`                                  | —                          | —      | C (state)         | —     | —                          | —                         | —     | all                       |
-| 14  | `save` → `MikroOrmWagerTransactionRepository.insert` or `update`                                    | —                          | —      | W                 | —     | —                          | —                         | —     | all                       |
-| 15  | `save` → `MikroOrmWalletRepository.save` (guarded by version)                                       | W                          | —      | —                 | —     | —                          | —                         | —     | all with a balance change |
-| 16  | `save` → `MikroOrmWalletLedgerRepository.append`                                                    | —                          | W      | —                 | —     | —                          | —                         | —     | all with a balance change |
-| 17  | `repositories.outbox.enqueue` (events built from the state)                                         | —                          | —      | —                 | —     | E                          | —                         | C     | all                       |
-| 18  | `recordInbound` → `MikroOrmInboxRepository.insert`                                                  | —                          | —      | —                 | W     | —                          | —                         | —     | queue                     |
-| 19  | Commit of the unit of work                                                                          | all of the above, together |        |                   |       |                            |                           |       | all                       |
-| 20  | `OutboxPublisher.publishOnce` → `claimDue`                                                          | —                          | —      | —                 | —     | W (lease)                  | —                         | —     | after commit              |
-| 21  | `SqsEventTransport.publish` → `SqsQueue.send`                                                       | —                          | —      | —                 | —     | R                          | —                         | sent  | after commit              |
-| 22  | `OutboxPublisher.deliver` → `complete` or `reschedule`                                              | —                          | —      | —                 | —     | W (guarded by lease token) | —                         | —     | after commit              |
-| 23  | `WalletQueries.reconcile` → `findForShare`, `summarize`                                             | S                          | R      | —                 | —     | —                          | —                         | —     | reconciliation            |
-| 24  | `WalletQueries.listLedger` → `listPageAfter`                                                        | —                          | R      | —                 | —     | —                          | —                         | —     | ledger                    |
-| 25  | `ProcessPendingReferences.runOnce` → `findDueForReferenceLookup`                                    | —                          | —      | R                 | —     | —                          | —                         | —     | reference                 |
-| 26  | `ProcessPendingReferences.resolveOne` → `findForUpdate`, `findById`, then `settle(existing = true)` | L, R                       | —      | R, W              | —     | E                          | —                         | —     | reference                 |
+| #   | Função (na ordem de execução)                                                                         | Carteira               | Ledger | Operação de wager | Inbox | Outbox                            | Cliente de API            | Evento  | Fluxo                      |
+| --- | ----------------------------------------------------------------------------------------------------- | ---------------------- | ------ | ----------------- | ----- | --------------------------------- | ------------------------- | ------- | -------------------------- |
+| 1   | `ApiKeyGuard.canActivate` → `AuthenticateApiKey.execute`                                              | —                      | —      | —                 | —     | —                                 | R (`findActiveByKeyHash`) | —       | HTTP                       |
+| 2   | `WageringController.submit` → `requireProviderScope`                                                  | —                      | —      | —                 | —     | —                                 | —                         | —       | HTTP                       |
+| 3   | `parseProcessWagerRequest` (ou `parseWagerCommandMessage`)                                            | —                      | —      | —                 | —     | —                                 | —                         | —       | HTTP, fila                 |
+| 4   | `ProcessWagerTransaction.execute` → `WagerTransaction.create`                                         | —                      | —      | C                 | —     | —                                 | —                         | —       | HTTP, fila                 |
+| 5   | `process` → `MikroOrmWalletRepository.findForUpdate`                                                  | L                      | —      | —                 | —     | —                                 | —                         | —       | HTTP, fila, referência     |
+| 6   | `isInboundRecorded` → `MikroOrmInboxRepository.find`                                                  | —                      | —      | —                 | R     | —                                 | —                         | —       | fila                       |
+| 7   | `MikroOrmWagerTransactionRepository.findByIdentity`                                                   | —                      | —      | R                 | —     | —                                 | —                         | —       | HTTP, fila                 |
+| 8   | `replay` (quando a chave já foi vista)                                                                | —                      | —      | R                 | —     | —                                 | —                         | —       | HTTP, fila                 |
+| 9   | `TransactionSettlement.settle` → `findByExternalId` (referência)                                      | —                      | —      | R                 | —     | —                                 | —                         | —       | HTTP, fila, referência     |
+| 10  | `WagerTransaction.walletMismatch`, `WagerTransaction.evaluateReference`                               | —                      | —      | —                 | —     | —                                 | —                         | —       | todos                      |
+| 11  | `processedOutcomesOf`                                                                                 | —                      | —      | R                 | —     | —                                 | —                         | —       | todos                      |
+| 12  | `Wallet.canDebit`, `Wallet.debit` ou `Wallet.credit`                                                  | —                      | C      | —                 | —     | —                                 | —                         | —       | todos                      |
+| 13  | `WagerTransaction.markProcessed`, `reject`, `markPendingReference`                                    | —                      | —      | C (estado)        | —     | —                                 | —                         | —       | todos                      |
+| 14  | `save` → `MikroOrmWagerTransactionRepository.insert` ou `update`                                      | —                      | —      | W                 | —     | —                                 | —                         | —       | todos                      |
+| 15  | `save` → `MikroOrmWalletRepository.save` (protegido por versão)                                       | W                      | —      | —                 | —     | —                                 | —                         | —       | todos com mudança de saldo |
+| 16  | `save` → `MikroOrmWalletLedgerRepository.append`                                                      | —                      | W      | —                 | —     | —                                 | —                         | —       | todos com mudança de saldo |
+| 17  | `repositories.outbox.enqueue` (eventos construídos a partir do estado)                                | —                      | —      | —                 | —     | E                                 | —                         | C       | todos                      |
+| 18  | `recordInbound` → `MikroOrmInboxRepository.insert`                                                    | —                      | —      | —                 | W     | —                                 | —                         | —       | fila                       |
+| 19  | Commit da unidade de trabalho                                                                         | todos os acima, juntos |        |                   |       |                                   |                           |         | todos                      |
+| 20  | `OutboxPublisher.publishOnce` → `claimDue`                                                            | —                      | —      | —                 | —     | W (lease)                         | —                         | —       | após commit                |
+| 21  | `SqsEventTransport.publish` → `SqsQueue.send`                                                         | —                      | —      | —                 | —     | R                                 | —                         | enviado | após commit                |
+| 22  | `OutboxPublisher.deliver` → `complete` ou `reschedule`                                                | —                      | —      | —                 | —     | W (protegido pelo token de lease) | —                         | —       | após commit                |
+| 23  | `WalletQueries.reconcile` → `findForShare`, `summarize`                                               | S                      | R      | —                 | —     | —                                 | —                         | —       | reconciliação              |
+| 24  | `WalletQueries.listLedger` → `listPageAfter`                                                          | —                      | R      | —                 | —     | —                                 | —                         | —       | ledger                     |
+| 25  | `ProcessPendingReferences.runOnce` → `findDueForReferenceLookup`                                      | —                      | —      | R                 | —     | —                                 | —                         | —       | referência                 |
+| 26  | `ProcessPendingReferences.resolveOne` → `findForUpdate`, `findById`, depois `settle(existing = true)` | L, R                   | —      | R, W              | —     | E                                 | —                         | —       | referência                 |
 
-Row 19 is the point of atomicity. A failure at any row before it leaves no write behind, which is
-why a crashed transaction shows nothing in any table.
+A linha 19 é o ponto de atomicidade. Uma falha em qualquer linha anterior não deixa nenhuma escrita para trás,
+razão pela qual uma transação com crash não exibe nada em nenhuma tabela.
 
-`S` in row 23 is a shared lock: it lets reads through, and makes a debit wait.
+`S` na linha 23 é um lock compartilhado (shared lock): permite leituras e faz o débito aguardar.
 
-## Entities
+## Entidades
 
-| Entity                | Table                   | Record class              | Repository                                                            | Domain class                                                                                        |
+| Entidade              | Tabela                  | Classe de registro        | Repositório                                                           | Classe de domínio                                                                                   |
 | --------------------- | ----------------------- | ------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `Wallet`              | `wallets`               | `WalletRecord`            | `MikroOrmWalletRepository`                                            | `Wallet`                                                                                            |
 | `WalletLedgerEntry`   | `wallet_ledger_entries` | `WalletLedgerEntryRecord` | `MikroOrmWalletLedgerRepository`                                      | `WalletLedgerEntry`                                                                                 |
 | `WagerTransaction`    | `wager_transactions`    | `WagerTransactionRecord`  | `MikroOrmWagerTransactionRepository`                                  | `WagerTransaction`                                                                                  |
 | `InboxMessage`        | `inbox_messages`        | `InboxMessageRecord`      | `MikroOrmInboxRepository`                                             | `InboxMessage`                                                                                      |
 | `OutboxMessage`       | `outbox_messages`       | `OutboxMessageRecord`     | `MikroOrmOutboxRepository` (enqueue), `MikroOrmOutboxStore` (publish) | `OutboxMessage`                                                                                     |
-| `ApiClient`           | `api_clients`           | `ApiClientRecord`         | `MikroOrmApiClientRepository`                                         | `Principal`, `api-key` functions                                                                    |
-| Integration events    | in `outbox_messages`    | none                      | `MikroOrmOutboxRepository.enqueue`                                    | `IntegrationEvent` and its four subclasses                                                          |
-| Commands and messages | none                    | none                      | none                                                                  | `ProcessWagerCommand`, `OpenWalletInput`, `CreateApiClientInput`, `ReceivedMessage`                 |
-| Values and policies   | none                    | none                      | none                                                                  | `Money`, `KIND_RULES`, `FAILURE_CODES`, `referenceRetryDelayMs`, `wagerPayloadHash`, `LedgerCursor` |
-| Errors                | none                    | none                      | none                                                                  | `DomainError`, application errors, `RequestValidationError`                                         |
+| `ApiClient`           | `api_clients`           | `ApiClientRecord`         | `MikroOrmApiClientRepository`                                         | `Principal`, funções de `api-key`                                                                   |
+| Eventos de integração | em `outbox_messages`    | nenhuma                   | `MikroOrmOutboxRepository.enqueue`                                    | `IntegrationEvent` e suas quatro subclasses                                                         |
+| Comandos e mensagens  | nenhuma                 | nenhuma                   | nenhum                                                                | `ProcessWagerCommand`, `OpenWalletInput`, `CreateApiClientInput`, `ReceivedMessage`                 |
+| Valores e políticas   | nenhuma                 | nenhuma                   | nenhum                                                                | `Money`, `KIND_RULES`, `FAILURE_CODES`, `referenceRetryDelayMs`, `wagerPayloadHash`, `LedgerCursor` |
+| Erros                 | nenhuma                 | nenhuma                   | nenhum                                                                | `DomainError`, erros de aplicação, `RequestValidationError`                                         |
 
-Six tables hold everything. The rest is passed in memory, or in a message.
+Seis tabelas comportam tudo. O restante é passado em memória ou em uma mensagem.
 
 ### Wallet
 
-| Method                  | Caller                                     | Effect                                         |
-| ----------------------- | ------------------------------------------ | ---------------------------------------------- |
-| `findForUpdate`         | `process`, `resolveOne`                    | the wallet lock, `FOR UPDATE`                  |
-| `findForShare`          | `WalletQueries.reconcile`                  | `FOR SHARE`, so a debit waits for the read     |
-| `findById`              | `WalletQueries.getWallet`, `resolveOne`    | read, without a lock                           |
-| `insert`                | `OpenWallet.execute`                       | one row                                        |
-| `save(wallet, version)` | `TransactionSettlement.applyBalanceChange` | `UPDATE ... WHERE version = expected`, one row |
+| Método                  | Chamador                                   | Efeito                                              |
+| ----------------------- | ------------------------------------------ | --------------------------------------------------- |
+| `findForUpdate`         | `process`, `resolveOne`                    | o lock de carteira, `FOR UPDATE`                    |
+| `findForShare`          | `WalletQueries.reconcile`                  | `FOR SHARE`, para que um débito espere pela leitura |
+| `findById`              | `WalletQueries.getWallet`, `resolveOne`    | leitura, sem lock                                   |
+| `insert`                | `OpenWallet.execute`                       | uma linha                                           |
+| `save(wallet, version)` | `TransactionSettlement.applyBalanceChange` | `UPDATE ... WHERE version = expected`, uma linha    |
 
-`Wallet.open` creates the wallet. It returns the opening ledger entry only for a positive balance.
-`Wallet.debit` and `Wallet.credit` return the new state and an entry, and bump `version` once.
+`Wallet.open` cria a carteira. Retorna o lançamento de abertura no ledger apenas para saldos positivos.
+`Wallet.debit` e `Wallet.credit` retornam o novo estado e um lançamento, incrementando `version` uma vez.
 
 ### WalletLedgerEntry
 
-| Method                            | Caller                                     | Effect                                            |
-| --------------------------------- | ------------------------------------------ | ------------------------------------------------- |
-| `append`                          | `OpenWallet.execute`, `applyBalanceChange` | one `INSERT`; a trigger refuses update and delete |
-| `summarize(walletId, currency)`   | `WalletQueries.reconcile`                  | the sum and whether the chain is intact           |
-| `listPageAfter(walletId, seq, n)` | `WalletQueries.listLedger`                 | keyset page                                       |
-| `listByWallet`                    | diagnostics and tests                      | all entries, in order                             |
+| Método                            | Chamador                                   | Efeito                                              |
+| --------------------------------- | ------------------------------------------ | --------------------------------------------------- |
+| `append`                          | `OpenWallet.execute`, `applyBalanceChange` | um `INSERT`; um gatilho recusa alteração e exclusão |
+| `summarize(walletId, currency)`   | `WalletQueries.reconcile`                  | o somatório e se a cadeia está íntegra              |
+| `listPageAfter(walletId, seq, n)` | `WalletQueries.listLedger`                 | página keyset                                       |
+| `listByWallet`                    | diagnósticos e testes                      | todos os lançamentos, em ordem                      |
 
 ### WagerTransaction
 
-| Method                      | Caller                                   | Effect                                                                |
-| --------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| `findByIdentity`            | `process`                                | the replay check, by key first, then external id                      |
-| `findByExternalId`          | `settle`, `WagerQueries.getByExternalId` | the reference, or a lookup by provider id                             |
-| `findById`                  | `WagerQueries.getById`, `resolveOne`     | one row                                                               |
-| `findDueForReferenceLookup` | `ProcessPendingReferences.runOnce`       | held rows whose lookup is due, at most 20                             |
-| `processedOutcomesOf`       | `settle`                                 | REFUND or ROLLBACK, and WIN or LOSS, already applied to the reference |
-| `insert`, `update`          | `save`, `holdOrRecordMiss`               | one row                                                               |
+| Método                      | Chamador                                 | Efeito                                                             |
+| --------------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `findByIdentity`            | `process`                                | a verificação de replay, por chave primeiro, depois por id externo |
+| `findByExternalId`          | `settle`, `WagerQueries.getByExternalId` | a referência, ou uma busca por id de provedor                      |
+| `findById`                  | `WagerQueries.getById`, `resolveOne`     | uma linha                                                          |
+| `findDueForReferenceLookup` | `ProcessPendingReferences.runOnce`       | linhas retidas cuja busca está vencida, no máximo 20               |
+| `processedOutcomesOf`       | `settle`                                 | REFUND ou ROLLBACK, e WIN ou LOSS, já aplicados à referência       |
+| `insert`, `update`          | `save`, `holdOrRecordMiss`               | uma linha                                                          |
 
-### InboxMessage and OutboxMessage
+### InboxMessage e OutboxMessage
 
-| Method                             | Caller                         | Effect                                              |
-| ---------------------------------- | ------------------------------ | --------------------------------------------------- |
-| `MikroOrmInboxRepository.find`     | `isInboundRecorded`            | was this message applied, and with which payload    |
-| `MikroOrmInboxRepository.insert`   | `recordInbound`                | one row, primary key `(consumer_name, message_id)`  |
-| `MikroOrmOutboxRepository.enqueue` | `settle`, `OpenWallet.execute` | one row, in the same transaction                    |
-| `MikroOrmOutboxStore.claimDue`     | `publishOnce`                  | `FOR UPDATE SKIP LOCKED`, sets the lease            |
-| `MikroOrmOutboxStore.complete`     | `deliver`                      | marks published, only while the lease token matches |
-| `MikroOrmOutboxStore.reschedule`   | `deliver`                      | a failed send, with the next attempt                |
+| Método                             | Chamador                       | Efeito                                                              |
+| ---------------------------------- | ------------------------------ | ------------------------------------------------------------------- |
+| `MikroOrmInboxRepository.find`     | `isInboundRecorded`            | se esta mensagem foi aplicada e com qual payload                    |
+| `MikroOrmInboxRepository.insert`   | `recordInbound`                | uma linha, chave primária `(consumer_name, message_id)`             |
+| `MikroOrmOutboxRepository.enqueue` | `settle`, `OpenWallet.execute` | uma linha, na mesma transação                                       |
+| `MikroOrmOutboxStore.claimDue`     | `publishOnce`                  | `FOR UPDATE SKIP LOCKED`, define o lease                            |
+| `MikroOrmOutboxStore.complete`     | `deliver`                      | marca como publicado, apenas enquanto o token de lease corresponder |
+| `MikroOrmOutboxStore.reschedule`   | `deliver`                      | um envio com falha, com a próxima tentativa                         |
 
 ### ApiClient
 
-| Method                | Caller                       | Effect                                         |
-| --------------------- | ---------------------------- | ---------------------------------------------- |
-| `findActiveByKeyHash` | `AuthenticateApiKey.execute` | the client that holds the hash, if not revoked |
-| `insert`              | `CreateApiClient.execute`    | one row, with the hash of the key              |
-| `revoke`              | `auth:revoke`                | sets `revoked_at` once                         |
+| Método                | Chamador                     | Efeito                                      |
+| --------------------- | ---------------------------- | ------------------------------------------- |
+| `findActiveByKeyHash` | `AuthenticateApiKey.execute` | o cliente detentor do hash, se não revogado |
+| `insert`              | `CreateApiClient.execute`    | uma linha, com o hash da chave              |
+| `revoke`              | `auth:revoke`                | define `revoked_at` uma vez                 |
 
-## Sequence diagrams
+## Diagramas de sequência
 
-### A BET over HTTP
+### Uma BET via HTTP
 
 ```mermaid
 sequenceDiagram
@@ -303,7 +303,7 @@ sequenceDiagram
   end
 ```
 
-### A command from the queue
+### Um comando vindo da fila
 
 ```mermaid
 sequenceDiagram
@@ -327,7 +327,7 @@ sequenceDiagram
   end
 ```
 
-### An event, from commit to the events queue
+### Um evento, do commit à fila de eventos
 
 ```mermaid
 sequenceDiagram
@@ -344,7 +344,7 @@ sequenceDiagram
   P->>DB: complete, only while the lease token still matches
 ```
 
-### A held reference, resolved later
+### Uma referência retida, resolvida posteriormente
 
 ```mermaid
 sequenceDiagram
@@ -362,7 +362,7 @@ sequenceDiagram
   end
 ```
 
-### A provider out of scope
+### Um provedor fora de escopo
 
 ```mermaid
 sequenceDiagram
@@ -373,11 +373,11 @@ sequenceDiagram
   C-->>P: 403 FORBIDDEN, nothing written
 ```
 
-## Where to change what
+## Onde alterar o quê
 
-- **A new kind of operation:** `KIND_RULES` in `wager-transaction-kind.ts`, the CHECK in a new
-  migration, and tests in `test/unit/wagering` and `test/integration/wagering`.
-- **A new event:** a class that extends `IntegrationEvent`, enqueued in `TransactionSettlement` or
-  `OpenWallet`, with a test in `test/integration/messaging`.
-- **A new table:** a migration, a record class, a repository, and a probe in
+- **Um novo tipo de operação:** `KIND_RULES` em `wager-transaction-kind.ts`, a restrição CHECK em uma nova
+  migração, e testes em `test/unit/wagering` e `test/integration/wagering`.
+- **Um novo evento:** uma classe que estende `IntegrationEvent`, enfileirada em `TransactionSettlement` ou
+  `OpenWallet`, com um teste em `test/integration/messaging`.
+- **Uma nova tabela:** uma migração, uma classe de registro, um repositório e uma verificação em
   `test/integration/schema/schema-constraints.test.ts`.

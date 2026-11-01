@@ -276,8 +276,8 @@ igual ao saldo (75,00); reconciliação consistente.
 
 ## Decisões que precisam do dono do desafio
 
-5. **F-13:** confirmar o caminho de FAILED (gravado pelo worker de referências) e o evento `WagerTransactionFailed`, que não está na especificação.
-1. **F-03:** a resposta 404 uniforme para transação alheia (mudança de um status documentado).
-1. **F-06:** adotar ou não os triggers de concordância, pagando ~1,8 ms de lock sob contenção.
-1. **F-10:** a leitura de D4 para ROLLBACK após desfazer REFUND.
-1. **F-11:** D1, resultado sem referência, que não pode ser limitado a um por BET.
+1. **F-13:** confirmar o caminho de FAILED (gravado pelo worker de referências) e o evento `WagerTransactionFailed`, que não está na especificação.
+2. **F-03:** a resposta 404 uniforme para transação alheia (mudança de um status documentado).
+3. **F-06:** adotar ou não os triggers de concordância, pagando ~1,8 ms de lock sob contenção.
+4. **F-10:** a leitura de D4 para ROLLBACK após desfazer REFUND.
+5. **F-11:** D1, resultado sem referência, que não pode ser limitado a um por BET.

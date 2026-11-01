@@ -1,6 +1,6 @@
 # Guia do avaliador
 
-Este guia mostra como verificar a solução em cerca de 30 minutos, sem orientação do autor. Cada afirmação aponta
+Este guia mostra como verificar a solução em cerca de 40 minutos, sem orientação do autor. Cada afirmação aponta
 para o comando ou o arquivo que a prova. Quando um item não é provado, o guia diz isso.
 
 ## 1. Rodar a stack e a demonstração (10 min)

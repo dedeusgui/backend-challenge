@@ -1,66 +1,66 @@
-# ADR 0007: API keys with two roles, and provider scope
+# ADR 0007: Chaves de API com dois papéis e escopo de provedor
 
-**Status:** accepted. Supersedes [ADR 0006](0006-authentication-deferred.md).
+**Status:** aceito. Substitui o [ADR 0006](0006-authentication-deferred.md).
 
-## Context
+## Contexto
 
-ADR 0006 deferred authentication, and the challenge allows that. The owner now asks for a
-simple, working scheme that lets the project do what it must: providers submit operations for
-their own provider id, operators run the back office, and nobody else reaches the API. The
-challenge suggests integrating an external identity provider (Keycloak or Zitadel) and warns
-against hand-made authentication with a user table and password hashes.
+O ADR 0006 adiou a autenticação, e o desafio permite isso. O proprietário agora pede um
+esquema funcional e simples que permita ao projeto fazer o que deve: provedores submetem operações para
+seu próprio id de provedor, operadores gerenciam o back office, e ninguém mais alcança a API. O
+desafio sugere a integração de um provedor de identidade externo (Keycloak ou Zitadel) e adverte
+contra a autenticação caseira com tabela de usuários e hashes de senha.
 
-## Decision
+## Decisão
 
-Each API client has one long-lived **bearer key**, sent as `Authorization: Bearer <key>`. A
-client has one of two roles:
+Cada cliente de API tem uma **chave bearer** de longa duração, enviada como `Authorization: Bearer <key>`. Um
+cliente tem um de dois papéis:
 
-| Role       | Bound to         | May                                                                      |
-| ---------- | ---------------- | ------------------------------------------------------------------------ |
-| `PROVIDER` | one `providerId` | submit and read the operations of its own provider id                    |
-| `OPERATOR` | no provider      | open, read and reconcile wallets, read metrics, and act for any provider |
+| Papel      | Vinculado a     | Pode                                                                          |
+| ---------- | --------------- | ----------------------------------------------------------------------------- |
+| `PROVIDER` | um `providerId` | submeter e ler as operações do seu próprio id de provedor                     |
+| `OPERATOR` | nenhum provedor | abrir, ler e reconciliar carteiras, ler métricas e agir por qualquer provedor |
 
-- Health probes are public. Every other route needs a valid key.
-- A PROVIDER request for another provider id is refused with `403 FORBIDDEN`, before anything
-  is written. A transaction read by id that belongs to another provider is `404 TRANSACTION_NOT_FOUND`,
-  the answer of a missing id, so the id cannot be probed (see ARCHITECTURE §12).
-- The key is 256 random bits with the prefix `wgr_`. Only its SHA-256 hash is stored in
-  `api_clients`. The hash is enough: the key cannot be searched from it, and a password hash
-  would only slow down a lookup made on every request.
-- A key is created and revoked with `bun run auth:create` and `bun run auth:revoke`. The key is
-  printed once. A revoked client keeps its row, so an audit can still see it.
-- The guard (`ApiKeyGuard`) authenticates each request once, before the controller runs.
-  The controller checks provider scope, because only it knows the provider of the record.
+- Sondas de health são públicas. Todas as outras rotas necessitam de uma chave válida.
+- Uma requisição de PROVIDER para outro id de provedor é recusada com `403 FORBIDDEN`, antes que qualquer
+  coisa seja escrita. Uma leitura de transação por id que pertence a outro provedor resulta em `404 TRANSACTION_NOT_FOUND`,
+  a resposta de um id ausente, de modo que o id não possa ser sondado (consulte ARCHITECTURE §12).
+- A chave tem 256 bits aleatórios com o prefixo `wgr_`. Apenas seu hash SHA-256 é armazenado em
+  `api_clients`. O hash é suficiente: a chave não pode ser pesquisada a partir dele, e um hash de senha
+  apenas tornaria mais lenta uma consulta feita em cada requisição.
+- Uma chave é criada e revogada com `bun run auth:create` e `bun run auth:revoke`. A chave é
+  exibida uma única vez. Um cliente revogado mantém sua linha, para que uma auditoria ainda possa vê-lo.
+- A guarda (`ApiKeyGuard`) autentica cada requisição uma vez, antes da execução do controller.
+  O controller verifica o escopo de provedor, pois somente ele conhece o provedor do registro.
 
-The unused `ProviderIdentityPort` stub is removed. This guard replaces it.
+O stub não utilizado `ProviderIdentityPort` é removido. Esta guarda o substitui.
 
-## Alternatives
+## Alternativas
 
-- **Keycloak or Zitadel, with OIDC.** The challenge's expectation, and the right choice for a
-  real deployment. It adds a container with its own realm, clients and token lifetimes, and this
-  build would still need a second service to test. The key table and the guard are the place
-  where an OIDC verifier would replace the hash lookup, so the change stays local.
-- **Signed JWTs issued locally.** Still needs an issuer, and gives no revocation without a
-  list. Rejected.
-- **A shared secret for everyone.** Gives no provider scope. Rejected.
+- **Keycloak ou Zitadel, com OIDC.** A expectativa do desafio, e a escolha certa para uma
+  implantação real. Adiciona um container com seu próprio realm, clientes e tempos de vida de tokens, e esta
+  versão ainda precisaria de um segundo serviço para testar. A tabela de chaves e a guarda são o local
+  onde um verificador OIDC substituiria a consulta por hash, portanto a alteração permanece local.
+- **JWTs assinados emitidos localmente.** Ainda necessita de um emissor, e não oferece revogação sem uma
+  lista. Recusada.
+- **Um segredo compartilhado para todos.** Não oferece escopo de provedor. Recusada.
 
-## Consequences
+## Consequências
 
-- Keys do not expire, and rotation is manual: create a new client, then revoke the old one.
-- Keys are sent in every request, so the API must run behind TLS in any real deployment. This
-  build serves plain HTTP inside a trusted network, as before.
-- Queue messages are still a trusted internal channel. The authenticator does not see them.
-  Their provider and wallet fields are still checked in the domain.
-- A leaked key lets its holder act for its provider until it is revoked. A revoked key is
-  refused on the next request, with no cache to flush.
+- Chaves não expiram, e a rotação é manual: cria-se um novo cliente e, em seguida, revoga-se o antigo.
+- As chaves são enviadas em cada requisição, portanto a API deve rodar atrás de TLS em qualquer implantação real. Esta
+  versão serve HTTP simples dentro de uma rede confiável, como antes.
+- Mensagens de fila continuam sendo um canal interno confiável. O autenticador não as vê.
+  Seus campos de provedor e carteira ainda são verificados no domínio.
+- Uma chave vazada permite que seu detentor aja pelo seu provedor até que seja revogada. Uma chave revogada é
+  recusada na requisição seguinte, sem cache para limpar.
 
-## Evidence
+## Evidências
 
-- `test/unit/auth/api-client.test.ts`: the role rules, key format, hash, bearer parsing, and
-  the validation of `CreateApiClient`.
-- `test/integration/auth/api-clients.test.ts`: only the hash is stored, a revoked key is refused,
-  and the table refuses a PROVIDER without a provider and an OPERATOR with one. It also runs the
-  `auth` command and checks the key it prints.
-- `test/e2e/auth-http.test.ts`: 401 without, with unknown, or with revoked keys; 403 for a
-  provider on operator routes, on another provider's submission and reads; 200 for the allowed
-  cases; health public.
+- `test/unit/auth/api-client.test.ts`: as regras de papéis, formato da chave, hash, análise do bearer e
+  a validação de `CreateApiClient`.
+- `test/integration/auth/api-clients.test.ts`: apenas o hash é armazenado, uma chave revogada é recusada,
+  e a tabela recusa um PROVIDER sem um provedor e um OPERATOR com um. Também executa o
+  comando `auth` e verifica a chave que ele imprime.
+- `test/e2e/auth-http.test.ts`: 401 sem chaves, com chaves desconhecidas ou revogadas; 403 para um
+  provedor em rotas de operador, em submissões e leituras de outro provedor; 200 para os casos
+  permitidos; health público.

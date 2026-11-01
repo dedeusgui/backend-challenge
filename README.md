@@ -5,18 +5,71 @@ provedores de jogos, por HTTP e por fila SQS. Mantém o saldo de cada carteira i
 concorrência, mensagens duplicadas, referências fora de ordem, falhas e reinícios.
 
 Este repositório é a solução do [desafio técnico da Jungle Gaming](docs/CHALLENGE.md), cópia fiel do enunciado.
-Versão em inglês deste guia: [README.en.md](README.en.md).
+Versão em inglês (referência): [README.en.md](README.en.md). Índice completo da documentação: [docs/README.md](docs/README.md).
 
 - **Stack:** Bun 1.4.4, TypeScript estrito, NestJS 12, MikroORM 7 (pinado em 7.x), PostgreSQL 17,
   AWS SQS via LocalStack 4.14, Docker Compose.
 - **Não é:** um sistema de login, um IdP externo nem um painel. A autenticação é por chave de API (ver
   [ADR 0007](docs/adr/0007-api-key-authentication.md)).
 
+## Arquitetura em um olhar
+
+Os diagramas abaixo são os **mesmos arquivos SVG versionados** utilizados na vitrine estática. Eles
+representam os fluxos implementados, não uma arquitetura hipotética. A explicação das
+garantias e dos pontos de falha está em [ARCHITECTURE.md](ARCHITECTURE.md); os testes
+correspondentes estão na [matriz de requisitos](docs/REQUIREMENTS_MATRIX.md).
+
+### 1. BET recebida por HTTP
+
+Autenticação e identidade do provedor, validação da operação, idempotência e decisão
+transacional. [Abrir SVG em tamanho original](docs/diagrams/bet-over-http.svg).
+
+![Fluxo BET via HTTP, incluindo autenticação, idempotência e persistência](docs/diagrams/bet-over-http.svg)
+
+### 2. Comando recebido pela SQS
+
+Consumo da fila, processamento financeiro compartilhado com a rota HTTP, tratamento de
+reentregas e confirmação da mensagem. [Abrir SVG em tamanho original](docs/diagrams/queued-command.svg).
+
+![Fluxo de um comando de apostas vindo da fila SQS](docs/diagrams/queued-command.svg)
+
+### 3. Resultados, estados e entidades
+
+Visão das transições e dos registros envolvidos na decisão sobre uma operação financeira.
+[Abrir SVG em tamanho original](docs/diagrams/outcome-entities.svg).
+
+![Diagrama de estados e entidades do processamento financeiro](docs/diagrams/outcome-entities.svg)
+
+Estes diagramas são explicativos: a prova das invariantes está nas constraints do banco,
+no código e nos testes de integração, concorrência e falhas. A
+[vitrine técnica](https://dedeusgui.github.io/backend-challenge/) reúne os mesmos fluxos
+com a metodologia e as limitações dos resultados publicados.
+
+## Restrições invioláveis do enunciado (§5)
+
+Cada restrição da [especificação](docs/CHALLENGE.md) tem um mecanismo no código ou no banco e um teste que a prova.
+Os números seguem a §5 do enunciado.
+
+| #   | Restrição                                             | Como o projeto atende                                                                                            | Prova                                                                            |
+| --- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | Nada de `number`, `float` ou `double` para dinheiro   | `Money` sobre decimal.js; valores trafegam como string decimal; `NUMERIC(20,2)` no banco                         | `test/unit/shared/domain/money.test.ts`                                          |
+| 2   | Idempotência nunca só em memória                      | chave única no banco por provedor (`UNIQUE`) e inbox persistente                                                 | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
+| 3   | Não confiar só no SQS FIFO                            | a fila não é a garantia: duplicatas e reentregas são absorvidas pela inbox e pela chave de idempotência no banco | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
+| 4   | Nenhum evento publicado antes do commit               | o outbox é gravado na mesma transação SQL; o publicador lê só depois                                             | `test/integration/messaging/outbox-publisher.test.ts`, `test/integration/faults` |
+| 5   | Ledger nunca sobrescrito nem excluído                 | trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` no `wallet_ledger_entries`                                         | `test/integration/schema/schema-constraints.test.ts`                             |
+| 6   | Nenhum lock global entre carteiras                    | `SELECT ... FOR UPDATE` por carteira                                                                             | `test/concurrency/hot-wallet.test.ts`                                            |
+| 7   | Nada de `read → calculate → update` sem controle      | lock de linha antes da decisão, com versão como guarda                                                           | `test/concurrency/hot-wallet.test.ts`                                            |
+| 8   | Correto com múltiplas instâncias                      | três processos independentes sobre o mesmo banco e a mesma fila                                                  | `test/concurrency/three-processes.test.ts`                                       |
+| 9   | Unicidade, imutabilidade e não-negatividade no schema | `CHECK`, `UNIQUE`, `FK` e trigger nas migrações                                                                  | `test/integration/schema`                                                        |
+
+As migrações são versionadas e reversíveis: as 12 têm `up` e `down`, e o teste de reversão está em
+`test/integration/schema/migrations.test.ts`. O código roda em TypeScript estrito (`"strict": true` no `tsconfig.json`).
+
 ## Por onde começar (avaliador)
 
 1. **Rode a stack** (seção seguinte) e faça a demonstração financeira: `bun run demo:finance`.
 2. **Leia o guia do avaliador:** [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), com o caminho de leitura de
-   aproximadamente 30 minutos, o que cada teste prova e o que não prova.
+   aproximadamente 40 minutos, o que cada teste prova e o que não prova.
 3. **Confira as garantias contra o código:** [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) liga cada
    requisito ao teste que o prova. Uma linha só é `PASSING` depois que o teste roda e passa.
 4. **Veja a arquitetura e as decisões:** [ARCHITECTURE.md](ARCHITECTURE.md), começando pela tabela de decisões.
@@ -126,39 +179,6 @@ estados e repetir o experimento.
 [registros JSON das execuções](docs/load/). São medições com LocalStack, não AWS SQS;
 não há soak test prolongado nem SLO de produção validado.
 
-## Diagramas dos fluxos
-
-Os diagramas abaixo são os **mesmos arquivos SVG versionados** utilizados na vitrine estática. Eles
-representam os fluxos implementados, não uma arquitetura hipotética. A explicação das
-garantias e dos pontos de falha está em [ARCHITECTURE.md](ARCHITECTURE.md); os testes
-correspondentes estão na [matriz de requisitos](docs/REQUIREMENTS_MATRIX.md).
-
-### 1. BET recebida por HTTP
-
-Autenticação e identidade do provedor, validação da operação, idempotência e decisão
-transacional. [Abrir SVG em tamanho original](docs/diagrams/bet-over-http.svg).
-
-![Fluxo BET via HTTP, incluindo autenticação, idempotência e persistência](docs/diagrams/bet-over-http.svg)
-
-### 2. Comando recebido pela SQS
-
-Consumo da fila, processamento financeiro compartilhado com a rota HTTP, tratamento de
-reentregas e confirmação da mensagem. [Abrir SVG em tamanho original](docs/diagrams/queued-command.svg).
-
-![Fluxo de um comando de apostas vindo da fila SQS](docs/diagrams/queued-command.svg)
-
-### 3. Resultados, estados e entidades
-
-Visão das transições e dos registros envolvidos na decisão sobre uma operação financeira.
-[Abrir SVG em tamanho original](docs/diagrams/outcome-entities.svg).
-
-![Diagrama de estados e entidades do processamento financeiro](docs/diagrams/outcome-entities.svg)
-
-Estes diagramas são explicativos: a prova das invariantes está nas constraints do banco,
-no código e nos testes de integração, concorrência e falhas. A
-[vitrine técnica](https://dedeusgui.github.io/backend-challenge/) reúne os mesmos fluxos
-com a metodologia e as limitações dos resultados publicados.
-
 ## Testes
 
 | Comando                    | Para que serve                                                                                          |
@@ -174,6 +194,21 @@ com a metodologia e as limitações dos resultados publicados.
 
 Nenhum teste de integração, concorrência ou e2e substitui PostgreSQL ou a fila por mock. Cada teste de concorrência
 verifica que exatamente uma operação tem o efeito, e que as outras são replays, conflitos ou rejeições.
+
+### Outros comandos
+
+| Comando                                                                | Para que serve                                                        |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `bun run typecheck`                                                    | `tsc --noEmit`: checa os tipos sem gerar arquivos                     |
+| `bun run lint`                                                         | oxlint sobre `src` e `test`                                           |
+| `bun run format` e `bun run format:check`                              | prettier: formata, ou só verifica (o `check:fast` roda a verificação) |
+| `bun run test:unit`                                                    | testes unitários, sem infraestrutura                                  |
+| `bun run auth:create -- --name <nome> --role PROVIDER --provider <id>` | cria chave de provedor; com `--role OPERATOR`, cria chave de operador |
+| `bun run auth:revoke -- --client <clientId>`                           | revoga uma chave de API                                               |
+| `bun run start`                                                        | sobe a API a partir do código, sem recarregar                         |
+| `bun run edge:up` e `bun run edge:down`                                | sobe e derruba o modo protegido                                       |
+| `bun run edge:check`                                                   | sobe o modo protegido, roda `test:edge` e derruba                     |
+| `bun run bench:edge`                                                   | mede o overhead da borda (`test/edge/overhead.ts`)                    |
 
 ## Endpoints
 

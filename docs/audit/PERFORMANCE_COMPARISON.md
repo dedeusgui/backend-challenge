@@ -187,7 +187,7 @@ crescimento das tabelas, nem sobre um soak do consumidor de fila: isso não foi 
 
 ---
 
-## Alterações descartadas## Alterações descartadas
+## Alterações descartadas
 
 | Alteração                                                   | Motivo do descarte                                                                                                                             |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

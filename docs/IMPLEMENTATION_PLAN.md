@@ -1,95 +1,97 @@
-# Implementation plan and status
+# Plano de implementação e status
 
-> **Appendix.** The log of the slices, kept as history. Where it differs from [ARCHITECTURE.md](../ARCHITECTURE.md),
-> ARCHITECTURE.md is the current reading.
+> **Apêndice.** O registro dos slices, mantido como histórico. Onde diferir de [ARCHITECTURE.md](../ARCHITECTURE.md),
+> ARCHITECTURE.md é a leitura atual.
+>
+> Os números de carga desta página são de uma rodada anterior e estão superados. Os valores atuais estão em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
 
-The [challenge specification](CHALLENGE.md) is authoritative. The
-[requirements matrix](REQUIREMENTS_MATRIX.md) is the detailed status. This page
-summarises the slices and what each one proved.
+A [especificação do desafio](CHALLENGE.md) é mandatória. A
+[matriz de requisitos](REQUIREMENTS_MATRIX.md) é o status detalhado. Esta página
+resume os slices e o que cada um comprovou.
 
-## Foundation and tooling
+## Fundação e ferramentas
 
-- [x] Bun 1.4.4 pinned locally, in CI and in the Dockerfile. `bun.lock` committed.
-- [x] `check:fast` and `check:all` run what they announce. CI runs `check:all`.
-- [x] Compose starts PostgreSQL 17 and LocalStack 4.14, provisions the FIFO queues and the
-      redrive policy, runs the migration once, then starts the API and the worker.
-- [x] Audit findings fixed: the Dockerfile installed without a lockfile, CI used a floating
-      Bun version, and `format:check` failed on five files.
+- [x] Bun 1.4.4 fixado localmente, no CI e no Dockerfile. `bun.lock` commitado.
+- [x] `check:fast` e `check:all` executam o que anunciam. O CI executa `check:all`.
+- [x] Compose inicia o PostgreSQL 17 e o LocalStack 4.14, provisiona as filas FIFO e a
+      política de redrive, executa a migração uma vez e, em seguida, inicia a API e o worker.
+- [x] Apontamentos da auditoria corrigidos: o Dockerfile instalava sem lockfile, o CI usava uma versão
+      flutuante do Bun e `format:check` falhava em cinco arquivos.
 
-## Domain
+## Domínio
 
-- [x] `Money`: exact decimal arithmetic, strict input, currency checks, mutation-checked.
-- [x] `Wallet` and `WalletLedgerEntry`: balance guard, validate-before-mutate, opening, version.
-- [x] `WagerTransaction`: kind rules table, status machine, reference evaluation, failure codes.
-- [x] Canonical payload hash with a golden test.
-- [x] Integration event envelope and the four concrete events.
-- [x] Inbox and outbox entities, with retry backoff.
+- [x] `Money`: aritmética decimal exata, entrada estrita, verificações de moeda, verificação contra mutação.
+- [x] `Wallet` e `WalletLedgerEntry`: proteção de saldo, validação antes da mutação, abertura, versão.
+- [x] `WagerTransaction`: tabela de regras por tipo, máquina de estados, avaliação de referência, códigos de falha.
+- [x] Hash canônico de payload com golden test.
+- [x] Envelope de eventos de integração e os quatro eventos concretos.
+- [x] Entidades de inbox e outbox, com backoff de retentativa.
 
-## Persistence
+## Persistência
 
-- [x] Migration 1: tables, constraints, partial indexes, append-only trigger.
-- [x] Migration 2: reference schedule, reversible.
-- [x] Migration 3: a referenced transaction is reversed once, whatever the kind of reversal, and a
-      WIN may carry the reference of its BET. Reversible.
-- [x] Repositories with explicit mapping and checked parsing of stored enums.
-- [x] Migrations applied from empty, rolled back to zero, and re-applied.
+- [x] Migração 1: tabelas, constraints, índices parciais, trigger append-only.
+- [x] Migração 2: agendamento de referência, reversível.
+- [x] Migração 3: uma operação referenciada é revertida uma única vez, qualquer que seja o tipo de reversão, e um
+      WIN pode carregar a referência de sua BET. Reversível.
+- [x] Repositórios com mapeamento explícito e parsing checado de enums armazenados.
+- [x] Migrações aplicadas a partir do banco vazio, revertidas até zero e reaplicadas.
 
-## Application
+## Aplicação
 
-- [x] `ProcessWagerTransaction`: one path for HTTP and SQS, with idempotency under the wallet lock.
-- [x] `TransactionSettlement`: the one financial decision, shared with the reference worker.
-- [x] `ProcessPendingReferences`: due holds resolved under the wallet lock, bounded retries.
-- [x] `OpenWallet`, wallet and transaction queries, reconciliation (diagnostic only).
+- [x] `ProcessWagerTransaction`: um único caminho para HTTP e SQS, com idempotência sob o lock da carteira.
+- [x] `TransactionSettlement`: a decisão financeira única, compartilhada com o worker de referências.
+- [x] `ProcessPendingReferences`: retenções vencidas resolvidas sob o lock da carteira, retentativas delimitadas.
+- [x] `OpenWallet`, consultas de carteira e de operações, reconciliação (apenas diagnóstica).
 
-## Messaging
+## Mensageria
 
-- [x] Command consumer: ACK after commit, permanent to the DLQ, transient with backoff.
-- [x] Outbox publisher: claim and lease with `SKIP LOCKED`, lease-owned marks, at-least-once.
-- [x] Broker-side redrive after ten deliveries is verified on the Compose-provisioned queue.
+- [x] Consumidor de comandos: ACK após commit, falha permanente para a DLQ, falha transitória com backoff.
+- [x] Publicador do outbox: reserva e lease com `SKIP LOCKED`, marcações de propriedade do lease, at-least-once.
+- [x] Redrive no broker após dez entregas verificado na fila provisionada pelo Compose.
 
-## HTTP, health and observability
+## HTTP, integridade e observabilidade
 
-- [x] Endpoints in `ARCHITECTURE.md` section 10, with the status taxonomy.
-- [x] Liveness is dependency-free. Readiness probes PostgreSQL and SQS and answers 503 when either fails.
-- [x] JSON operation logs with no amounts. Per-process metrics at `GET /metrics`.
-- [x] Each minimum metric has an assertion: transactions, replays, lock conflicts, retries, DLQ, outbox lag, latency and divergences.
+- [x] Endpoints na seção 10 de `ARCHITECTURE.md`, com a taxonomia de status.
+- [x] Liveness é livre de dependências. Readiness sonda o PostgreSQL e o SQS e responde 503 quando algum falhar.
+- [x] Logs de operações em JSON sem valores monetários. Métricas por processo em `GET /metrics`.
+- [x] Cada métrica mínima possui uma asserção: transações, replays, conflitos de lock, retentativas, DLQ, lag do outbox, latência e divergências.
 
-## Concurrency and failure proof
+## Prova de concorrência e de falhas
 
-- [x] Hot wallet 80/80, fifty identical requests, distinct wallets, a mixed hot wallet, and
-      competing reversals, all in process, with the final invariant.
-- [x] Three independent API processes and a worker against shared PostgreSQL and LocalStack.
-- [x] Crash after commit and before ACK, recovered by a restarted worker, with one effect.
-- [x] Graceful SIGTERM exits with 0.
-- [x] Fault injection before commit, after broker accept and before mark, and during
-      reference resolution.
-- [x] Ledger invariant verified at the teardown of every flow-level database suite.
-- [x] Process-level crash before commit, and an interrupted batch during shutdown
+- [x] Hot wallet 80/80, cinquenta requisições idênticas, carteiras distintas, uma hot wallet mista e
+      reversões concorrentes, tudo em processo, com o invariante final.
+- [x] Três processos independentes de API e um worker contra PostgreSQL e LocalStack compartilhados.
+- [x] Queda após o commit e antes do ACK, recuperada por um worker reiniciado, com um único efeito.
+- [x] Encerramento gracioso por SIGTERM finaliza com 0.
+- [x] Injeção de falhas antes do commit, após aceite do broker e antes da marcação, e durante
+      a resolução de referências.
+- [x] Invariante do ledger verificado no encerramento de cada suíte de testes de fluxo com banco de dados.
+- [x] Queda em nível de processo antes do commit e lote interrompido durante o encerramento
       (`test/concurrency/process-crash-and-shutdown.test.ts`).
 
-## Documentation and decisions
+## Documentação e decisões
 
-- [x] `README.md`, `ARCHITECTURE.md` with five Mermaid diagrams, `docs/TEST_STRATEGY.md`.
-- [x] Seven ADRs in `docs/adr/`, each with the evidence that supports it. ADR 0006 is superseded by 0007.
-- [x] `docs/REFERENCE_REVIEW.md` rewritten from the three public repositories, with file citations.
-- [x] `CLAUDE.md` for agents.
+- [x] `README.md`, `ARCHITECTURE.md` com cinco diagramas Mermaid, `docs/TEST_STRATEGY.md`.
+- [x] Sete ADRs em `docs/adr/`, cada um com as evidências que o sustentam. ADR 0006 foi substituído pelo 0007.
+- [x] `docs/REFERENCE_REVIEW.md` reescrito a partir dos três repositórios públicos, com citações a arquivos.
+- [x] `CLAUDE.md` para agentes.
 
-## Not in this build
+## Não contemplado nesta versão
 
-- Authentication is not an IdP integration (ADR 0007): API keys with two roles, a hashed key table, provider scope and a CLI to create and revoke keys.
-- Load test: pinned to 1, 2 and 4 CPUs on one cloud VM. Agreed rates 25, 100 and 200 req/s; first failing 50, 125 and 300. Records in `docs/load/results/`, report in `docs/LOAD_TEST_RESULTS.md`. It is not in `check:all`.
-- Dead-letter replay tooling and a scheduled reconciliation job.
+- Autenticação não é integração com IdP (ADR 0007): chaves de API com dois papéis, tabela de chaves com hash, escopo de provedor e uma CLI para criar e revogar chaves.
+- Teste de carga: fixado em 1, 2 e 4 CPUs em uma VM de nuvem. Taxas acordadas de 25, 100 e 200 req/s; primeiras com falha em 50, 125 e 300. Registros em `docs/load/results/`, relatório em `docs/LOAD_TEST_RESULTS.md`. Não está em `check:all`.
+- Ferramenta de replay de dead-letter e rotina agendada de reconciliação.
 
-## Finalization review (this branch)
+## Revisão de finalização (esta branch)
 
-Changes of the review, each with its evidence in the commit message and in `DECISIONS.md` section P:
+Alterações da revisão, cada uma com sua evidência na mensagem de commit e na seção P de `DECISIONS.md`:
 
-- Queue and HTTP share one parser for the business fields (`d437452`); a dead-letter copy keeps one copy inside the
-  broker's window (`ebc9589`); a duplicate that waits for the lock records no second inbox row (`a10fd11`).
-- Phase instrumentation of the transaction, the lock and the outbox (`ceb60c7`), and the load harness reads it
+- Fila e HTTP compartilham um único parser para os campos de negócio (`d437452`); uma cópia em dead-letter mantém uma cópia dentro da
+  janela do broker (`ebc9589`); uma duplicata que aguarda o lock não grava uma segunda linha na inbox (`a10fd11`).
+- Instrumentação de fases da transação, do lock e do outbox (`ceb60c7`), e o harness de carga a lê
   (`e6b0380`).
-- Outbox batches in due order, which fixed an order defect (`89b7bc1`); fewer round trips on the lock path, with an
-  outcome query that uses the partial indexes (`9e8dabe`).
-- The crash test runs on its own (`f0f1f9b`); test fixtures fail on a missing value (`336110b`).
-- Protected mode, an optional Nginx edge with per-client limits, and its suite (`66c590f`).
-- The pinned load report of this host: 100, 200 and 400 req/s agreed on 1, 2 and 4 CPUs.
+- Lotes do outbox na ordem devida, o que corrigiu um defeito de ordenação (`89b7bc1`); menos round trips no caminho de lock, com uma
+  consulta de resultado que usa os índices parciais (`9e8dabe`).
+- O teste de queda executa isoladamente (`f0f1f9b`); fixtures de teste falham em caso de valor ausente (`336110b`).
+- Modo protegido, uma borda opcional Nginx com limites por cliente, e sua suíte (`66c590f`).
+- O relatório fixado de carga deste host: 100, 200 e 400 req/s acordados em 1, 2 e 4 CPUs.

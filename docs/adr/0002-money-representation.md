@@ -1,43 +1,43 @@
-# ADR 0002: Money as decimal string, decimal.js arithmetic, NUMERIC(20,2) storage
+# ADR 0002: Dinheiro como string decimal, aritmética com decimal.js, armazenamento em NUMERIC(20,2)
 
-**Status:** accepted, amended (the input scale, see below)
+**Status:** aceito, emendado (a escala de entrada, veja abaixo)
 
-## Context
+## Contexto
 
-The contract is a decimal string with two fractional digits and an ISO currency
-(challenge §6.1). `number`, `float` and `double` are forbidden for money.
+O contrato é uma string decimal com dois dígitos fracionários e uma moeda ISO
+(desafio §6.1). `number`, `float` e `double` são proibidos para dinheiro.
 
-## Decision
+## Decisão
 
-- `Money` is an immutable value object over `decimal.js`, with a 40-digit precision
-  context (`src/shared/domain/money.ts`). The default context (20 digits) rounds a
-  sum of two `NUMERIC(20,2)` operands. A test pins this: `999999999999999999.99 +
-0.02` must be `1000000000000000000.01`.
-- Input needs exactly 2 fractional digits and no leading zero, and at most 18 integer digits, the
-  same bounds as the column. Anything else is rejected, never rounded or normalized.
-  An earlier version normalized `"25"` to `"25.00"`. That was withdrawn, because the contract
-  fixes the scale and one value must have one representation.
-- Storage is `numeric(20,2)` in PostgreSQL, read back as strings and parsed through
-  `Money.from`.
+- `Money` é um value object imutável sobre `decimal.js`, com um contexto de precisão
+  de 40 dígitos (`src/shared/domain/money.ts`). O contexto padrão (20 dígitos) arredonda uma
+  soma de dois operandos `NUMERIC(20,2)`. Um teste fixa isso: `999999999999999999.99 +
+0.02` deve ser `1000000000000000000.01`.
+- A entrada necessita de exatamente 2 dígitos fracionários e nenhum zero à esquerda, e no máximo 18 dígitos inteiros, os
+  mesmos limites da coluna. Qualquer outra coisa é recusada, nunca arredondada ou normalizada.
+  Uma versão anterior normalizava `"25"` para `"25.00"`. Isso foi retirado, porque o contrato
+  fixa a escala e um valor deve ter uma única representação.
+- O armazenamento é `numeric(20,2)` no PostgreSQL, lido de volta como strings e analisado por meio
+  de `Money.from`.
 
-## Alternatives
+## Alternativas
 
-- **Integer minor units (`bigint`).** Exact and simple for two-decimal currencies,
-  and needs no dependency. Two of the reference projects use it. We chose
-  `decimal.js` as ARCHITECTURE §3 decided. The choice is cheap to reverse: `Money`
-  is the only place that knows the representation.
+- **Subunidades inteiras (`bigint`).** Exato e simples para moedas de duas casas decimais,
+  e não necessita de dependência. Dois dos projetos de referência o utilizam. Escolhemos
+  `decimal.js` conforme decidido em ARCHITECTURE §3. A escolha é barata de reverter: `Money`
+  é o único lugar que conhece a representação.
 
-## Consequences
+## Consequências
 
-- Arithmetic is exact, and a regression in precision fails a unit test.
-- The ledger arithmetic CHECK (`balance_after = balance_before ± amount`) is
-  enforced by the database with the same numeric type, so the two sides cannot
-  disagree on scale.
+- A aritmética é exata, e uma regressão em precisão falha um teste unitário.
+- O CHECK aritmético do ledger (`balance_after = balance_before ± amount`) é
+  aplicado pelo banco de dados com o mesmo tipo numérico, para que os dois lados não possam
+  discordar sobre a escala.
 
-## Evidence
+## Evidências
 
-- `test/unit/shared/domain/money.test.ts` (43 cases, including the precision and
-  overflow boundaries). Mutants on the precision context and the 18-digit bound
-  were detected.
-- `test/integration/schema/schema-constraints.test.ts`: `NUMERIC(20,2)` overflow
-  is refused with SQLSTATE 22003.
+- `test/unit/shared/domain/money.test.ts` (43 casos, incluindo os limites de precisão e
+  overflow). Mutantes no contexto de precisão e no limite de 18 dígitos
+  foram detectados.
+- `test/integration/schema/schema-constraints.test.ts`: overflow de `NUMERIC(20,2)`
+  é recusado com SQLSTATE 22003.

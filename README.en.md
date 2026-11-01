@@ -7,21 +7,68 @@ operations (BET, WIN, LOSS, REFUND, ROLLBACK) from game providers over HTTP and 
 balances consistent under concurrency, duplicates and crashes, and reconciles each wallet against
 its ledger.
 
+## Architecture at a glance
+
+These diagrams are the same versioned SVG files used on the static showcase. They show the flows that are
+implemented, not a hypothetical architecture. The guarantees and failure points are explained in
+[ARCHITECTURE.md](ARCHITECTURE.md); the matching tests are in the [requirements matrix](docs/REQUIREMENTS_MATRIX.md).
+
+### 1. BET received over HTTP
+
+Authentication and provider identity, validation of the operation, idempotency, and the transactional decision.
+[Open the SVG at full size](docs/diagrams/bet-over-http.svg).
+
+![BET over HTTP flow, including authentication, idempotency, and persistence](docs/diagrams/bet-over-http.svg)
+
+### 2. Command received from SQS
+
+Queue consumption, financial processing shared with the HTTP route, handling of redeliveries, and message
+acknowledgement. [Open the SVG at full size](docs/diagrams/queued-command.svg).
+
+![Flow of a betting command coming from the SQS queue](docs/diagrams/queued-command.svg)
+
+### 3. Outcomes, states and entities
+
+The transitions and the records involved in the decision on a financial operation.
+[Open the SVG at full size](docs/diagrams/outcome-entities.svg).
+
+![State and entity diagram of the financial processing](docs/diagrams/outcome-entities.svg)
+
+## Restrictions from the specification (§5)
+
+Each restriction of the [specification](docs/CHALLENGE.md) has a mechanism in the code or in the database and a
+test that proves it. The numbers follow §5 of the specification.
+
+| #   | Restriction                                               | How the project meets it                                                                                                      | Proof                                                                            |
+| --- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | No `number`, `float` or `double` for money                | `Money` over decimal.js; values travel as decimal strings; `NUMERIC(20,2)` in the database                                    | `test/unit/shared/domain/money.test.ts`                                          |
+| 2   | Idempotency never only in memory                          | a unique key in the database per provider (`UNIQUE`) and a persistent inbox                                                   | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
+| 3   | Do not rely only on SQS FIFO                              | the queue is not the guarantee: duplicates and redeliveries are absorbed by the inbox and the idempotency key in the database | `test/integration/messaging/duplicate-deliveries.test.ts`                        |
+| 4   | No event published before the commit                      | the outbox is written in the same SQL transaction; the publisher reads only afterwards                                        | `test/integration/messaging/outbox-publisher.test.ts`, `test/integration/faults` |
+| 5   | Ledger never overwritten or deleted                       | a trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` on `wallet_ledger_entries`                                                    | `test/integration/schema/schema-constraints.test.ts`                             |
+| 6   | No global lock across wallets                             | `SELECT ... FOR UPDATE` per wallet                                                                                            | `test/concurrency/hot-wallet.test.ts`                                            |
+| 7   | No `read → calculate → update` without control            | a row lock before the decision, with the version as a guard                                                                   | `test/concurrency/hot-wallet.test.ts`                                            |
+| 8   | Correct with multiple instances                           | three independent processes over the same database and queue                                                                  | `test/concurrency/three-processes.test.ts`                                       |
+| 9   | Uniqueness, immutability and non-negativity in the schema | `CHECK`, `UNIQUE`, `FK` and triggers in the migrations                                                                        | `test/integration/schema`                                                        |
+
+The migrations are versioned and reversible: all 12 have `up` and `down`, and the rollback test is in
+`test/integration/schema/migrations.test.ts`. The code runs in strict TypeScript (`"strict": true` in `tsconfig.json`).
+
 ## Reading order
 
 1. **This README**: how to run and test the service.
-2. **[ARCHITECTURE.md](ARCHITECTURE.md)**: the flow, the main decisions (the table at its start
+2. **[ARCHITECTURE.md](ARCHITECTURE.en.md)**: the flow, the main decisions (the table at its start
    gives each one with its reason and its evidence), and the limitations in section 14.
 3. **Contract**: [docs/openapi.json](docs/openapi.json), checked against the routes and the real answers.
 4. **Reproducible evidence**: [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) links each
-   requirement to the test that proves it. [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) says what each
+   requirement to the test that proves it. [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.en.md) says what each
    suite runs and what it does not replace.
-5. **Appendices, for deeper reading**: the [ADR index](docs/adr/README.md) and its records;
-   [DECISIONS.md](DECISIONS.md), every decision with its evidence; the reviews in
-   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.md) and [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md);
-   [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.md); the load reports in
-   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.md);
-   the [implementation log](docs/IMPLEMENTATION_PLAN.md); and the [specification](docs/CHALLENGE.md), kept verbatim.
+5. **Appendices, for deeper reading**: the [ADR index](docs/adr/README.en.md) and its records;
+   [DECISIONS.md](DECISIONS.en.md), every decision with its evidence; the reviews in
+   [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md) and [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.en.md);
+   [docs/FLOW_MATRIX.md](docs/FLOW_MATRIX.en.md); the load reports in
+   [docs/LOAD_TEST_RESULTS.md](docs/LOAD_TEST_RESULTS.md) and [docs/LOAD_TEST_HISTORY.md](docs/LOAD_TEST_HISTORY.en.md);
+   the [implementation log](docs/IMPLEMENTATION_PLAN.en.md); and the [specification](docs/CHALLENGE.md), kept verbatim.
 
 ## Run
 
@@ -99,6 +146,21 @@ operation has the effect and that the others are replays, conflicts or rejection
 The load test pins the stack to a number of CPUs and ramps the request rate in steps. Its method and
 results are in `docs/LOAD_TEST_RESULTS.md`. The numbers describe the machine that ran them.
 
+### Other commands
+
+| Command                                                                | What it is for                                                           |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `bun run typecheck`                                                    | `tsc --noEmit`: checks the types without emitting files                  |
+| `bun run lint`                                                         | oxlint over `src` and `test`                                             |
+| `bun run format` and `bun run format:check`                            | prettier: formats, or only verifies (`check:fast` runs the verification) |
+| `bun run test:unit`                                                    | unit tests, without infrastructure                                       |
+| `bun run auth:create -- --name <name> --role PROVIDER --provider <id>` | creates a provider key; with `--role OPERATOR`, creates an operator key  |
+| `bun run auth:revoke -- --client <clientId>`                           | revokes an API key                                                       |
+| `bun run start`                                                        | starts the API from the source, without reloading                        |
+| `bun run edge:up` and `bun run edge:down`                              | starts and stops protected mode                                          |
+| `bun run edge:check`                                                   | starts protected mode, runs `test:edge`, and stops it                    |
+| `bun run bench:edge`                                                   | measures the edge overhead (`test/edge/overhead.ts`)                     |
+
 ## Demonstrations
 
 Three scenarios show the guarantees. Each one prints its result, and each needs only the commands below.
@@ -164,7 +226,7 @@ acknowledged only after its transaction commits. Permanent failures go to
 The full list is in `ARCHITECTURE.md` section 14. The most important:
 
 - **API keys, not an identity provider.** Keys last until revoked, with no rotation or login. The API
-  serves plain HTTP, so a deployment must put it behind TLS. See [ADR 0007](docs/adr/0007-api-key-authentication.md).
+  serves plain HTTP, so a deployment must put it behind TLS. See [ADR 0007](docs/adr/0007-api-key-authentication.en.md).
 - **Rate limiting is per client address, and only in protected mode.** It is not protection against a
   distributed attack, and the default mode has none. See `ARCHITECTURE.md` section 15.
 - **Local infrastructure only.** LocalStack stands in for SQS. No AWS deployment was made.

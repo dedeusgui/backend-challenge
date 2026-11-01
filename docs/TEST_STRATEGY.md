@@ -1,238 +1,238 @@
-# Test strategy
+# Estratégia de testes
 
-Each guarantee in the [requirements matrix](REQUIREMENTS_MATRIX.md) names the suite that
-proves it. A row is `PASSING` only after its suite has run and passed. This document says how
-the suites are organised, what each may and may not replace, which failures they inject, and
-what mutation evidence says about whether they can fail.
+Cada garantia na [matriz de requisitos](REQUIREMENTS_MATRIX.md) indica a suíte que a
+comprova. Uma linha só é `PASSING` após sua suíte ter sido executada e aprovada. Este documento descreve como
+as suítes estão organizadas, o que cada uma pode ou não substituir, quais falhas elas injetam e
+o que as evidências de mutação dizem sobre se elas podem falhar.
 
-## Suites and commands
+## Suítes e comandos
 
-| Command                    | What it runs                                                                                                                                                                                                      | Real infrastructure           |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `bun run typecheck`        | `tsc --noEmit` over `src` and `test`                                                                                                                                                                              | none                          |
-| `bun run lint`             | oxlint on `src` and `test`                                                                                                                                                                                        | none                          |
-| `bun run format:check`     | Prettier                                                                                                                                                                                                          | none                          |
-| `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops                                                                                                                    | none                          |
-| `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table                                                                                                              | PostgreSQL and LocalStack     |
-| `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown                                                                                                                  | PostgreSQL and LocalStack     |
-| `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys and the input contract (malformed input is 400)                                                                                                         | PostgreSQL and LocalStack     |
-| `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md`                                                                                                          | PostgreSQL and LocalStack     |
-| `bun run check:fast`       | typecheck, lint, format, unit                                                                                                                                                                                     | none                          |
-| `bun run test:edge`        | `test/edge`: protected mode. The API has no port, limits per address, 429 as JSON, spoofed headers, isolation, the connection flood, the financial result through the edge. Needs the protected stack (`edge:up`) | the protected stack           |
-| `bun run edge:check`       | starts the protected stack, runs `test:edge`, then stops the stack and reports its exit code                                                                                                                      | Docker                        |
-| `bun run bench:edge`       | `test/edge/overhead.ts`: the same reads through the edge and directly, and the refusal share at the default limits                                                                                                | a running stack               |
-| `bun run demo:finance`     | `test/demo/finance.ts`: the financial flow of demonstration 1, against the running API, checking each balance                                                                                                     | the default stack             |
-| `bun run test:infra`       | `test/infra`: the merged Compose configuration, read by `docker compose config`. No published port binds every interface; protected mode publishes only the edge                                                  | the Compose CLI, no container |
-| `bun run site:build`       | `scripts/build-site.ts`: the static showcase in `site/`, from repository data. Its test builds into a temporary directory                                                                                         | none                          |
-| `bun run check:all`        | `check:fast`, then integration, concurrency and e2e. This is the gate, and CI runs it                                                                                                                             | all of the above              |
+| Comando                    | O que executa                                                                                                                                                                                                               | Infraestrutura real             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `bun run typecheck`        | `tsc --noEmit` sobre `src` e `test`                                                                                                                                                                                         | nenhuma                         |
+| `bun run lint`             | oxlint em `src` e `test`                                                                                                                                                                                                    | nenhuma                         |
+| `bun run format:check`     | Prettier                                                                                                                                                                                                                    | nenhuma                         |
+| `bun run test:unit`        | `test/unit`: regras de domínio, lógica pura, formatos de log e métrica, as regras de autenticação, os loops dos workers                                                                                                     | nenhuma                         |
+| `bun run test:integration` | `test/integration`: esquema e migrações, persistência, casos de uso, mensageria, falhas, a tabela de autenticação                                                                                                           | PostgreSQL e LocalStack         |
+| `bun run test:concurrency` | `test/concurrency`: conexões paralelas, três processos de API e dois workers, crashes, encerramento                                                                                                                         | PostgreSQL e LocalStack         |
+| `bun run test:e2e`         | `test/e2e`: a aplicação Nest via HTTP, com chaves de API e o contrato de entrada (entrada malformada é 400)                                                                                                                 | PostgreSQL e LocalStack         |
+| `bun run test:load`        | `test/load`: execução opcional de carga por contagem de CPUs; grava em `docs/load/results` e `docs/LOAD_TEST_RESULTS.md`                                                                                                    | PostgreSQL e LocalStack         |
+| `bun run check:fast`       | typecheck, lint, format, unit                                                                                                                                                                                               | nenhuma                         |
+| `bun run test:edge`        | `test/edge`: modo protegido. A API não possui porta, limites por endereço, 429 como JSON, cabeçalhos forjados, isolamento, flood de conexões, o resultado financeiro através da borda. Requer a stack protegida (`edge:up`) | a stack protegida               |
+| `bun run edge:check`       | inicia a stack protegida, executa `test:edge`, depois para a stack e relata seu código de saída                                                                                                                             | Docker                          |
+| `bun run bench:edge`       | `test/edge/overhead.ts`: as mesmas leituras através da borda e diretamente, e a proporção de recusas nos limites padrão                                                                                                     | uma stack em execução           |
+| `bun run demo:finance`     | `test/demo/finance.ts`: o fluxo financeiro da demonstração 1, contra a API em execução, verificando cada saldo                                                                                                              | a stack padrão                  |
+| `bun run test:infra`       | `test/infra`: a configuração mesclada do Compose, lida por `docker compose config`. Nenhuma porta publicada vincula todas as interfaces; o modo protegido publica apenas a borda                                            | a CLI do Compose, sem contêiner |
+| `bun run site:build`       | `scripts/build-site.ts`: a vitrine estática em `site/`, a partir dos dados do repositório. Seu teste compila em um diretório temporário                                                                                     | nenhuma                         |
+| `bun run check:all`        | `check:fast`, depois integração, concorrência e e2e. Esta é a barreira de verificação, e o CI a executa                                                                                                                     | todas as anteriores             |
 
-`test:load` is not part of `check:all`. It takes minutes, and its numbers describe the machine
-it runs on.
+`test:load` não faz parte de `check:all`. Ele leva minutos, e seus números descrevem a máquina
+onde é executado.
 
-Start the infrastructure with `bun run infra:up`. The suites read `DATABASE_URL` (default
-`postgresql://wagering:wagering@localhost:5432/wagering`) and `SQS_ENDPOINT` (default
+Inicie a infraestrutura com `bun run infra:up`. As suítes leem `DATABASE_URL` (padrão
+`postgresql://wagering:wagering@localhost:5432/wagering`) e `SQS_ENDPOINT` (padrão
 `http://localhost:4566`).
 
-## What the spec asks for, and where each item is proven
+## O que a especificação pede e onde cada item é comprovado
 
-The challenge's section 13 lists the required tests. Each one maps to a suite:
+A seção 13 do desafio lista os testes obrigatórios. Cada um mapeia para uma suíte:
 
-| Requirement (section 13)                                 | Proven by                                                                                                                                |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Concurrency 1: one BET sent 50 times in parallel         | `test/concurrency/hot-wallet.test.ts` (in one process); `test/concurrency/three-processes.test.ts` (fifty requests over three processes) |
-| Concurrency 2: operations competing for one balance (§8) | `test/concurrency/hot-wallet.test.ts`; `test/concurrency/distributed-contention.test.ts`                                                 |
-| Concurrency 3: distinct wallets in parallel              | `test/concurrency/hot-wallet.test.ts`; `test/concurrency/three-processes.test.ts`                                                        |
-| Concurrency 4: three or more processes at once           | `test/concurrency/three-processes.test.ts`; `test/concurrency/distributed-contention.test.ts`                                            |
-| Concurrency 5: worker killed after commit, before ACK    | `test/concurrency/three-processes.test.ts`                                                                                               |
-| Concurrency 6: two publishers over one outbox            | `test/concurrency/distributed-contention.test.ts` (processes); `test/integration/messaging/outbox-publisher.test.ts` (in one process)    |
-| Concurrency 7: ROLLBACK or REFUND before its reference   | `test/integration/wagering/pending-reference.test.ts`; `test/integration/faults/fault-injection.test.ts`                                 |
-| Concurrency 8: restart with final consistency            | `test/concurrency/three-processes.test.ts`; `test/concurrency/process-crash-and-shutdown.test.ts`                                        |
-| §8: several workers receive operations of one wallet     | `test/concurrency/distributed-contention.test.ts`                                                                                        |
-| Final invariant: `wallet.balance == ledger`              | checked at the teardown of every database suite (see Isolation), and in each concurrency test                                            |
+| Requisito (seção 13)                                       | Comprovado por                                                                                                                               |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concorrência 1: uma BET enviada 50 vezes em paralelo       | `test/concurrency/hot-wallet.test.ts` (em um processo); `test/concurrency/three-processes.test.ts` (cinquenta requisições em três processos) |
+| Concorrência 2: operações competindo por um saldo (§8)     | `test/concurrency/hot-wallet.test.ts`; `test/concurrency/distributed-contention.test.ts`                                                     |
+| Concorrência 3: carteiras distintas em paralelo            | `test/concurrency/hot-wallet.test.ts`; `test/concurrency/three-processes.test.ts`                                                            |
+| Concorrência 4: três ou mais processos ao mesmo tempo      | `test/concurrency/three-processes.test.ts`; `test/concurrency/distributed-contention.test.ts`                                                |
+| Concorrência 5: worker encerrado após commit, antes do ACK | `test/concurrency/three-processes.test.ts`                                                                                                   |
+| Concorrência 6: dois publicadores sobre uma outbox         | `test/concurrency/distributed-contention.test.ts` (processos); `test/integration/messaging/outbox-publisher.test.ts` (em um processo)        |
+| Concorrência 7: ROLLBACK ou REFUND antes de sua referência | `test/integration/wagering/pending-reference.test.ts`; `test/integration/faults/fault-injection.test.ts`                                     |
+| Concorrência 8: reinício com consistência final            | `test/concurrency/three-processes.test.ts`; `test/concurrency/process-crash-and-shutdown.test.ts`                                            |
+| §8: vários workers recebem operações de uma carteira       | `test/concurrency/distributed-contention.test.ts`                                                                                            |
+| Invariante final: `wallet.balance == ledger`               | verificado no teardown de toda suíte de banco de dados (ver Isolamento), e em cada teste de concorrência                                     |
 
-Every item is run against real PostgreSQL and real LocalStack. None is run against a mock.
+Cada item é executado contra PostgreSQL real e LocalStack real. Nenhum é executado contra um mock.
 
-## What each layer may replace
+## O que cada camada pode substituir
 
-- **Unit tests** use real domain objects. They do not use the database or the queue.
-- **Integration, e2e and concurrency tests never replace PostgreSQL or SQS with mocks.** A test
-  that claims atomicity or concurrency runs against the real server. Where a test needs a
-  failure, it wraps a real component (a unit of work, an outbox store, a transport) and fails
-  exactly once. Production code carries no fault hook.
-- **Concurrency tests** issue their operations at the same time (`Promise.all`), each on its own
-  connection. Nothing waits for one operation before starting the next.
-- **The process-level suites** start real processes with `Bun.spawn` and stop them with signals.
-  They wait for readiness by polling `/health/ready`, and for effects by polling the database. A
-  sleep is never the synchronisation. Timing appears only where SQS visibility is the mechanism
-  under test.
-- **Test-only entrypoints** live in `test/support`. Each one wraps a real component to stop the
-  process at a chosen point: `crashing-worker.ts` (after commit), `crashing-before-commit-worker.ts`
-  (inside a transaction, before commit) and `slow-worker.ts` (a delay per transaction, so a batch is
-  in progress when SIGTERM arrives). They use the test-only seams `faults` and `decorateUnitOfWork`
-  of `createWorkerRuntime`, which production never passes.
+- **Testes unitários** usam objetos de domínio reais. Eles não usam o banco de dados nem a fila.
+- **Testes de integração, e2e e concorrência nunca substituem PostgreSQL ou SQS por mocks.** Um teste
+  que reivindica atomicidade ou concorrência é executado contra o servidor real. Onde um teste necessita de uma
+  falha, ele envolve um componente real (uma unidade de trabalho, um armazenamento de outbox, um transporte) e falha
+  exatamente uma vez. O código de produção não contém ganchos de falha.
+- **Testes de concorrência** emitem suas operações ao mesmo tempo (`Promise.all`), cada uma em sua própria
+  conexão. Nada espera por uma operação antes de iniciar a próxima.
+- **As suítes em nível de processo** iniciam processos reais com `Bun.spawn` e os encerram com sinais.
+  Elas aguardam prontidão consultando `/health/ready`, e efeitos consultando o banco de dados. Um
+  sleep nunca é a sincronização. Temporização aparece apenas onde a visibilidade do SQS é o mecanismo
+  sob teste.
+- **Pontos de entrada apenas de teste** ficam em `test/support`. Cada um envolve um componente real para parar o
+  processo em um ponto escolhido: `crashing-worker.ts` (após commit), `crashing-before-commit-worker.ts`
+  (dentro de uma transação, antes do commit) e `slow-worker.ts` (um atraso por transação, para que um lote esteja
+  em andamento quando o SIGTERM chegar). Eles usam os pontos de extensão apenas de teste `faults` e `decorateUnitOfWork`
+  de `createWorkerRuntime`, que a produção nunca passa.
 
-## Isolation
+## Isolamento
 
-- Every database suite gets its own database, created and migrated at the start, and dropped at
-  the end, even after a failure (`test/integration/support/test-database.ts`).
-- Every SQS suite gets its own private FIFO queues, with a random suffix, so no test sees another
-  test's messages (`test/integration/support/sqs-test-queues.ts`).
-- Each process of a cluster opens its own pool and clients, and gets its own port.
-- A process-level test stops every worker it started, and a failing test is followed by a kill of
-  any worker left behind. Otherwise a leftover worker would consume the queue of the next test.
-  That happened once while these suites were written.
-- Ports and identifiers are random, so suites can run in any order.
-- Long polling is used where a test receives messages. Short polling can miss messages that exist.
-  Every test that receives messages acknowledges them, because an in-flight FIFO message blocks its
-  group. A test that must not wait behind another test's in-flight message uses its own group.
+- Cada suíte de banco de dados obtém seu próprio banco de dados, criado e migrado no início, e descartado ao
+  final, mesmo após uma falha (`test/integration/support/test-database.ts`).
+- Cada suíte de SQS obtém suas próprias filas FIFO privadas, com um sufixo aleatório, para que nenhum teste veja
+  as mensagens de outro teste (`test/integration/support/sqs-test-queues.ts`).
+- Cada processo de um cluster abre seu próprio pool e clientes, e obtém sua própria porta.
+- Um teste em nível de processo para todos os workers que iniciou, e um teste que falha é seguido pela terminação forçada de
+  qualquer worker deixado para trás. Caso contrário, um worker remanescente consumiria a fila do próximo teste.
+  Isso aconteceu uma vez durante a escrita destas suítes.
+- Portas e identificadores são aleatórios, permitindo que as suítes sejam executadas em qualquer ordem.
+- Long polling é usado onde um teste recebe mensagens. Short polling pode perder mensagens existentes.
+  Todo teste que recebe mensagens as confirma, porque uma mensagem FIFO em trânsito bloqueia seu
+  grupo. Um teste que não deve esperar atrás de uma mensagem em trânsito de outro teste usa seu próprio grupo.
 
-## The ledger invariant
+## O invariante do ledger
 
-Every database suite checks, when it is dropped, that each wallet's balance equals its ledger sum.
-A violation fails the suite and names the rows. The schema-constraint suite opts out, because it
-writes rows directly to show what the database refuses, and some of those states break the
-invariant on purpose.
+Toda suíte de banco de dados verifica, ao ser descartada, se o saldo de cada carteira é igual ao somatório do seu ledger.
+Uma violação falha a suíte e aponta as linhas. A suíte de restrições de esquema opta por não participar, porque
+escreve linhas diretamente para demonstrar o que o banco de dados recusa, e alguns desses estados quebram o
+invariante de propósito.
 
-## Fault injection
+## Injeção de falhas
 
-| Point                                               | How it is produced                                                                                              | Where                                                 |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| After commit, before the SQS acknowledgement        | the worker process exits with code 137 in a test-only entrypoint (`test/support/crashing-worker.ts`)            | `test/concurrency/three-processes.test.ts`            |
-| Inside a transaction, before commit                 | the worker process exits with code 137 after the writes, before the commit (`crashing-before-commit-worker.ts`) | `test/concurrency/process-crash-and-shutdown.test.ts` |
-| A worker killed while another takes the same wallet | `SIGKILL` to one of two workers in the middle of a contention                                                   | `test/concurrency/distributed-contention.test.ts`     |
-| Before commit, in one process                       | the unit of work does its work, then throws before committing                                                   | `test/integration/faults/fault-injection.test.ts`     |
-| After the broker accepted, before marking published | the outbox store rejects the mark once                                                                          | `test/integration/faults/fault-injection.test.ts`     |
-| While resolving a held reference                    | the unit of work throws before commit, once                                                                     | `test/integration/faults/fault-injection.test.ts`     |
-| Broker unavailable                                  | the transport throws                                                                                            | `test/integration/messaging/outbox-publisher.test.ts` |
-| Lost race on a unique identity                      | two concurrent transactions, one loses and retries                                                              | `test/concurrency/hot-wallet.test.ts`                 |
-| Graceful shutdown                                   | `SIGTERM` to a worker process, which must exit with 0                                                           | `test/concurrency/three-processes.test.ts`            |
-| SIGTERM during a batch                              | the batch in progress finishes and is acknowledged; nothing is left in flight                                   | `test/concurrency/process-crash-and-shutdown.test.ts` |
+| Ponto                                                      | Como é produzido                                                                                                           | Onde                                                  |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Após o commit, antes da confirmação SQS                    | o processo do worker é encerrado com código 137 em um ponto de entrada apenas de teste (`test/support/crashing-worker.ts`) | `test/concurrency/three-processes.test.ts`            |
+| Dentro de uma transação, antes do commit                   | o processo do worker é encerrado com código 137 após as escritas, antes do commit (`crashing-before-commit-worker.ts`)     | `test/concurrency/process-crash-and-shutdown.test.ts` |
+| Um worker encerrado enquanto outro assume a mesma carteira | `SIGKILL` em um dos dois workers no meio de uma contenção                                                                  | `test/concurrency/distributed-contention.test.ts`     |
+| Antes do commit, em um processo                            | a unidade de trabalho executa seu trabalho, depois lança um erro antes de fazer o commit                                   | `test/integration/faults/fault-injection.test.ts`     |
+| Após aceitação pelo broker, antes de marcar como publicado | o armazenamento da outbox rejeita a marcação uma vez                                                                       | `test/integration/faults/fault-injection.test.ts`     |
+| Durante a resolução de uma referência retida               | a unidade de trabalho lança um erro antes do commit, uma vez                                                               | `test/integration/faults/fault-injection.test.ts`     |
+| Broker indisponível                                        | o transporte lança um erro                                                                                                 | `test/integration/messaging/outbox-publisher.test.ts` |
+| Disputa perdida por uma identidade única                   | duas transações concorrentes, uma perde e tenta novamente                                                                  | `test/concurrency/hot-wallet.test.ts`                 |
+| Encerramento gracioso (graceful shutdown)                  | `SIGTERM` para um processo de worker, que deve sair com código 0                                                           | `test/concurrency/three-processes.test.ts`            |
+| SIGTERM durante um lote                                    | o lote em andamento é concluído e confirmado; nada é deixado em trânsito                                                   | `test/concurrency/process-crash-and-shutdown.test.ts` |
 
-Recovery is always checked by reading the persisted state afterwards: balance, ledger, outbox and
-queue.
+A recuperação é sempre verificada lendo o estado persistido posteriormente: saldo, ledger, outbox e
+fila.
 
-**Not injected:** a crash of the HTTP API process inside a transaction. The API is covered in
-process only by the concurrency tests, and by in-process faults. A provider's retry under the same
-idempotency key is covered in-process.
+**Não injetado:** um crash do processo da API HTTP dentro de uma transação. A API é coberta em
+processo apenas pelos testes de concorrência e por falhas em processo. Uma retentativa de um provedor sob a mesma
+chave de idempotência é coberta em processo.
 
-## Mutation evidence
+## Evidência de mutação
 
-A suite that passes is not enough. For the rules that carry the guarantees, the author broke the
-rule on purpose and ran the suite. A mutant the suite does not catch is a finding.
+Uma suíte que passa não é suficiente. Para as regras que sustentam as garantias, o autor quebrou a
+regra de propósito e executou a suíte. Um mutante que a suíte não detecta é um achado.
 
-Mutants of this round, run against `test/concurrency/distributed-contention.test.ts`:
+Mutantes desta rodada, executados contra `test/concurrency/distributed-contention.test.ts`:
 
-| Mutant | Rule removed                                                               | Result                                                                                                                                                                                                                                       |
-| ------ | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1     | the wallet row lock (`FOR UPDATE` in `findForUpdate`)                      | **Killed.** The suite still passed, because the version guard and retries keep the final state right. The zero-retry test failed: three lost races. Added to the suite for this reason.                                                      |
-| M2     | the reversal guard in `TransactionSettlement` (one reversal per reference) | **Killed**, by the refund-and-rollbacks test and by the zero-retry test.                                                                                                                                                                     |
-| M3     | `SKIP LOCKED` in the outbox claim                                          | **Survived.** This mutant is equivalent for safety. The second publisher waits for the first, then re-checks the lease predicate and excludes the row. `SKIP LOCKED` removes the wait, and no test measures a wait. Recorded as a known gap. |
-| M4     | the outbox lease predicate (`lease_expires_at IS NULL OR ... < now`)       | **Killed.** The two-publisher test failed: 61 lost leases, which are double claims.                                                                                                                                                          |
+| Mutante | Regra removida                                                                  | Resultado                                                                                                                                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1      | o bloqueio de linha da carteira (`FOR UPDATE` em `findForUpdate`)               | **Eliminado.** A suíte ainda passou, porque a proteção por versão e as retentativas mantêm o estado final correto. O teste sem retentativas falhou: três disputas perdidas. Adicionado à suíte por este motivo.                                                           |
+| M2      | a proteção de reversão em `TransactionSettlement` (uma reversão por referência) | **Eliminado**, pelo teste de reembolso e rollbacks e pelo teste sem retentativas.                                                                                                                                                                                         |
+| M3      | `SKIP LOCKED` na reivindicação da outbox                                        | **Sobreviveu.** Este mutante é equivalente em termos de segurança. O segundo publicador espera pelo primeiro, depois reavalia o predicado de lease e exclui a linha. `SKIP LOCKED` remove a espera, e nenhum teste mede uma espera. Registrado como uma lacuna conhecida. |
+| M4      | o predicado de lease da outbox (`lease_expires_at IS NULL OR ... < now`)        | **Eliminado.** O teste de dois publicadores falhou: 61 leases perdidos, que são reivindicações duplas.                                                                                                                                                                    |
 
-Mutants of earlier rounds, each caught by at least one test:
+Mutantes de rodadas anteriores, cada um detectado por pelo menos um teste:
 
-- the money precision context and the 18-digit bound;
-- the ledger's arithmetic and reversal-once rules;
-- the version guard and the wallet lock (the lock is now also covered by the zero-retry test);
-- the ACK ordering in the consumer, and lease ownership in the publisher;
-- the failure classification and the status taxonomy;
-- the reference miss counter, its limit and its wallet lock;
-- the cap of the reference retry delay (`test/unit/wagering/domain/reference-retry-policy.test.ts`).
+- o contexto de precisão monetária e o limite de 18 dígitos;
+- a aritmética do ledger e as regras de reversão única;
+- a proteção por versão e o bloqueio da carteira (o bloqueio agora também é coberto pelo teste sem retentativas);
+- a ordenação de ACK no consumidor e a titularidade de lease no publicador;
+- a classificação de falhas e a taxonomia de status;
+- o contador de referências ausentes, seu limite e seu bloqueio de carteira;
+- o teto do atraso de retentativa de referência (`test/unit/wagering/domain/reference-retry-policy.test.ts`).
 
-Two weaknesses in the tests were found and fixed. A lease assertion proved nothing, found by
-reading the test. A two-worker race test did not reach its race window, found when a mutant
-survived.
+Duas fragilidades nos testes foram encontradas e corrigidas. Uma asserção de lease não comprovava nada, descoberta ao
+ler o teste. Um teste de disputa entre dois workers não atingiu sua janela de disputa, descoberto quando um mutante
+sobreviveu.
 
-Mutants of this review, against the unit, wagering and schema suites. Each one changes one line of a
-committed file, runs the suites, and restores the file. The concurrency suite was not run for these
-mutants, because one run takes about a minute.
+Mutantes desta revisão, contra as suítes unitárias, de apostas e de esquema. Cada um altera uma linha de um
+arquivo comitado, executa as suítes e restaura o arquivo. A suíte de concorrência não foi executada para estes
+mutantes, porque uma execução leva cerca de um minuto.
 
-| Mutant | Change                                                   | Result                                                                                      |
-| ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| M1     | the reversal check in `TransactionSettlement` removed    | **Killed** by 5 tests: a refund credited once, one reversal per BET, a ROLLBACK of a REFUND |
-| M2     | the unsettled-reference check of a BET removed           | **Killed** by 4 tests: a BET pays once, a REFUND after a WIN or a LOSS                      |
-| M3     | the direction of a ROLLBACK not inverted                 | **Killed** by 7 tests                                                                       |
-| M4     | the wallet comparison in `sharesContextWith` removed     | **Killed** by 1 unit test, a reference from a different wallet                              |
-| M5     | a debit equal to the balance refused (strict comparison) | **Killed** by 2 tests, one unit test that debits the whole balance                          |
+| Mutante | Alteração                                                     | Resultado                                                                                                  |
+| ------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| M1      | a verificação de reversão em `TransactionSettlement` removida | **Eliminado** por 5 testes: um reembolso creditado uma vez, uma reversão por BET, um ROLLBACK de um REFUND |
+| M2      | a verificação de referência não liquidada de uma BET removida | **Eliminado** por 4 testes: uma BET paga uma vez, um REFUND após um WIN ou um LOSS                         |
+| M3      | a direção de um ROLLBACK não invertida                        | **Eliminado** por 7 testes                                                                                 |
+| M4      | a comparação de carteira em `sharesContextWith` removida      | **Eliminado** por 1 teste unitário, uma referência de uma carteira diferente                               |
+| M5      | um débito igual ao saldo recusado (comparação estrita)        | **Eliminado** por 2 testes, um teste unitário que debita todo o saldo                                      |
 
-No mutant of this round survived. The partial unique indexes also refuse the second row in M1 and M2
-(`wager_one_processed_reversal_per_reference`, `wager_one_processed_settlement_per_reference`), so a
-bypass of the domain check cannot store a second effect. The database gives a unique violation, not the
-business answer (`REFERENCE_ALREADY_REVERSED`), so the business answer is tested in the domain suites.
+Nenhum mutante desta rodada sobreviveu. Os índices únicos parciais também recusam a segunda linha em M1 e M2
+(`wager_one_processed_reversal_per_reference`, `wager_one_processed_settlement_per_reference`), portanto uma
+violação da verificação de domínio não pode armazenar um segundo efeito. O banco de dados gera uma violação de unicidade, não a
+resposta de negócio (`REFERENCE_ALREADY_REVERSED`), de modo que a resposta de negócio é testada nas suítes de domínio.
 
-Mutants of the money input contract (`fix(money)`), against `src/shared/domain/money.ts`. Each one changes
-the validator, runs the suites, and is restored byte for byte (checked with `cmp`) before the next:
+Mutantes do contrato de entrada monetária (`fix(money)`), contra `src/shared/domain/money.ts`. Cada um altera
+o validador, executa as suítes e é restaurado byte por byte (verificado com `cmp`) antes do seguinte:
 
-| Mutant | Change                                          | Result                                                                                                                             |
-| ------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| N1     | one fractional digit accepted again (`\d{1,2}`) | **Killed.** `money.test.ts`, "rejects an amount with one fractional digit", and the E2E cases for `25.1` (opening balance and BET) |
-| N2     | leading zeros accepted (`\d{1,18}`)             | **Killed.** `money.test.ts`, "rejects an amount with a leading zero in the integer part"                                           |
+| Mutante | Alteração                                          | Resultado                                                                                                                           |
+| ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| N1      | um dígito fracionário aceito novamente (`\d{1,2}`) | **Eliminado.** `money.test.ts`, "rejects an amount with one fractional digit", e os casos E2E para `25.1` (saldo de abertura e BET) |
+| N2      | zeros à esquerda aceitos (`\d{1,18}`)              | **Eliminado.** `money.test.ts`, "rejects an amount with a leading zero in the integer part"                                         |
 
-## Load
+## Carga
 
-`bun run test:load` measures the stack under a product mix, pinned to a number of CPUs. The stack
-(three API processes, two workers, PostgreSQL, LocalStack) gets `LOAD_CPUS` CPUs, and the generator
-gets the others. Each step sends requests on a fixed schedule at a fixed rate, and is checked against
-the constraints in `test/load/thresholds.ts`: error rate, lost requests, p95 and p99 latency, generator
-lag at p99, outbox drain, memory per process, and the invariant `balance == ledger`. The ramp stops at
-the first failing step. The method is in `DECISIONS.md`, group N.
+`bun run test:load` mede a stack sob um mix de produto, fixado a um número de CPUs. A stack
+(três processos de API, dois workers, PostgreSQL, LocalStack) recebe `LOAD_CPUS` CPUs, e o gerador
+recebe os demais. Cada etapa envia requisições em um cronograma fixo a uma taxa fixa, e é verificada contra
+as restrições em `test/load/thresholds.ts`: taxa de erros, requisições perdidas, latência p95 e p99, atraso do gerador
+em p99, esvaziamento da outbox, memória por processo e o invariante `balance == ledger`. A rampa de carga para na
+primeira etapa que falhar. O método está em `DECISIONS.md`, grupo N.
 
-| Where                    | What it is                                                                  |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `test/load/workload.ts`  | the product mix and each operation's request, as pure functions             |
-| `test/load/metrics.ts`   | percentiles, CPU lists, `/proc` and `docker stats` parsers, CPU per request |
-| `test/load/records.ts`   | the record of a run, one JSON file per CPU count                            |
-| `test/load/report.ts`    | the report, rendered from the records                                       |
-| `test/load/host.ts`      | pinning: which CPUs each part gets, and the containers' cpusets             |
-| `test/load/load-test.ts` | the driver, which runs the stack and writes the record                      |
+| Onde                     | O que é                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `test/load/workload.ts`  | o mix de produto e a requisição de cada operação, como funções puras                    |
+| `test/load/metrics.ts`   | percentis, listas de CPUs, analisadores de `/proc` e `docker stats`, CPU por requisição |
+| `test/load/records.ts`   | o registro de uma execução, um arquivo JSON por contagem de CPUs                        |
+| `test/load/report.ts`    | o relatório, gerado a partir dos registros                                              |
+| `test/load/host.ts`      | fixação: quais CPUs cada parte recebe, e os cpusets dos contêineres                     |
+| `test/load/load-test.ts` | o executor, que roda a stack e grava o registro                                         |
 
-The planner and the parsers are unit tested in `test/unit/load/`, so the mix and the arithmetic are
-checked without a server. The driver is checked by its runs.
+O planejador e os analisadores são testados unitariamente em `test/unit/load/`, de modo que o mix e a aritmética são
+verificados sem um servidor. O executor é verificado por suas execuções.
 
-**Results.** The pinned results are in `docs/load/results/cpus-<N>.json`, one per CPU count, and the report that
-reads them is `docs/LOAD_TEST_RESULTS.md`. On the sandbox host used for this review (four vCPUs), the agreed rates
-were:
+**Resultados.** Os resultados fixados estão em `docs/load/results/cpus-<N>.json`, um por contagem de CPUs, e o relatório que
+os lê é `docs/LOAD_TEST_RESULTS.md`. No host de sandbox usado para esta revisão (quatro vCPUs), as taxas acordadas
+foram:
 
-| Stack CPUs | Agreed rate | First failing rate | What failed at the first failing rate         |
-| ---------: | ----------: | -----------------: | --------------------------------------------- |
-|          1 |   100 req/s |          125 req/s | p95 4176 ms, at 83% of the CPU                |
-|          2 |   200 req/s |          300 req/s | p95 3408 ms, at 72% of the CPU                |
-|          4 |   400 req/s |               none | 400 is the top configured step, and it passed |
+| CPUs da stack | Taxa acordada | Primeira taxa com falha | O que falhou na primeira taxa com falha        |
+| ------------: | ------------: | ----------------------: | ---------------------------------------------- |
+|             1 |     100 req/s |               125 req/s | p95 4176 ms, a 83% da CPU                      |
+|             2 |     200 req/s |               300 req/s | p95 3408 ms, a 72% da CPU                      |
+|             4 |     400 req/s |                 nenhuma | 400 é a etapa máxima configurada, e ela passou |
 
-The predicted ceiling (the CPUs divided by the CPU per request) was 120 req/s on one CPU and 276 on two, against
-first failing rates of 125 and 300. The 4-CPU ceiling is above 400 in this measurement. The paired before-and-after
-runs, and the baseline they compare with, are in [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md).
+O teto previsto (as CPUs divididas pela CPU por requisição) foi de 120 req/s em uma CPU e 276 em duas, contra
+as primeiras taxas com falha de 125 e 300. O teto para 4 CPUs está acima de 400 nesta medição. As execuções
+pareadas de antes e depois, e a linha de base com a qual se comparam, estão em [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.md).
 
-**What these runs prove, and what they do not:**
+**O que essas execuções comprovam e o que não comprovam:**
 
-- They prove the constraints held for the length of one step, at one rate, with the stack on that many CPUs.
-- They do not prove a longer run. There is no soak test.
-- The generator runs on the CPUs the stack does not use. On the four-CPU host the stack has every CPU, and
-  the generator shares them, which the report states.
-- The queue is LocalStack, and PostgreSQL has its default configuration, with no replica.
-- The mix is ours, and it goes through HTTP only. The command queue is covered by the concurrency suites.
-- The machine is one cloud VM. Its numbers are not a capacity claim for another machine.
+- Comprovam que as restrições se mantiveram durante a duração de uma etapa, a uma taxa, com a stack nessa quantidade de CPUs.
+- Não comprovam uma execução mais longa. Não há teste de imersão (soak test).
+- O gerador é executado nas CPUs que a stack não utiliza. No host de quatro CPUs a stack possui todas as CPUs, e
+  o gerador as compartilha, o que o relatório informa.
+- A fila é o LocalStack, e o PostgreSQL possui sua configuração padrão, sem réplica.
+- O mix é o nosso, e passa apenas por HTTP. A fila de comandos é coberta pelas suítes de concorrência.
+- A máquina é uma VM em nuvem. Seus números não constituem uma alegação de capacidade para outra máquina.
 
-## Environment notes
+## Notas sobre o ambiente
 
-- The verified Compose stack is built with the sandbox CA, outside the repository. See
-  `ARCHITECTURE.md` section 14.
-- Some suites are timing-sensitive by design (SQS visibility, lease expiry). Each uses an injected
-  clock where it can, and bounded polling where it cannot.
+- A stack verificada do Compose é construída com a CA da sandbox, fora do repositório. Consulte
+  `ARCHITECTURE.md` seção 14.
+- Algumas suítes são sensíveis à temporização por projeto (visibilidade SQS, expiração de lease). Cada uma usa um
+  relógio injetado onde possível, e polling delimitado onde não for.
 
-## Added in the final review round
+## Adicionado na rodada final de revisão
 
-Each suite below was run before the change it protects, and the failure it produced is recorded. A check that
-has never failed proves less.
+Cada suíte abaixo foi executada antes da alteração que ela protege, e a falha que produziu foi registrada. Uma verificação que
+nunca falhou comprova menos.
 
-| Suite                                                           | What it proves                                                                                                               | Failure seen before the change                                                                             |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `test/infra/compose-exposure.test.ts`                           | every published port binds `127.0.0.1`; protected mode publishes only the edge                                               | 4 of 4 failed: `hostIp` absent (all interfaces), and PostgreSQL and LocalStack published in protected mode |
-| `test/e2e/authorization-adversarial.test.ts`                    | 28 attempts to reach an operator route, a foreign transaction, a foreign write, or a refused key by another spelling         | 1 of 28 failed: the lower-case `bearer` scheme was refused. Fixed; the token is still case-sensitive       |
-| `test/integration/messaging/partial-batch-order.test.ts`        | E1 accepted, E2 refused, E3 accepted, for one wallet: the outbox state and the order at the real queue                       | characterization: the order `1, 3, 2` is the truth, and it is documented, not hidden                       |
-| `test/unit/worker/worker-http.test.ts`, `worker-config.test.ts` | the worker's HTTP surface: liveness, metrics while running, methods, cache policy; the port setting                          | before the implementation: the module could not load, and 7 of the 8 port-setting cases failed             |
-| `test/concurrency/worker-metrics-live.test.ts`                  | counters read from a running worker process, before it stops                                                                 | with the surface removed from the worker, it failed after its 30 s timeout                                 |
-| `test/unit/openapi/*.test.ts`                                   | the OpenAPI document is sound, describes the registered routes in both directions, and the checker reports each divergence   | one expectation of the checker was wrong (`integer`, not `number`), corrected                              |
-| `test/e2e/openapi-responses.test.ts`                            | every real answer has a documented status and a body that validates                                                          | found `seq` as text, not integer. The contract was corrected, not the API                                  |
-| `test/unit/site/static-showcase.test.ts`                        | the static page: no placeholder, no external load, every link resolves, pinned repository links, numbers equal their sources | found a placeholder pattern that did not accept digits, so `{{COUNT_E2E}}` would ship unfilled             |
-| `test/edge/protected-mode.test.ts` (changed)                    | the edge binds loopback; PostgreSQL and LocalStack publish nothing at run time                                               | the old assertion pinned `0.0.0.0`, the exposure being fixed. Corrected to `127.0.0.1`                     |
+| Suíte                                                           | O que comprova                                                                                                                   | Falha observada antes da alteração                                                                                       |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `test/infra/compose-exposure.test.ts`                           | toda porta publicada vincula `127.0.0.1`; o modo protegido publica apenas a borda                                                | 4 de 4 falharam: `hostIp` ausente (todas as interfaces), e PostgreSQL e LocalStack publicados no modo protegido          |
+| `test/e2e/authorization-adversarial.test.ts`                    | 28 tentativas de acessar uma rota de operador, transação externa, escrita externa ou chave recusada sob outra grafia             | 1 de 28 falhou: o esquema `bearer` em minúsculas foi recusado. Corrigido; o token ainda diferencia maiúsculas/minúsculas |
+| `test/integration/messaging/partial-batch-order.test.ts`        | E1 aceito, E2 recusado, E3 aceito, para uma carteira: o estado da outbox e a ordem na fila real                                  | caracterização: a ordem `1, 3, 2` é a verdade, e está documentada, não escondida                                         |
+| `test/unit/worker/worker-http.test.ts`, `worker-config.test.ts` | a superfície HTTP do worker: liveness, métricas durante a execução, métodos, política de cache; a configuração de porta          | antes da implementação: o módulo não carregava, e 7 dos 8 casos de configuração de porta falharam                        |
+| `test/concurrency/worker-metrics-live.test.ts`                  | contadores lidos a partir de um processo de worker em execução, antes de parar                                                   | com a superfície removida do worker, falhou após seu timeout de 30 s                                                     |
+| `test/unit/openapi/*.test.ts`                                   | o documento OpenAPI é íntegro, descreve as rotas registradas em ambas as direções, e o verificador relata cada divergência       | uma expectativa do verificador estava errada (`integer`, não `number`), corrigida                                        |
+| `test/e2e/openapi-responses.test.ts`                            | toda resposta real possui um status documentado e um corpo que valida                                                            | encontrou `seq` como texto, não inteiro. O contrato foi corrigido, não a API                                             |
+| `test/unit/site/static-showcase.test.ts`                        | a página estática: sem placeholder, sem carga externa, todo link resolve, links de repositório fixados, números iguais às fontes | encontrou um padrão de placeholder que não aceitava dígitos, então `{{COUNT_E2E}}` seria enviado sem preenchimento       |
+| `test/edge/protected-mode.test.ts` (alterado)                   | a borda vincula loopback; PostgreSQL e LocalStack não publicam nada em tempo de execução                                         | a asserção antiga fixava `0.0.0.0`, a exposição sendo corrigida. Corrigido para `127.0.0.1`                              |

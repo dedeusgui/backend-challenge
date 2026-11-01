@@ -45,3 +45,8 @@ Distributed Wagering Processor. Read `ARCHITECTURE.md` before changing financial
 - MikroORM is pinned to 7.x. Use `defineEntity` (not decorators) and `migrator.up()`.
 - LocalStack returns queue URLs under a host name that may not resolve. Build queue URLs from
   the configured endpoint when one is set.
+
+## Documentation
+
+- The main documents are in Portuguese (pt-BR). English reference copies use the `.en.md` suffix. When you change a document that has a pair, update both in the same commit.
+- Before changing documentation, read `docs/CONVENCOES_DOCUMENTACAO.md`. It lists what is not translated, the generated files and the verification steps.

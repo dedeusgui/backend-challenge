@@ -1,115 +1,115 @@
-# Public implementation review
+# Revisão de implementações públicas
 
-> **Appendix.** A comparison with three public implementations, made to test the design. Running or testing the
-> service does not need it.
+> **Apêndice.** Uma comparação com três implementações públicas, elaborada para avaliar o design. A execução ou teste do
+> serviço não depende deste documento.
 
-Reviewed on 2026-10-31 by reading the three public repositories (shallow clones
-at the default branch), grepping their code, and reading their architecture
-documents. The reference suites were **not executed**, so no claim here rests on
-their test results. These projects are references for trade-offs. Nothing was
-copied from them.
+Revisado em 2026-10-31 por meio da leitura dos três repositórios públicos (clones rasos
+no branch padrão), busca via grep em seus códigos e leitura de seus documentos de
+arquitetura. As suítes de referência **não foram executadas**, portanto nenhuma afirmação aqui se baseia em
+seus resultados de teste. Esses projetos servem de referência para trade-offs. Nada foi
+copiado deles.
 
-Every observation below cites the file that supports it. Claims that could not be
-verified are listed at the end and are not used in any decision.
+Cada observação abaixo cita o arquivo que lhe dá suporte. Afirmações que não puderam ser
+verificadas estão listadas ao final e não foram utilizadas em nenhuma decisão.
 
 ## 1. AndreLopes30/junglegaming-backend-challenge
 
-- **Locking:** the wallet is read with `LockMode.PESSIMISTIC_WRITE`
-  (`src/infrastructure/persistence/repositories/wallet.repository.ts`). The outbox
-  claim uses `PESSIMISTIC_PARTIAL_WRITE`, which is `FOR UPDATE SKIP LOCKED`
+- **Bloqueio (Locking):** a carteira é lida com `LockMode.PESSIMISTIC_WRITE`
+  (`src/infrastructure/persistence/repositories/wallet.repository.ts`). A reivindicação da outbox
+  utiliza `PESSIMISTIC_PARTIAL_WRITE`, que equivale a `FOR UPDATE SKIP LOCKED`
   (`outbox.repository.ts`).
-- **Money:** the domain holds `bigint` minor units (`src/domain/money/money.ts`).
-  Persistence stores `numeric` as a string, converted with `replace('.', '')`.
-- **Outbox during I/O:** the architecture document states that the outbox keeps a
-  row lock and a connection open while it calls SQS (section 15). This design
-  trades simplicity for long transactions. We do not adopt it.
-- **Entrypoints:** `src/main.ts` and `src/worker.ts` are separate. The document
-  states that no entrypoint runs migrations.
-- **Reconciliation:** documented as diagnostic only; it never corrects a balance or
-  bumps a version. We adopt the same rule.
-- **Metrics:** per-process counters, with DLQ and lag read from shared
-  infrastructure. Stated as a limitation.
-- **Auth:** a no-op guard as the extension point. Same decision as ours.
+- **Dinheiro:** o domínio mantém unidades fracionárias em `bigint` (`src/domain/money/money.ts`).
+  A persistência armazena `numeric` como string, convertida com `replace('.', '')`.
+- **Outbox durante E/S (I/O):** o documento de arquitetura afirma que a outbox mantém um
+  lock de linha e uma conexão aberta enquanto chama o SQS (seção 15). Este design
+  troca simplicidade por transações longas. Nós não o adotamos.
+- **Pontos de entrada:** `src/main.ts` e `src/worker.ts` são separados. O documento
+  afirma que nenhum ponto de entrada executa migrações.
+- **Reconciliação:** documentada apenas como diagnóstica; nunca corrige saldo nem
+  incrementa versão. Adotamos a mesma regra.
+- **Métricas:** contadores por processo, com DLQ e lag lidos da infraestrutura
+  compartilhada. Indicado como uma limitação.
+- **Autenticação:** um guard no-op como ponto de extensão. Mesma decisão que a nossa.
 
 ## 2. paulovitorlr/jungle-gaming-challenge
 
-- **Optimistic versioning:** the pending-reference reprocessor reads
-  `wallet.version` and calls `walletRepository.update(wallet, expectedVersion)`
+- **Controle de versão otimista:** o reprocessador de referências pendentes lê
+  `wallet.version` e chama `walletRepository.update(wallet, expectedVersion)`
   (`src/modules/wagering/application/use-cases/reprocess-pending-references.use-case.ts`).
-  The wallet is not locked pessimistically on that path.
-- **Leases:** the outbox publisher takes a lease with a configured duration
-  (`src/modules/messaging/infrastructure/outbox/outbox-publisher.service.ts`), and
-  claims use `FOR UPDATE SKIP LOCKED`. The send happens outside the claim
-  transaction. This is the design we adopt.
-- **Mappers:** explicit mapper files exist for each persistence entity
+  A carteira não é bloqueada de forma pessimista nesse fluxo.
+- **Leases:** o publicador da outbox assume um lease com duração configurada
+  (`src/modules/messaging/infrastructure/outbox/outbox-publisher.service.ts`), e as
+  reivindicações usam `FOR UPDATE SKIP LOCKED`. O envio ocorre fora da transação
+  de reivindicação. Este é o design que adotamos.
+- **Mapeadores (Mappers):** arquivos explícitos de mapper existem para cada entidade de persistência
   (`wager-transaction.mapper.ts`, `wallet.mapper.ts`).
-- **Money:** `decimal.js` value object (`src/shared/domain/value-objects/money.vo.ts`),
-  with `numeric(20, 2)` columns. This matches our choice.
+- **Dinheiro:** objeto de valor baseado em `decimal.js` (`src/shared/domain/value-objects/money.vo.ts`),
+  com colunas `numeric(20, 2)`. Isso coincide com a nossa escolha.
 
 ## 3. eriksonwilliam/jungle-gaming-wagering
 
-- **Locking:** `LockMode.PESSIMISTIC_WRITE` on the wallet
+- **Bloqueio (Locking):** `LockMode.PESSIMISTIC_WRITE` na carteira
   (`src/infrastructure/persistence/mikro-orm/repositories/wallet.repository.ts`),
-  and `PESSIMISTIC_PARTIAL_WRITE` on the outbox.
-- **Money:** `bigint` minor units in the ledger and wager repositories, through
-  `toMinorUnits()` and `BigInt(...)`.
-- **Operations:** a Keycloak JWT verifier and guard, a Prometheus metrics adapter,
-  and a Grafana dashboard are present. The challenge gives no points for these.
-  We do not adopt them, as `docs/REFERENCE_REVIEW.md` previously recommended.
+  e `PESSIMISTIC_PARTIAL_WRITE` na outbox.
+- **Dinheiro:** unidades fracionárias em `bigint` nos repositórios de ledger e wager, através de
+  `toMinorUnits()` e `BigInt(...)`.
+- **Operações:** verificador JWT e guard do Keycloak, adaptador de métricas Prometheus
+  e painel do Grafana estão presentes. O desafio não concede pontuação para esses itens.
+  Não os adotamos, conforme `docs/REFERENCE_REVIEW.md` havia recomendado anteriormente.
 
-## What this changed in our decisions
+## O que isso mudou em nossas decisões
 
-- **Wallet lock:** all three use a pessimistic row lock. Our own mutation
-  evidence adds one fact they do not establish: without the row lock, the version
-  guard still prevents corruption, but a hot wallet exhausts its retries under
-  load (`test/concurrency/hot-wallet.test.ts`). The lock is kept for
-  availability, not only for correctness. See `docs/adr/0001-pessimistic-wallet-lock.md`.
-- **Money representation:** two references use minor units in the domain. We use
-  `decimal.js` with `NUMERIC(20,2)`, as the architecture document decided. Minor
-  units are a simpler exact representation for two-decimal currencies, and we
-  would reconsider the choice if the domain grew beyond that. Recorded in
+- **Lock de carteira:** os três usam lock de linha pessimista. Nossas próprias evidências de
+  mutação acrescentam um fato que eles não estabelecem: sem o lock de linha, a proteção por versão
+  ainda impede corrupção, mas uma carteira disputada (hot wallet) esgota suas retentativas sob
+  carga (`test/concurrency/hot-wallet.test.ts`). O lock é mantido por
+  disponibilidade, não apenas por corretude. Consulte `docs/adr/0001-pessimistic-wallet-lock.md`.
+- **Representação de dinheiro:** duas referências utilizam unidades fracionárias no domínio. Nós utilizamos
+  `decimal.js` com `NUMERIC(20,2)`, conforme decidido no documento de arquitetura. Unidades
+  fracionárias são uma representação exata mais simples para moedas de duas casas decimais, e
+  reconsideraríamos a escolha se o domínio crescesse além disso. Registrado em
   `docs/adr/0002-money-representation.md`.
-- **Outbox I/O:** we keep the send outside any transaction, following
-  `paulovitorlr`. The send-inside-transaction design in `AndreLopes30` is
-  rejected: it holds a connection and a row lock for the whole broker call.
-- **Reconciliation:** diagnostic only, as in `AndreLopes30`.
+- **E/S (I/O) da Outbox:** mantemos o envio fora de qualquer transação, seguindo
+  `paulovitorlr`. O design de envio dentro da transação em `AndreLopes30` é
+  rejeitado: ele mantém uma conexão e um lock de linha durante toda a chamada ao broker.
+- **Reconciliação:** apenas diagnóstica, assim como em `AndreLopes30`.
 
-## Consultation on testing, and what we might be forgetting
+## Consulta sobre testes e o que podemos estar esquecendo
 
-Re-read in this round, against the test suites of the three repositories. The question was whether
-the challenge's testing requirements (section 13) and the concurrency scenario (section 8) are fully
-covered here, and what the other implementations test that we do not.
+Relido nesta rodada, confrontando com as suítes de teste dos três repositórios. A questão era saber se
+os requisitos de teste do desafio (seção 13) e o cenário de concorrência (seção 8) estão totalmente
+cobertos aqui, e o que as outras implementações testam que nós não testamos.
 
-| Area                                  | What the reference does                                                                                                                                                                                                                                                                               | What this project does                                                                                                                                                                      | Decision                                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Same operation from several processes | andre: `test/integration/multi-process-concurrency.test.ts` (three HTTP processes, state kept across restart). paulo: `test/concurrency/multiprocess-concurrency.spec.ts` (hot wallet across independent processes). erikson: `duplicate-bet.concurrency.test.ts` (fifty parallel BETs, one process). | `test/concurrency/three-processes.test.ts` and `distributed-contention.test.ts`: real processes, one idempotency key with three payloads, competing reversals and results, lost-lock check. | Adopted, and extended beyond the references.                                                            |
-| "Multi-instance"                      | paulo's suite says "Three application contexts in one process". erikson's instances run in one process too (no `spawn` in the suite).                                                                                                                                                                 | Real processes only.                                                                                                                                                                        | Our suites are stronger here. Noted so the claim is not repeated as proof.                              |
-| Two publishers over one outbox        | erikson: `outbox-publishers.concurrency.test.ts`, in one process against real PostgreSQL.                                                                                                                                                                                                             | In one process, and now across two worker processes with a lost-lease count (`distributed-contention.test.ts`).                                                                             | Adopted across processes.                                                                               |
-| Several workers on one wallet         | Not tested by any of the three.                                                                                                                                                                                                                                                                       | `distributed-contention.test.ts`: two workers, forty operations on one wallet, and a worker killed mid-contention.                                                                          | Added here.                                                                                             |
-| Load test                             | erikson: `test/load/run.ts`, against nginx and three instances, with Keycloak tokens, p95 by scenario.                                                                                                                                                                                                | `bun run test:load`: three processes and two workers, client-side p50, p95, p99, the outbox lag, and the invariant after the run. Writes `docs/LOAD_TEST_RESULTS.md`.                       | Adopted in our form. It is not in `check:all`.                                                          |
-| Dashboards and metrics export         | erikson: Prometheus and Grafana provisioned by Compose, with a scrape config for each instance.                                                                                                                                                                                                       | JSON `GET /metrics` per process, no aggregation.                                                                                                                                            | Not adopted. The challenge does not ask for it. It is the first candidate if observability is reviewed. |
-| Identity                              | erikson: Keycloak, the identity provider the challenge suggests.                                                                                                                                                                                                                                      | API keys with two roles (ADR 0007).                                                                                                                                                         | Deliberate deviation. Owner decision D5 in `INVARIANT_REVIEW.md`.                                       |
-| Coverage                              | erikson: `test:coverage` script.                                                                                                                                                                                                                                                                      | None.                                                                                                                                                                                       | Candidate. Coverage says nothing about the interleavings that matter here, so it is not a gate.         |
-| Mutation testing                      | None of the three.                                                                                                                                                                                                                                                                                    | Manual mutants, recorded in `TEST_STRATEGY.md`, four in this round.                                                                                                                         | No tool added. The manual record is kept honest with the one survivor (`SKIP LOCKED`).                  |
-| Smoke test of a running stack         | andre: `infra:check` script (`check-infrastructure.ts`), which checks the stack before tests.                                                                                                                                                                                                         | `/health/ready` only, checked by hand.                                                                                                                                                      | Candidate: a script that posts one BET to a running Compose stack.                                      |
-| Unit tests with test doubles          | erikson: `test/unit/application/use-cases/*` with fakes.                                                                                                                                                                                                                                              | Unit tests use real domain objects, and no fakes for the database or the queue.                                                                                                             | Kept. It matches the rule against replacing the database and the queue.                                 |
-| Restart and worker entrypoint         | paulo: `restart-recovery.e2e.spec.ts`. andre: `worker-entrypoint.test.ts`.                                                                                                                                                                                                                            | `three-processes.test.ts` (restart, SIGTERM) and `process-crash-and-shutdown.test.ts` (kill before commit, SIGTERM during a batch).                                                         | Covered.                                                                                                |
-| Constraints                           | paulo: `database-constraints.e2e.spec.ts`. erikson: `schema-constraints.integration.test.ts`.                                                                                                                                                                                                         | `test/integration/schema/schema-constraints.test.ts`, 38 test declarations, each probe failing before its migration exists.                                                                 | Covered.                                                                                                |
+| Área                                              | O que a referência faz                                                                                                                                                                                                                                                                                                  | O que este projeto faz                                                                                                                                                                                         | Decisão                                                                                                           |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Mesma operação a partir de vários processos       | andre: `test/integration/multi-process-concurrency.test.ts` (três processos HTTP, estado mantido entre reinícios). paulo: `test/concurrency/multiprocess-concurrency.spec.ts` (carteira disputada entre processos independentes). erikson: `duplicate-bet.concurrency.test.ts` (cinquenta BETs paralelas, um processo). | `test/concurrency/three-processes.test.ts` e `distributed-contention.test.ts`: processos reais, uma chave de idempotência com três payloads, reversões e resultados concorrentes, verificação de lock perdido. | Adotado, e estendido além das referências.                                                                        |
+| "Multi-instância"                                 | A suíte de paulo afirma "Three application contexts in one process". As instâncias de erikson rodam em um processo só (sem `spawn` na suíte).                                                                                                                                                                           | Processos reais apenas.                                                                                                                                                                                        | Nossas suítes são mais robustas aqui. Registrado para que a afirmação não seja repetida como prova.               |
+| Dois publicadores sobre uma outbox                | erikson: `outbox-publishers.concurrency.test.ts`, em um processo contra PostgreSQL real.                                                                                                                                                                                                                                | Em um processo, e agora através de dois processos de worker com contagem de leases perdidos (`distributed-contention.test.ts`).                                                                                | Adotado entre processos.                                                                                          |
+| Vários workers em uma carteira                    | Não testado por nenhuma das três referências.                                                                                                                                                                                                                                                                           | `distributed-contention.test.ts`: dois workers, quarenta operações em uma carteira e um worker encerrado no meio da contenção.                                                                                 | Adicionado aqui.                                                                                                  |
+| Teste de carga                                    | erikson: `test/load/run.ts`, contra nginx e três instâncias, com tokens Keycloak, p95 por cenário.                                                                                                                                                                                                                      | `bun run test:load`: três processos e dois workers, p50, p95 e p99 do lado do cliente, lag da outbox e o invariante após a execução. Grava `docs/LOAD_TEST_RESULTS.md`.                                        | Adotado no nosso formato. Não está em `check:all`.                                                                |
+| Painéis e exportação de métricas                  | erikson: Prometheus e Grafana provisionados por Compose, com configuração de scrape para cada instância.                                                                                                                                                                                                                | JSON em `GET /metrics` por processo, sem agregação.                                                                                                                                                            | Não adotado. O desafio não o exige. É o primeiro candidato caso a observabilidade seja revista.                   |
+| Identidade                                        | erikson: Keycloak, o provedor de identidade sugerido pelo desafio.                                                                                                                                                                                                                                                      | Chaves de API com dois papéis (ADR 0007).                                                                                                                                                                      | Desvio deliberado. Decisão D5 do proprietário em `INVARIANT_REVIEW.md`.                                           |
+| Cobertura                                         | erikson: script `test:coverage`.                                                                                                                                                                                                                                                                                        | Nenhuma.                                                                                                                                                                                                       | Candidato. Cobertura nada diz sobre o entrelaçamento que importa aqui, não sendo barreira de validação.           |
+| Testes de mutação                                 | Nenhuma das três.                                                                                                                                                                                                                                                                                                       | Mutantes manuais, registrados em `TEST_STRATEGY.md`, quatro nesta rodada.                                                                                                                                      | Nenhuma ferramenta adicionada. O registro manual mantém-se transparente com o único sobrevivente (`SKIP LOCKED`). |
+| Teste de fumaça (smoke test) de stack em execução | andre: script `infra:check` (`check-infrastructure.ts`), que verifica a stack antes dos testes.                                                                                                                                                                                                                         | `/health/ready` apenas, checado manualmente.                                                                                                                                                                   | Candidato: um script que envie uma BET para uma stack Compose em execução.                                        |
+| Testes unitários com dublês de teste              | erikson: `test/unit/application/use-cases/*` com fakes.                                                                                                                                                                                                                                                                 | Testes unitários usam objetos de domínio reais, e nenhum fake para banco de dados ou fila.                                                                                                                     | Mantido. Alinha-se à regra de não substituir o banco de dados nem a fila.                                         |
+| Reinício e ponto de entrada de worker             | paulo: `restart-recovery.e2e.spec.ts`. andre: `worker-entrypoint.test.ts`.                                                                                                                                                                                                                                              | `three-processes.test.ts` (reinício, SIGTERM) e `process-crash-and-shutdown.test.ts` (kill antes de commit, SIGTERM durante lote).                                                                             | Coberto.                                                                                                          |
+| Restrições                                        | paulo: `database-constraints.e2e.spec.ts`. erikson: `schema-constraints.integration.test.ts`.                                                                                                                                                                                                                           | `test/integration/schema/schema-constraints.test.ts`, 38 declarações de teste, cada probe falhando antes de sua migração existir.                                                                              | Coberto.                                                                                                          |
 
-### What we might still be missing
+### O que ainda podemos estar deixando passar
 
-1. **An API process killed inside a transaction.** No reference tests it either. The HTTP path is
-   covered in-process, and by a provider's retry under the same key.
-2. **A smoke test of the running Compose stack**, the equivalent of andre's `infra:check`.
-3. **Coverage numbers**, which the references publish and we do not.
-4. **Metrics that a dashboard can read**, as erikson provisions them.
-5. **The wait for the wallet lock**, which no reference measures either. This project does not measure
-   it. `concurrency_conflicts_total` counts lost races only.
+1. **Um processo de API encerrado dentro de uma transação.** Nenhuma referência testa isso também. O caminho HTTP é
+   coberto em processo e por retentativa de provedor sob a mesma chave.
+2. **Um teste de fumaça (smoke test) da stack Compose em execução**, o equivalente ao `infra:check` do andre.
+3. **Números de cobertura**, que as referências publicam e nós não.
+4. **Métricas legíveis por um dashboard**, como erikson provisiona.
+5. **A espera pelo lock de carteira**, que nenhuma referência mede também. Este projeto não a
+   mede. `concurrency_conflicts_total` conta apenas disputas perdidas.
 
-## Not verified, not used
+## Não verificado, não utilizado
 
-- Test counts and pass or fail status of the reference suites.
-- `paulovitorlr`'s "some entities under a catch-all shared area" claim, which
-  the previous review made without evidence.
-- Any behaviour under concurrency or failure in the reference code. We did not
-  run it, so no conclusion about correctness is drawn.
+- Contagem de testes e status de sucesso ou falha das suítes de referência.
+- A alegação de `paulovitorlr` sobre "algumas entidades sob uma área compartilhada genérica", feita na
+  revisão anterior sem evidências.
+- Qualquer comportamento sob concorrência ou falha no código de referência. Não o
+  executamos, portanto nenhuma conclusão sobre corretude é extraída.

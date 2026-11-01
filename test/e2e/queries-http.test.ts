@@ -226,13 +226,16 @@ describe('reconciliation', () => {
 
   test('a divergence is reported, counted, and not silently corrected', async () => {
     const wallet = await fundedWallet('100.00');
-    // The row guard refuses a balance change without its version bump, so the divergence is injected the way the
-    // guard allows: balance and version together. The database cannot see that it has no ledger entry; reconciliation must.
-    await database.orm.em
-      .getConnection()
-      .execute(`UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?`, [
-        wallet.walletId,
-      ]);
+    // The balance trigger refuses a balance that differs from its ledger, so the divergence is injected the way a
+    // manual correction outside the application would be: in one transaction with the triggers off for that
+    // transaction only. Reconciliation must still report it, because the database refuses it only when triggers run.
+    await database.orm.em.fork().transactional(async (em) => {
+      await em.execute("SET LOCAL session_replication_role = 'replica'");
+      await em.execute(
+        `UPDATE wallets SET balance = balance + 1, version = version + 1 WHERE id = ?`,
+        [wallet.walletId],
+      );
+    });
 
     const result = await call('POST', `/wallets/${wallet.walletId}/reconciliation`);
     const after = await call('GET', `/wallets/${wallet.walletId}`);

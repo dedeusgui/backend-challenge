@@ -545,11 +545,21 @@ describe('inbox and outbox constraints', () => {
 
   test('keeps one outbox row per stable event id', async () => {
     const eventId = randomUUID();
+    // The payload is a well-formed envelope: the shape constraint refuses anything else before this one applies.
+    const payload = JSON.stringify({
+      eventId,
+      eventType: 'WalletBalanceChanged',
+      aggregateId: 'wallet-1',
+      correlationId: 'correlation-1',
+      occurredAt: '2026-07-29T15:00:00.000Z',
+      version: 1,
+      data: {},
+    });
     const insertOutbox = () =>
       sql(
         `INSERT INTO outbox_messages (id, aggregate_id, event_type, payload, occurred_at, next_attempt_at)
-         VALUES (?, 'wallet-1', 'WalletBalanceChanged', '{}'::jsonb, now(), now())`,
-        [eventId],
+         VALUES (?, 'wallet-1', 'WalletBalanceChanged', ?::jsonb, now(), now())`,
+        [eventId, payload],
       );
 
     await insertOutbox();

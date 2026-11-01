@@ -88,6 +88,7 @@ export async function buildSite(options: BuildSiteOptions): Promise<BuildSiteRes
     parseJson(await readFile(join(root, 'docs/openapi.json'), 'utf8')),
   );
   const runs = await Promise.all(LOAD_CPUS.map((cpus) => loadRun(root, cpus, git)));
+  const localRuns = await loadAllLocalRuns(root, git);
   const commits = (
     await git(['log', '--reverse', '--format=%H%x09%h%x09%s', `${REVIEW_BASE_COMMIT}..HEAD`])
   )
@@ -112,6 +113,7 @@ export async function buildSite(options: BuildSiteOptions): Promise<BuildSiteRes
     DIAGRAMS: diagrams.map((diagram) => renderDiagramBlock(diagram, commit)).join('\n'),
     LOAD_CHART: loadChart(runs),
     LOAD_ROWS: runs.map(loadRow).join('\n                '),
+    LOCAL_LOAD_ROWS: localRuns.map(localLoadRow).join('\n                '),
     COMMITS_LIST: commits.map((line) => commitItem(line)).join('\n            '),
   };
   const html = fillTemplate(template, values);
@@ -586,6 +588,99 @@ function loadRow(run: LoadRun): string {
     run.agreedStep ? `${(run.agreedStep.errorRate * 100).toFixed(2)}%` : '-',
     `${escapeHtml(run.cpuModel)}, ${run.hostLogicalCpus} CPUs lógicas, ${run.memoryGiB.toFixed(1)} GiB${run.pinned ? '' : ', sem fixação'}`,
     `<code>${run.commit}</code>, <code>${escapeHtml(run.file)}</code>`,
+  ];
+  return `<tr>${cells.map((cell, index) => (index === 0 ? `<th scope="row">${cell}</th>` : `<td>${cell}</td>`)).join('')}</tr>`;
+}
+
+export interface LocalLoadRun {
+  readonly scenario: string;
+  readonly cpus: number;
+  readonly file: string;
+  readonly commit: string;
+  readonly agreedRate: number | null;
+  readonly firstFailingRate: number | null;
+  readonly p99: number | null;
+  readonly utilisation: number | null;
+}
+
+async function loadLocalRun(
+  root: string,
+  scenario: string,
+  git: (args: string[]) => Promise<string>,
+): Promise<LocalLoadRun> {
+  const scenarioDir = join('docs/load/local', scenario);
+  const fullScenarioDir = join(root, scenarioDir);
+  const files = await readdir(fullScenarioDir);
+  const jsonName = files.find((name) => name.endsWith('.json'));
+  if (jsonName === undefined) {
+    throw new Error(`no JSON result in ${scenarioDir}`);
+  }
+  const file = join(scenarioDir, jsonName);
+  const parsed = parseJson(await readFile(join(root, file), 'utf8'));
+  if (!isRecord(parsed)) {
+    throw new Error(`${file} is not an object`);
+  }
+  const stackCpus = typeof parsed.stackCpus === 'number' ? parsed.stackCpus : 0;
+  const agreedRate = typeof parsed.agreedRate === 'number' ? parsed.agreedRate : null;
+  const firstFailingRate =
+    typeof parsed.firstFailingRate === 'number' ? parsed.firstFailingRate : null;
+  const steps = Array.isArray(parsed.steps) ? parsed.steps.filter(isRecord) : [];
+  const agreed = steps.find((step) => step.rate === agreedRate);
+  const p99 = agreed !== undefined && typeof agreed.p99 === 'number' ? agreed.p99 : null;
+
+  let utilisation: number | null = null;
+  if (
+    agreed !== undefined &&
+    isRecord(parsed.idle) &&
+    isRecord(parsed.idle.cpuPercent) &&
+    isRecord(agreed.cpuPercent) &&
+    stackCpus > 0
+  ) {
+    const idleCpus = parsed.idle.cpuPercent;
+    const agreedCpus = agreed.cpuPercent;
+    let total = 0;
+    for (const [comp, gross] of Object.entries(agreedCpus)) {
+      if (typeof gross === 'number') {
+        const idle = typeof idleCpus[comp] === 'number' ? idleCpus[comp] : 0;
+        total += Math.max(0, gross - idle);
+      }
+    }
+    utilisation = total / (stackCpus * 100);
+  }
+
+  const commit = (await git(['log', '-1', '--format=%h', '--', file])).trim();
+  return {
+    scenario,
+    cpus: stackCpus,
+    file,
+    commit,
+    agreedRate,
+    firstFailingRate,
+    p99,
+    utilisation,
+  };
+}
+
+export async function loadAllLocalRuns(
+  root: string,
+  git: (args: string[]) => Promise<string>,
+): Promise<LocalLoadRun[]> {
+  const localDir = join(root, 'docs/load/local');
+  const scenarios = (await readdir(localDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  return Promise.all(scenarios.map((scenario) => loadLocalRun(root, scenario, git)));
+}
+
+export function localLoadRow(run: LocalLoadRun): string {
+  const cells = [
+    `<code>${escapeHtml(run.scenario)}</code>`,
+    String(run.cpus),
+    run.agreedRate === null ? 'nenhuma' : String(run.agreedRate),
+    run.firstFailingRate === null ? 'nenhuma no degrau' : String(run.firstFailingRate),
+    run.p99 === null ? '-' : run.p99.toFixed(1),
+    run.utilisation === null ? '-' : `${(run.utilisation * 100).toFixed(0)}%`,
   ];
   return `<tr>${cells.map((cell, index) => (index === 0 ? `<th scope="row">${cell}</th>` : `<td>${cell}</td>`)).join('')}</tr>`;
 }

@@ -356,6 +356,17 @@
             0,1%, nenhuma perda, p95 até 500 ms, p99 até 1000 ms, saldo igual ao ledger, e nenhuma
             resposta incorreta. A taxa acordada é o maior degrau aprovado.
           </p>
+
+          <h3>Benchmark de nuvem</h3>
+          <p>
+            <strong>Ambiente da nuvem</strong>: VM com Intel Xeon @ 2.10 GHz (4 vCPUs), 15.7 GiB de
+            memória, Linux. Topologia padrão (3 APIs, 2 workers, PostgreSQL 17 alpine, LocalStack
+            4.14). Relatório completo em
+            <a
+              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_RESULTS.md"
+              >LOAD_TEST_RESULTS.md</a
+            >.
+          </p>
           <figure class="chart">
             {{LOAD_CHART}}
             <figcaption>
@@ -365,7 +376,9 @@
             </figcaption>
           </figure>
           <details>
-            <summary>Tabela por execução: máquina, commit e números do degrau acordado</summary>
+            <summary>
+              Tabela por execução na nuvem: máquina, commit e números do degrau acordado
+            </summary>
             <div class="table-wrap">
               <table>
                 <caption>
@@ -390,6 +403,44 @@
               </table>
             </div>
           </details>
+
+          <h3>Benchmark local</h3>
+          <p>
+            <strong>Ambiente local</strong>: AMD Ryzen 7 7735HS com 8 núcleos e 16 threads (SMT),
+            22.2 GiB de memória, Linux 7.2.6. Matriz de 13 cenários variando CPUs da pilha (1 a 8),
+            APIs (1 a 3) e workers (1 a 2). Relatório completo em
+            <a
+              href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_BASELINE.md"
+              >LOAD_TEST_BASELINE.md</a
+            >.
+          </p>
+          <details open>
+            <summary>
+              Tabela dos 13 cenários locais: CPUs, taxa acordada, primeira falha, p99 e utilização
+            </summary>
+            <div class="table-wrap">
+              <table>
+                <caption>
+                  Resultados dos 13 cenários locais, com CPUs, taxa acordada, primeira taxa
+                  reprovada, p99 no passo acordado e utilização
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Cenário</th>
+                    <th scope="col">CPUs da pilha</th>
+                    <th scope="col">Taxa acordada (req/s)</th>
+                    <th scope="col">Primeira taxa reprovada (req/s)</th>
+                    <th scope="col">p99 no passo acordado (ms)</th>
+                    <th scope="col">Utilização</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{LOCAL_LOAD_ROWS}}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
           <h3>Como ler estes números</h3>
           <ul>
             <li>
@@ -413,16 +464,24 @@
               divide as CPUs, e os números ficam pessimistas.
             </li>
             <li>
-              Execuções de máquinas diferentes não são um experimento controlado. Compare apenas as
-              linhas da mesma máquina.
+              <strong>Dois ambientes distintos</strong>: as medições da nuvem (VM Intel Xeon) e
+              locais (AMD Ryzen 7 7735HS) foram executadas em máquinas diferentes e não são um
+              experimento controlado para confronto direto. A comparação é de tendência dentro de
+              cada ambiente, não de qual máquina é melhor. Compare apenas execuções da mesma
+              máquina.
             </li>
             <li>
-              Os registros commitados são de <code>b34c198</code>. Não foi reexecutada uma campanha
-              completa no código atual; o smoke de 1 CPU está registrado em
-              <code>docs/load/smoke/</code>. O relatório completo, com método e restrições, está em
+              Os registros commitados são de <code>b34c198</code> na nuvem e <code>40ad8bf</code> no
+              local. Não foi reexecutada uma campanha completa no código atual; o smoke de 1 CPU
+              está registrado em <code>docs/load/smoke/</code>. O relatório completo da nuvem, com
+              método e restrições, está em
               <a
                 href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_RESULTS.md"
                 >LOAD_TEST_RESULTS.md</a
+              >, e o baseline local com os 13 cenários está em
+              <a
+                href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/LOAD_TEST_BASELINE.md"
+                >LOAD_TEST_BASELINE.md</a
               >.
             </li>
           </ul>
@@ -518,11 +577,9 @@
               feito.
             </li>
             <li>
-              <strong
-                >Sem console de engenharia, sem laboratório de carga e sem Prometheus ou
-                Grafana</strong
-              >
-              nesta entrega. Os motivos estão em
+              <strong>Sem console de engenharia e sem laboratório de carga</strong>
+              nesta entrega: o Prometheus está no formato texto em
+              <code>/metrics/prometheus</code>; Grafana não é adotado. Os motivos estão em
               <a
                 href="https://github.com/dedeusgui/backend-challenge/blob/{{COMMIT_FULL}}/docs/AUDITORIA_FINAL.md"
                 >AUDITORIA_FINAL.md</a

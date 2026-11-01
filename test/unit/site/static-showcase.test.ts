@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -256,6 +256,35 @@ describe('the numbers match the files they come from', () => {
       expect(html).toContain(run.environment.cpuModel);
     }
     expect(html).toContain('1 CPU: 100 req/s; 2 CPU: 200 req/s; 4 CPU: 400 req/s');
+
+    const localDir = join(ROOT, 'docs/load/local');
+    const localScenarios = (await readdir(localDir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(localScenarios.length).toBe(13);
+    for (const scenario of localScenarios) {
+      const files = await readdir(join(localDir, scenario));
+      const jsonFile = files.find((f) => f.endsWith('.json'));
+      if (jsonFile === undefined) {
+        throw new Error(`missing json file for ${scenario}`);
+      }
+      const parsed: unknown = JSON.parse(
+        await readFile(join(localDir, scenario, jsonFile), 'utf8'),
+      );
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('agreedRate' in parsed) ||
+        typeof parsed.agreedRate !== 'number'
+      ) {
+        throw new Error(`invalid json in ${scenario}`);
+      }
+      expect(html).toContain(`<code>${scenario}</code>`);
+      expect(html).toContain(`<td>${parsed.agreedRate}</td>`);
+    }
+    expect(html).toContain('AMD Ryzen 7 7735HS');
+    expect(html).toContain('docs/LOAD_TEST_BASELINE.md');
   });
 
   test('the commits listed are exactly the ones after the review base, oldest first', async () => {

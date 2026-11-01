@@ -43,6 +43,8 @@ exige que todos passem.
 Para ver que os testes de concorrência não estão vazios, veja as mutações registradas em
 [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md): removendo a trava ou a guarda de versão, o teste falha.
 
+Para qualquer outra garantia, o índice [audit/README.md](audit/README.md) aponta o teste que a prova.
+
 ## 5. Autenticação e autorização (5 min)
 
 - `test/e2e/auth-http.test.ts`: o que cada papel pode fazer.
@@ -79,8 +81,16 @@ chega (tentativas sem teto, só o atraso é limitado); `eventId` identifica o fa
 de saldo de uma carteira. A ordem de chegada **não** é garantida: um evento recusado é retentado depois, e um evento
 posterior da mesma carteira pode chegar antes. O teste `partial-batch-order.test.ts` mostra essa sequência no SQS real.
 
+Desde esta rodada, o lease e o reagendamento do outbox são decididos pelo relógio do banco
+(`outbox-lease-clock.test.ts`, `outbox-retry-clock.test.ts`), e o worker de retenções também
+(`database-clock-references.test.ts`). Uma mensagem em voo é renovada enquanto o seu comando roda, até 300 s
+(`slow-message-hold.test.ts`). Uma retenção com falha permanente vira `FAILED` e é anunciada como
+`WagerTransactionFailed`, evento que a especificação não lista (ver F-13 em [FINDINGS.md](audit/FINDINGS.md)).
+
 ## 9. O que não foi feito, e por quê
 
+- **Custo da renovação de visibilidade e vazão do consumidor de fila.** Não medidos: o teste de carga envia só HTTP.
+  Ver [PERFORMANCE_COMPARISON.md](audit/PERFORMANCE_COMPARISON.md), experimentos 2 e 4.
 - **Console de engenharia e laboratório de carga.** Não construídos nesta rodada. A telemetria que um console
   mostraria só ficou verdadeira com a superfície do worker; um painel sobre os números atuais seria prematuro.
   Ver [AUDITORIA_FINAL.md](AUDITORIA_FINAL.md).
@@ -98,3 +108,6 @@ A lista completa está em [ARCHITECTURE.md §14](../ARCHITECTURE.md). Os que mai
 chaves de API sem rotação nem login; HTTP simples atrás de TLS a ser colocado; ausência de limite de taxa no modo
 padrão; um `WIN` sem referência que não bloqueia o `REFUND` da sua aposta; um `REFUND` que não é deduplicado entre
 chaves diferentes com ids diferentes.
+
+- Uma mensagem em voo que roda além de 300 s é liberada, e dois consumidores podem processar o mesmo comando ao mesmo
+  tempo. A identidade da transação mantém o efeito em um (`slow-message-hold.test.ts`).

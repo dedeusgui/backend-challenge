@@ -1,0 +1,13 @@
+# Outbox backlog drain (test/perf/outbox-backlog.ts; BATCH=20; one process; LocalStack events queue).
+# Round R2. "base" is 73c284c, run with an equivalent copy of the script in that worktree.
+# Columns: tree, events, published, remaining, seconds, events per second.
+
+base  2000  2000  0  1.23  1626
+head  2000  2000  0  1.28  1559
+
+base  5000  5000  0  3.45  1449
+head  5000  5000  0  3.29  1519
+base  5000  5000  0  3.36  1487
+head  5000  5000  0  3.06  1631
+base  5000  5000  0  3.30  1515
+head  5000  5000  0  3.27  1529

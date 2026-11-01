@@ -125,8 +125,10 @@ passa pela guarda e é reportada pela reconciliação.
 `ChangeMessageVisibilityBatch` por mensagem após a primeira. O custo esperado é o de uma requisição SQS extra
 por mensagem, que se soma à recepção, ao processamento e à remoção.
 
-**Estado.** Não medido nesta rodada. A correção (commit `b398e22`) foi validada pelo teste de concorrência
-com LocalStack, mas o custo em throughput não foi medido. Entra como `OPTIMIZATION_CANDIDATE` em
+**Estado.** Não medido. A correção (commit `b398e22`) foi validada pelo teste de concorrência com LocalStack, mas o
+custo não foi medido. O teste de carga (`test/load/workload.ts`) envia só requisições HTTP: o consumidor de fila não
+está no caminho medido, então o experimento 3 não responde a esta pergunta. Medir exige um teste de carga que alimente
+a fila. Não se afirma custo nem ganho para a renovação por mensagem (`b398e22`, e a de `6b3b23e`). Entra como `OPTIMIZATION_CANDIDATE` em
 `FINDINGS.md`, com a medição necessária descrita: rodar `test:load` pareado com e sem a renovação, com a pilha
 em execução. Sem essa medição, o custo não é afirmado.
 
@@ -134,13 +136,58 @@ em execução. Sem essa medição, o custo não é afirmado.
 
 ## Experimento 3 — teste de carga pareado
 
-**Estado.** Não executado nesta rodada. A pilha Compose do repositório não constrói no sandbox (ver
-`BASELINE.md` §2), e a execução com a imagem de teste exige tempo que não cabe nesta rodada. Os pares de
-medição já versionados em `docs/load/` continuam sendo a referência. Nenhum número de carga novo é afirmado.
+**Estado.** Executado nesta rodada, na máquina do sandbox (4 CPUs), com `test:load`: três processos de API e dois
+workers sobre um PostgreSQL e um LocalStack. Pares alternados: a base `73c284c` (antes desta rodada) e o `HEAD` `c8ffbcc`,
+com taxas de 25, 50 e 100 req/s em degraus de 15 s. Arquivos: `docs/load/paired/R2-*/cpus-4.json`.
+
+| Braço          | p99 a 25 req/s | p99 a 50 req/s | p99 a 100 req/s | Perdas | Erros |
+| -------------- | -------------: | -------------: | --------------: | -----: | ----: |
+| base, rodada 1 |        23,9 ms |        29,1 ms |         22,0 ms |      0 |     0 |
+| HEAD, rodada 1 |        34,9 ms |        24,1 ms |         22,0 ms |      0 |     0 |
+| base, rodada 2 |        29,2 ms |        21,3 ms |         23,3 ms |      0 |     0 |
+| HEAD, rodada 2 |        30,5 ms |        21,2 ms |         23,9 ms |      0 |     0 |
+
+**Leitura.** Todos os degraus passaram e nenhuma requisição foi perdida. A taxa acordada foi 100 req/s nos quatro
+braços, o maior degrau testado, então o teto não foi encontrado. Com dois pares e de 375 a 1 500 requisições por
+degrau, a diferença de p99 não se distingue do ruído: a 25 req/s o HEAD ficou acima nas duas rodadas (mediana 32,7 ms
+contra 26,6 ms), mas a faixa do base vai de 23,9 a 29,2 ms. **Não se declara ganho nem regressão de latência.** Isso
+exige mais pares e degraus mais longos.
 
 ---
 
-## Alterações descartadas
+## Experimento 4 — drenagem de backlog do outbox
+
+**Hipótese.** Depois de uma indisponibilidade, o publicador drena o backlog de eventos sem perder nenhum, e a
+velocidade não cai com o tamanho do backlog.
+
+**Estado.** Medido nesta rodada com `test/perf/outbox-backlog.ts`: N eventos são gravados de uma vez, e um publicador de
+produção (lote de 20, lease de 30 s) roda até não restar nenhum vencido. Um processo, um LocalStack. Dados em
+`docs/load/backlog/R2-backlog.txt`.
+
+| Eventos | Base (`73c284c`)                                  | HEAD (`c8ffbcc`)                                  |
+| ------: | ------------------------------------------------- | ------------------------------------------------- |
+|   2 000 | 1,23 s (1 626 ev/s)                               | 1,28 s (1 559 ev/s)                               |
+|   5 000 | 3,45 s, 3,36 s, 3,30 s (1 449, 1 487, 1 515 ev/s) | 3,29 s, 3,06 s, 3,27 s (1 519, 1 631, 1 529 ev/s) |
+
+**Leitura.** Em todas as corridas nenhum evento ficou para trás. O HEAD ficou cerca de 5 % acima do base na mediana,
+com três amostras por braço. Isso não basta para afirmar ganho: a medida mostra que a recuperação não regrediu.
+Não mede a taxa de consumo dos workers, nem a de vários publicadores em paralelo.
+
+---
+
+## Experimento 5 — soak
+
+**Hipótese.** Sob carga constante, a latência e as perdas não se degradam ao longo do tempo.
+
+**Estado.** Executado nesta rodada: `LOAD_RATES=100 LOAD_STEP_SECONDS=300` no HEAD `c8ffbcc`. 30 000 requisições em
+5 min, sem perdas nem erros, p99 de 22,0 ms, degrau aprovado. Arquivo: `docs/load/soak/R2-head-100rps-300s/cpus-4.json`.
+
+**Limite.** O harness mede latência, perdas e erros por degrau. Não se afirma sobre memória de processo, nem sobre o
+crescimento das tabelas, nem sobre um soak do consumidor de fila: isso não foi medido.
+
+---
+
+## Alterações descartadas## Alterações descartadas
 
 | Alteração                                                   | Motivo do descarte                                                                                                                             |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

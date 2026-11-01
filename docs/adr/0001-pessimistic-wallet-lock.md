@@ -38,7 +38,7 @@ seja detectado em vez de sobrescrever silenciosamente.
 - Operações em carteiras diferentes nunca bloqueiam umas às outras (`test/concurrency`).
 - Bloqueios são mantidos pela duração de uma transação curta. Nenhum I/O de SQS acontece
   dentro dela (ADR 0004).
-- O tempo de espera de bloqueio ainda não é exportado como métrica (`OBS-03` permanece parcial).
+- O tempo de espera de bloqueio é exportado como métrica (`wallet_lock_wait_ms`, cobrindo `OBS-03`).
 
 ## Evidências
 

@@ -1,6 +1,6 @@
 # Convenções da documentação
 
-Estas regras valem para todos os próximos passos. A documentação é parte da avaliação (seção 14 do
+Estas regras valem para toda a documentação. A documentação é parte da avaliação (seção 14 do
 [enunciado](CHALLENGE.md)), então qualquer mudança nela segue o mesmo fluxo.
 
 ## Idioma e pares em inglês
@@ -28,8 +28,8 @@ atualizar todas as referências: `ARCHITECTURE.md`, `DECISIONS.md`, `docs/REQUIR
 
 ## Documentos gerados: não editar à mão
 
-- [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md) é gerado por `test/load/report.ts`. Qualquer edição é sobrescrita na
-  próxima medição. Ele ainda está em inglês, porque traduzi-lo exige mudar o gerador; isso é uma fase de código.
+- [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md) é gerado por `test/load/report.ts`. Qualquer edição é sobrescrita pela
+  geração. O arquivo permanece em inglês, como emitido pelo gerador.
 - `docs/load/`, `docs/edge/results/` e `docs/audit/perf/` são medições brutas em JSON.
 - `docs/site/` é a fonte do site estático. Gere com `bun run site:build`.
 
@@ -64,7 +64,3 @@ atualizar todas as referências: `ARCHITECTURE.md`, `DECISIONS.md`, `docs/REQUIR
    fechar a fatia, `bun run check:all`, que exige `bun run infra:up`. Depois, derrube a infraestrutura com
    `docker compose down`.
 6. **Commit:** um commit em Conventional Commits, por exemplo `docs: ...`, com o corpo descrevendo o que mudou.
-
-## Escopo atual
-
-Nesta fase, a mudança é só documental. Ajustes no código serão tratados em uma fase separada, com contrato próprio.

@@ -27,7 +27,7 @@ Commits following this hash modified documentation and catalog files only.
 
 ## 3. Status of each quality bar item (docs/CHALLENGE.md §14)
 
-Estimates cited from the simulated review bar recorded in [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
+Estimates cited from the internal review bar (estimated target of 90/100 points).
 
 ### 3.1 Financial correctness
 
@@ -57,7 +57,7 @@ Estimates cited from the simulated review bar recorded in [REVISAO_SIMULADA.md](
 
 - **Bar score:** 10 points in specification (§14). Estimated target in simulated review: 9 points.
 - **Evidence:** Inbound and outbound flow mapping in `ARCHITECTURE.md` §1; decoupled ports in `src/wagering/application/ports/` and `src/shared/application/ports/`; clean separation in `messaging/application/inbound/` and `messaging/application/outbound/`; financial invariants encapsulated inside domain entities and `src/wagering/domain/transaction-settlement.ts`; architecture boundaries test in `test/unit/architecture/domain-boundaries.test.ts` (domain free of framework or cloud SDK imports).
-- **Known gap:** Contract decisions F-03 (returning 404 for transactions belonging to other providers) and F-13 (persisting `FAILED` and emitting `WagerTransactionFailed`) pending confirmation by challenge owner.
+- **Known gap:** Contract decisions F-03 (returning 404 for transactions belonging to other providers) and F-13 (persisting `FAILED` and emitting `WagerTransactionFailed`) are open decisions, owned by the challenge owner.
 
 ### 3.6 Tests
 
@@ -87,13 +87,13 @@ Source: [FINDINGS.md](audit/FINDINGS.md). Total of 15 evaluated findings: 11 clo
 | :--- | :---------------------------------------------------------------------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-01 | Malformed outbox envelope halted batch publication                      | Closed      | Commit `2905535` (migration 9 with `CHECK outbox_envelope_shape` constraint). Test: `test/integration/messaging/outbox-malformed-row.test.ts`.                                                                 |
 | F-02 | Same `messageId` with distinct `idempotencyKey` accepted as duplicate   | Closed      | Commit `2ec4d5e` (included key in `wagerMessageFingerprint`). Test: `test/integration/messaging/inbox-message-identity.test.ts`.                                                                               |
-| F-03 | 403 response for another provider's transaction revealed existence      | Closed      | Commit `154b52a` (uniform 404 response). Test: `test/e2e/authorization-adversarial.test.ts`. Contract decision pending challenge owner confirmation.                                                           |
+| F-03 | 403 response for another provider's transaction revealed existence      | Closed      | Commit `154b52a` (uniform 404 response). Test: `test/e2e/authorization-adversarial.test.ts`. Contract confirmation is an open decision, owned by the challenge owner.                                          |
 | F-04 | Slow batch left in-flight messages visible to other consumers           | Closed      | Commit `b398e22` (`ChangeMessageVisibilityBatch` before each message). Test: `test/integration/messaging/visibility-during-batch.test.ts`.                                                                     |
 | F-05 | Test fault hooks inside production code                                 | Closed      | Commit `489df8b` (extracted to `assembleWorker` and seams in `test/support/worker-seams.ts`). Suites pass without modified assertions.                                                                         |
 | F-06 | Balance-ledger agreement was not enforced by database schema            | Closed      | Migration 12 in commit `c5ddca9` (`wallets_ledger_balance_check` and `wallet_ledger_entries_balance_check` triggers). Test: `test/integration/schema/ledger-agreement-trigger.test.ts`.                        |
 | F-07 | Outbox lease compared expiration against caller's local clock           | Closed      | Commits `433ebe2` and `c952ba2` (ownership and rescheduling via database `now()`). Tests: `test/integration/messaging/outbox-lease-clock.test.ts` and `test/integration/messaging/outbox-retry-clock.test.ts`. |
 | F-08 | Ledger summary during reconciliation read outside transaction           | Closed      | Commit `0f4fa19` (read via `em.execute` inside transaction under lock). Test: `test/integration/schema/wallet-ledger-summary.test.ts`.                                                                         |
-| F-13 | Transaction with permanent failure stalled worker; `FAILED` lacked path | Closed      | Commit `c8ffbcc` (recorded `FAILED` with `WagerTransactionFailed` event). Test: `test/integration/wagering/held-failure.test.ts`. Contract decision pending challenge owner confirmation.                      |
+| F-13 | Transaction with permanent failure stalled worker; `FAILED` lacked path | Closed      | Commit `c8ffbcc` (recorded `FAILED` with `WagerTransactionFailed` event). Test: `test/integration/wagering/held-failure.test.ts`. Contract confirmation is an open decision, owned by the challenge owner.     |
 | F-14 | Message exceeding visibility window was redelivered during processing   | Closed      | Commit `6b3b23e` (renewed at each third of visibility window up to 300 s). Tests: `test/integration/messaging/slow-message-hold.test.ts` and `test/unit/messaging/application/wager-command-hold.test.ts`.     |
 | F-15 | Worker decided reference deadline using its local clock                 | Closed      | Commit `fc3862c` (`DatabaseClock` reading database `now()` within transaction). Test: `test/integration/wagering/database-clock-references.test.ts`.                                                           |
 
@@ -104,7 +104,7 @@ Confirmation of closure for F-06 is found in migration 12 history (`git log --on
 | ID   | Description                                                   | Status | Details                                                                                                                                                                                    |
 | :--- | :------------------------------------------------------------ | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-09 | Ledger query plan depends on PostgreSQL planner statistics    | Open   | Requires monitoring with `EXPLAIN` in production. Measured queries: sequential scan at 1,000 entries (0.68 ms), index scan at 100,000 (0.44 ms) and 1,000,000 (0.50 ms).                   |
-| F-10 | `ROLLBACK` of BET after `ROLLBACK` of REFUND is rejected      | Open   | Contract decision (D4) pending challenge owner confirmation. Code enforces rejection with `REFERENCE_ALREADY_REVERSED`, fixed in tests.                                                    |
+| F-10 | `ROLLBACK` of BET after `ROLLBACK` of REFUND is rejected      | Open   | Contract decision (D4) is an open decision, owned by the challenge owner. Code enforces rejection with `REFERENCE_ALREADY_REVERSED`, fixed in tests.                                       |
 | F-11 | Results without reference cannot be bounded to one per BET    | Open   | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md).                                     |
 | F-12 | Repository Docker image does not build in sandbox environment | Open   | Sandbox TLS proxy emits self-signed certificate (`SELF_SIGNED_CERT_IN_CHAIN`) during `bun install`. Bypassed in sandbox using an external test image; build verified in GitHub Actions CI. |
 
@@ -112,14 +112,14 @@ Confirmation of closure for F-06 is found in migration 12 history (`git log --on
 
 Eight decisions remain open awaiting confirmation by the challenge owner. The implementation follows the documented choice in each case.
 
-- **F-03 (HTTP status for transaction of another provider):** In `GET /wagering/transactions/:id`, a transaction belonging to another provider returns `404 TRANSACTION_NOT_FOUND`, identical to a non-existent identifier, to avoid enumeration of external transactions. Pending challenge owner decision: confirm uniform 404 or revert to 403.
-- **F-10 (ROLLBACK of BET after ROLLBACK of REFUND):** When a REFUND is reversed by ROLLBACK, a subsequent ROLLBACK of the BET is rejected with `REFERENCE_ALREADY_REVERSED`. Pending challenge owner decision: confirm whether a reference admits at most one reversal in total (preventing double credit of stake) or admits net reversals.
-- **F-13 (Execution path for FAILED and new domain event):** A held transaction that encounters an unrecoverable failure is recorded as `FAILED` and publishes `WagerTransactionFailed` (event not listed in specification §6.3). Pending challenge owner decision: confirm persisting `FAILED` and introducing this event.
-- **D1 (Results without reference):** The specification (§6.3 and §7) allows WIN and LOSS to omit the reference to the bet. Without a reference, the system cannot link the result to the BET or block a subsequent REFUND or second result. Pending challenge owner decision: accept the economic risk of unlinked results or make the reference to BET mandatory for all results.
-- **D2 (ROLLBACK in any state of the bet):** A ROLLBACK is accepted against any state of the source transaction, including after a processed WIN, returning the stake while the win credit remains. Pending challenge owner decision: confirm whether cancelling the bet may leave winnings intact or whether ROLLBACK of a BET with a win must be rejected until the WIN is reversed first.
-- **D3 (REFUND only for BET without result):** A REFUND is accepted only if the bet has no processed outcome (WIN or LOSS). If a result exists, it is rejected with `REFERENCE_ALREADY_SETTLED`. Pending challenge owner decision: confirm requiring providers to reverse outcomes before requesting refunds.
-- **D4 (At most one reversal per reference):** The system limits any reference to at most one reversal, whether REFUND or ROLLBACK. Rule 4 of the specification ("cannot be reversed twice by the same operation type"), read literally, would allow a REFUND followed by a ROLLBACK on the same bet, crediting the stake twice. Pending challenge owner decision: confirm strict constraint against duplicate credit.
-- **D5 (Static API key authentication):** Authentication implemented using static API keys with provider scope and roles (`operator` and `provider`), as described in ADR 0007, rather than an external identity provider (IdP) mentioned in specification (§2). Pending challenge owner decision: confirm this authentication simplification adopted for the challenge scope.
+- **F-03 (HTTP status for transaction of another provider):** In `GET /wagering/transactions/:id`, a transaction belonging to another provider returns `404 TRANSACTION_NOT_FOUND`, identical to a non-existent identifier, to avoid enumeration of external transactions. Open decision, owned by the challenge owner: confirm uniform 404 or revert to 403.
+- **F-10 (ROLLBACK of BET after ROLLBACK of REFUND):** When a REFUND is reversed by ROLLBACK, a subsequent ROLLBACK of the BET is rejected with `REFERENCE_ALREADY_REVERSED`. Open decision, owned by the challenge owner: confirm whether a reference admits at most one reversal in total (preventing double credit of stake) or admits net reversals.
+- **F-13 (Execution path for FAILED and new domain event):** A held transaction that encounters an unrecoverable failure is recorded as `FAILED` and publishes `WagerTransactionFailed` (event not listed in specification §6.3). Open decision, owned by the challenge owner: confirm persisting `FAILED` and introducing this event.
+- **D1 (Results without reference):** The specification (§6.3 and §7) allows WIN and LOSS to omit the reference to the bet. Without a reference, the system cannot link the result to the BET or block a subsequent REFUND or second result. Open decision, owned by the challenge owner: accept the economic risk of unlinked results or make the reference to BET mandatory for all results.
+- **D2 (ROLLBACK in any state of the bet):** A ROLLBACK is accepted against any state of the source transaction, including after a processed WIN, returning the stake while the win credit remains. Open decision, owned by the challenge owner: confirm whether cancelling the bet may leave winnings intact or whether ROLLBACK of a BET with a win must be rejected until the WIN is reversed first.
+- **D3 (REFUND only for BET without result):** A REFUND is accepted only if the bet has no processed outcome (WIN or LOSS). If a result exists, it is rejected with `REFERENCE_ALREADY_SETTLED`. Open decision, owned by the challenge owner: confirm requiring providers to reverse outcomes before requesting refunds.
+- **D4 (At most one reversal per reference):** The system limits any reference to at most one reversal, whether REFUND or ROLLBACK. Rule 4 of the specification ("cannot be reversed twice by the same operation type"), read literally, would allow a REFUND followed by a ROLLBACK on the same bet, crediting the stake twice. Open decision, owned by the challenge owner: confirm strict constraint against duplicate credit.
+- **D5 (Static API key authentication):** Authentication implemented using static API keys with provider scope and roles (`operator` and `provider`), as described in ADR 0007, rather than an external identity provider (IdP) mentioned in specification (§2). Open decision, owned by the challenge owner: confirm this authentication simplification adopted for the challenge scope.
 
 ## 6. Gaps not covered by tests
 
@@ -158,13 +158,9 @@ History of simulated reviews with internal estimated scores (not an evaluation p
 
 ### 7.2 Round 2 (Simulated Review and Quality Round)
 
-- **Estimated score:** 90/100, marked as internal estimated target in [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
+- **Estimated score:** 90/100, marked as internal estimated target.
 - **Highest severity findings and fixes:**
   - F-06 (divergent balance accepted by direct SQL update): resolved by migration 12 with balance agreement triggers in commit `c5ddca9`.
   - Coupling in infrastructure ports: resolved by segregating ports in `application/ports/` and separating inbound/outbound flows in commit `ef390fe`.
   - Missing `retries_total` metric (§12): implemented and exposed at `/metrics` in commit `4ee8f72`.
   - Absence of executable BDD suite linked to edge matrix: implemented with 73 Gherkin scenarios in `test/features/` in commits `3620d74` and `c8320ea`.
-
-### 7.3 Round 3
-
-Round 3 of the simulated review has not yet been conducted.

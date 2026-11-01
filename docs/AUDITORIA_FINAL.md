@@ -27,7 +27,7 @@ Commits posteriores a esse hash alteraram exclusivamente documentação e arquiv
 
 ## 3. Estado de cada item da barra (docs/CHALLENGE.md §14)
 
-Estimativas citadas da barra da revisão simulada registrada em [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
+Estimativas citadas da barra de avaliação interna (meta estimada de 90/100 pontos).
 
 ### 3.1 Correção financeira
 
@@ -57,7 +57,7 @@ Estimativas citadas da barra da revisão simulada registrada em [REVISAO_SIMULAD
 
 - **Pontos da barra:** 10 pontos no enunciado (§14). Meta estimada na revisão simulada: 9 pontos.
 - **Evidência:** Mapeamento de fluxos em `ARCHITECTURE.md` §1; portas desacopladas em `src/wagering/application/ports/` e `src/shared/application/ports/`; separação em `messaging/application/inbound/` e `messaging/application/outbound/`; invariantes financeiras encapsuladas nas entidades e em `src/wagering/domain/transaction-settlement.ts`; teste de fronteiras em `test/unit/architecture/domain-boundaries.test.ts` (domínio sem dependências de frameworks ou SDKs).
-- **Lacuna conhecida:** Alterações contratuais F-03 (retorno de 404 para transação de outro provedor) e F-13 (persistência de `FAILED` e emissão de `WagerTransactionFailed`) pendentes de validação pelo dono do desafio.
+- **Lacuna conhecida:** Alterações contratuais F-03 (retorno de 404 para transação de outro provedor) e F-13 (persistência de `FAILED` e emissão de `WagerTransactionFailed`) são decisões em aberto, de responsabilidade do dono do desafio.
 
 ### 3.6 Testes
 
@@ -83,19 +83,19 @@ Fonte: [FINDINGS.md](audit/FINDINGS.md). Total de 15 achados avaliados: 11 fecha
 
 ### 4.1 Achados fechados no código (11)
 
-| ID   | Descrição                                                             | Status no código | Evidência de fechamento                                                                                                                                                                                   |
-| :--- | :-------------------------------------------------------------------- | :--------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F-01 | Envelope malformado no outbox interrompia publicação do lote          | Fechado          | Commit `2905535` (migração 9 com restrição `CHECK outbox_envelope_shape`). Teste: `test/integration/messaging/outbox-malformed-row.test.ts`.                                                              |
-| F-02 | Mesmo `messageId` com `idempotencyKey` distinta aceito como duplicata | Fechado          | Commit `2ec4d5e` (inclusão da chave na impressão digital `wagerMessageFingerprint`). Teste: `test/integration/messaging/inbox-message-identity.test.ts`.                                                  |
-| F-03 | Resposta 403 para transação de outro provedor revelava sua existência | Fechado          | Commit `154b52a` (resposta 404 uniforme). Teste: `test/e2e/authorization-adversarial.test.ts`. Confirmação de contrato pendente do dono do desafio.                                                       |
-| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor    | Fechado          | Commit `b398e22` (chamada `ChangeMessageVisibilityBatch` antes de cada mensagem). Teste: `test/integration/messaging/visibility-during-batch.test.ts`.                                                    |
-| F-05 | Ganchos de falha de teste dentro do código de produção                | Fechado          | Commit `489df8b` (extração para `assembleWorker` e seams em `test/support/worker-seams.ts`). Suítes passam sem alteração de asserções.                                                                    |
-| F-06 | Concordância entre saldo e ledger não era garantida pelo esquema      | Fechado          | Migração 12 no commit `c5ddca9` (gatilhos `wallets_ledger_balance_check` e `wallet_ledger_entries_balance_check`). Teste: `test/integration/schema/ledger-agreement-trigger.test.ts`.                     |
-| F-07 | Lease do outbox comparava expiração com relógio local do chamador     | Fechado          | Commits `433ebe2` e `c952ba2` (posse e reagendamento via `now()` do banco). Testes: `test/integration/messaging/outbox-lease-clock.test.ts` e `test/integration/messaging/outbox-retry-clock.test.ts`.    |
-| F-08 | Resumo do ledger na reconciliação era lido fora da transação          | Fechado          | Commit `0f4fa19` (leitura via `em.execute` dentro da transação sob lock). Teste: `test/integration/schema/wallet-ledger-summary.test.ts`.                                                                 |
-| F-13 | Transação com falha permanente travava worker; `FAILED` sem caminho   | Fechado          | Commit `c8ffbcc` (registro de `FAILED` e evento `WagerTransactionFailed`). Teste: `test/integration/wagering/held-failure.test.ts`. Confirmação de contrato pendente do dono do desafio.                  |
-| F-14 | Mensagem com tempo maior que a janela de visibilidade era reentregue  | Fechado          | Commit `6b3b23e` (renovação a cada terço da janela até o limite de 300 s). Testes: `test/integration/messaging/slow-message-hold.test.ts` e `test/unit/messaging/application/wager-command-hold.test.ts`. |
-| F-15 | Worker decidia prazo de referência pelo próprio relógio               | Fechado          | Commit `fc3862c` (`DatabaseClock` lendo `now()` do banco na transação). Teste: `test/integration/wagering/database-clock-references.test.ts`.                                                             |
+| ID   | Descrição                                                             | Status no código | Evidência de fechamento                                                                                                                                                                                        |
+| :--- | :-------------------------------------------------------------------- | :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-01 | Envelope malformado no outbox interrompia publicação do lote          | Fechado          | Commit `2905535` (migração 9 com restrição `CHECK outbox_envelope_shape`). Teste: `test/integration/messaging/outbox-malformed-row.test.ts`.                                                                   |
+| F-02 | Mesmo `messageId` com `idempotencyKey` distinta aceito como duplicata | Fechado          | Commit `2ec4d5e` (inclusão da chave na impressão digital `wagerMessageFingerprint`). Teste: `test/integration/messaging/inbox-message-identity.test.ts`.                                                       |
+| F-03 | Resposta 403 para transação de outro provedor revelava sua existência | Fechado          | Commit `154b52a` (resposta 404 uniforme). Teste: `test/e2e/authorization-adversarial.test.ts`. Confirmação de contrato em aberto, de responsabilidade do dono do desafio.                                      |
+| F-04 | Lote lento deixava mensagens em voo visíveis para outro consumidor    | Fechado          | Commit `b398e22` (chamada `ChangeMessageVisibilityBatch` antes de cada mensagem). Teste: `test/integration/messaging/visibility-during-batch.test.ts`.                                                         |
+| F-05 | Ganchos de falha de teste dentro do código de produção                | Fechado          | Commit `489df8b` (extração para `assembleWorker` e seams em `test/support/worker-seams.ts`). Suítes passam sem alteração de asserções.                                                                         |
+| F-06 | Concordância entre saldo e ledger não era garantida pelo esquema      | Fechado          | Migração 12 no commit `c5ddca9` (gatilhos `wallets_ledger_balance_check` e `wallet_ledger_entries_balance_check`). Teste: `test/integration/schema/ledger-agreement-trigger.test.ts`.                          |
+| F-07 | Lease do outbox comparava expiração com relógio local do chamador     | Fechado          | Commits `433ebe2` e `c952ba2` (posse e reagendamento via `now()` do banco). Testes: `test/integration/messaging/outbox-lease-clock.test.ts` e `test/integration/messaging/outbox-retry-clock.test.ts`.         |
+| F-08 | Resumo do ledger na reconciliação era lido fora da transação          | Fechado          | Commit `0f4fa19` (leitura via `em.execute` dentro da transação sob lock). Teste: `test/integration/schema/wallet-ledger-summary.test.ts`.                                                                      |
+| F-13 | Transação com falha permanente travava worker; `FAILED` sem caminho   | Fechado          | Commit `c8ffbcc` (registro de `FAILED` e evento `WagerTransactionFailed`). Teste: `test/integration/wagering/held-failure.test.ts`. Confirmação de contrato em aberto, de responsabilidade do dono do desafio. |
+| F-14 | Mensagem com tempo maior que a janela de visibilidade era reentregue  | Fechado          | Commit `6b3b23e` (renovação a cada terço da janela até o limite de 300 s). Testes: `test/integration/messaging/slow-message-hold.test.ts` e `test/unit/messaging/application/wager-command-hold.test.ts`.      |
+| F-15 | Worker decidia prazo de referência pelo próprio relógio               | Fechado          | Commit `fc3862c` (`DatabaseClock` lendo `now()` do banco na transação). Teste: `test/integration/wagering/database-clock-references.test.ts`.                                                                  |
 
 A confirmação do fechamento de F-06 consta no histórico do arquivo da migração 12 (`git log --oneline -- src/shared/infrastructure/database/migrations/Migration20261101000012.ts`): commit `c5ddca9`.
 
@@ -104,7 +104,7 @@ A confirmação do fechamento de F-06 consta no histórico do arquivo da migraç
 | ID   | Descrição                                                          | Status | Detalhes                                                                                                                                                                                                          |
 | :--- | :----------------------------------------------------------------- | :----- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-09 | Plano de consulta do ledger depende das estatísticas do PostgreSQL | Aberto | Requer monitoramento com `EXPLAIN` em produção. Testes medidos: varredura em 1.000 lançamentos (0,68 ms), índice em 100.000 (0,44 ms) e 1.000.000 (0,50 ms).                                                      |
-| F-10 | `ROLLBACK` do BET após `ROLLBACK` do REFUND é recusado             | Aberto | Decisão de contrato (D4) pendente do dono do desafio. O código aplica a recusa com `REFERENCE_ALREADY_REVERSED`, fixada em teste.                                                                                 |
+| F-10 | `ROLLBACK` do BET após `ROLLBACK` do REFUND é recusado             | Aberto | Decisão de contrato (D4) em aberto, de responsabilidade do dono do desafio. O código aplica a recusa com `REFERENCE_ALREADY_REVERSED`, fixada em teste.                                                           |
 | F-11 | Resultados sem referência não podem ser limitados a um por BET     | Aberto | Decisão de contrato (D1) decorrente da especificação (§6.3, §7). Documentado em `ARCHITECTURE.md` §13 e `docs/INVARIANT_REVIEW.md`.                                                                               |
 | F-12 | A imagem Docker do repositório não constrói no ambiente de sandbox | Aberto | O proxy TLS do sandbox emite certificado autoassinado (`SELF_SIGNED_CERT_IN_CHAIN`) no `bun install`. Contornado no sandbox por imagem externa de teste; o build foi verificado com sucesso no CI GitHub Actions. |
 
@@ -112,14 +112,14 @@ A confirmação do fechamento de F-06 consta no histórico do arquivo da migraç
 
 Oito decisões permanecem abertas aguardando confirmação do dono do desafio. O código implementa a alternativa documentada em cada caso.
 
-- **F-03 (Status HTTP para transação de outro provedor):** Na rota `GET /wagering/transactions/:id`, transação de outro provedor responde `404 TRANSACTION_NOT_FOUND`, idêntico ao identificador inexistente, para evitar a sondagem de transações alheias. Pendente de decisão do dono do desafio: confirmar o status 404 uniforme ou reverter para 403.
-- **F-10 (ROLLBACK de BET após ROLLBACK de REFUND):** Quando um REFUND é desfeito por ROLLBACK, o posterior ROLLBACK da BET é recusado com `REFERENCE_ALREADY_REVERSED`. Pendente de decisão do dono do desafio: confirmar se uma referência admite no máximo uma reversão no total (evitando duplo retorno da aposta) ou se deve admitir reversões líquidas.
-- **F-13 (Caminho de execução para FAILED e novo evento):** Uma transação retida com erro irrecuperável é registrada como `FAILED` e anuncia o evento `WagerTransactionFailed` (evento não listado no enunciado §6.3). Pendente de decisão do dono do desafio: confirmar a persistência do status `FAILED` e a introdução desse evento.
-- **D1 (Resultados sem referência):** O enunciado (§6.3 e §7) permite que WIN e LOSS omitam a referência à aposta. Sem referência, o sistema não pode associar o resultado à BET nem barrar um REFUND posterior ou segundo resultado. Pendente de decisão do dono do desafio: aceitar o risco de duplicidade de resultado não vinculado ou exigir a referência à BET em todo resultado.
-- **D2 (ROLLBACK em qualquer estado da aposta):** O ROLLBACK é processado em qualquer estado da transação de origem, inclusive após um WIN processado, devolvendo a aposta enquanto o ganho permanece creditado. Pendente de decisão do dono do desafio: confirmar se o cancelamento da aposta pode manter o ganho ou se o ROLLBACK da BET com WIN prévio deve ser recusado até a reversão do WIN.
-- **D3 (REFUND apenas para BET sem resultado):** Um REFUND é aceito apenas se a aposta não possuir resultado processado (WIN ou LOSS). Havendo resultado, é recusado com `REFERENCE_ALREADY_SETTLED`. Pendente de decisão do dono do desafio: confirmar a restrição que obriga o provedor a reverter o resultado antes de pedir estorno.
-- **D4 (Uma reversão no máximo por referência):** O sistema restringe qualquer referência a no máximo uma reversão, seja ela REFUND ou ROLLBACK. A regra 4 do enunciado ("não pode ser revertida duas vezes pelo mesmo tipo de operação"), se aplicada literalmente, permitiria um REFUND e depois um ROLLBACK na mesma aposta, creditando o valor duas vezes. Pendente de decisão do dono do desafio: confirmar a restrição contra crédito duplicado.
-- **D5 (Autenticação por chave de API estática):** Implementação via chaves estáticas com escopo por provedor e papéis (`operator` e `provider`), conforme ADR 0007, em vez de um provedor de identidade externo (IdP) mencionado no enunciado (§2). Pendente de decisão do dono do desafio: confirmar a simplificação de autenticação adotada para o escopo do projeto.
+- **F-03 (Status HTTP para transação de outro provedor):** Na rota `GET /wagering/transactions/:id`, transação de outro provedor responde `404 TRANSACTION_NOT_FOUND`, idêntico ao identificador inexistente, para evitar a sondagem de transações alheias. Decisão em aberto, de responsabilidade do dono do desafio: confirmar o status 404 uniforme ou reverter para 403.
+- **F-10 (ROLLBACK de BET após ROLLBACK de REFUND):** Quando um REFUND é desfeito por ROLLBACK, o posterior ROLLBACK da BET é recusado com `REFERENCE_ALREADY_REVERSED`. Decisão em aberto, de responsabilidade do dono do desafio: confirmar se uma referência admite no máximo uma reversão no total (evitando duplo retorno da aposta) ou se deve admitir reversões líquidas.
+- **F-13 (Caminho de execução para FAILED e novo evento):** Uma transação retida com erro irrecuperável é registrada como `FAILED` e anuncia o evento `WagerTransactionFailed` (evento não listado no enunciado §6.3). Decisão em aberto, de responsabilidade do dono do desafio: confirmar a persistência do status `FAILED` e a introdução desse evento.
+- **D1 (Resultados sem referência):** O enunciado (§6.3 e §7) permite que WIN e LOSS omitam a referência à aposta. Sem referência, o sistema não pode associar o resultado à BET nem barrar um REFUND posterior ou segundo resultado. Decisão em aberto, de responsabilidade do dono do desafio: aceitar o risco de duplicidade de resultado não vinculado ou exigir a referência à BET em todo resultado.
+- **D2 (ROLLBACK em qualquer estado da aposta):** O ROLLBACK é processado em qualquer estado da transação de origem, inclusive após um WIN processado, devolvendo a aposta enquanto o ganho permanece creditado. Decisão em aberto, de responsabilidade do dono do desafio: confirmar se o cancelamento da aposta pode manter o ganho ou se o ROLLBACK da BET com WIN prévio deve ser recusado até a reversão do WIN.
+- **D3 (REFUND apenas para BET sem resultado):** Um REFUND é aceito apenas se a aposta não possuir resultado processado (WIN ou LOSS). Havendo resultado, é recusado com `REFERENCE_ALREADY_SETTLED`. Decisão em aberto, de responsabilidade do dono do desafio: confirmar a restrição que obriga o provedor a reverter o resultado antes de pedir estorno.
+- **D4 (Uma reversão no máximo por referência):** O sistema restringe qualquer referência a no máximo uma reversão, seja ela REFUND ou ROLLBACK. A regra 4 do enunciado ("não pode ser revertida duas vezes pelo mesmo tipo de operação"), se aplicada literalmente, permitiria um REFUND e depois um ROLLBACK na mesma aposta, creditando o valor duas vezes. Decisão em aberto, de responsabilidade do dono do desafio: confirmar a restrição contra crédito duplicado.
+- **D5 (Autenticação por chave de API estática):** Implementação via chaves estáticas com escopo por provedor e papéis (`operator` e `provider`), conforme ADR 0007, em vez de um provedor de identidade externo (IdP) mencionado no enunciado (§2). Decisão em aberto, de responsabilidade do dono do desafio: confirmar a simplificação de autenticação adotada para o escopo do projeto.
 
 ## 6. Lacunas que a prova não cobre
 
@@ -158,13 +158,9 @@ Histórico das revisões simuladas com notas estimadas internas (não constituem
 
 ### 7.2 Rodada 2 (Revisão Simulada e Rodada de Qualidade)
 
-- **Nota estimada:** 90/100, marcada como meta estimada interna em [REVISAO_SIMULADA.md](audit/REVISAO_SIMULADA.md).
+- **Nota estimada:** 90/100, marcada como meta estimada interna.
 - **Achados de maior severidade e correções:**
   - F-06 (saldo divergente do ledger aceito em escrita direta no banco): corrigido pela migração 12 com gatilhos de concordância no commit `c5ddca9`.
   - Acoplamento em portas de infraestrutura: corrigido pela segregação de portas em `application/ports/` e separação dos fluxos de entrada e saída no commit `ef390fe`.
   - Métrica `retries_total` ausente (§12): implementada e exposta em `/metrics` no commit `4ee8f72`.
   - Ausência de suíte BDD executável rastreável à matriz de borda: implementada com 73 cenários Gherkin em `test/features/` nos commits `3620d74` e `c8320ea`.
-
-### 7.3 Rodada 3
-
-A rodada 3 da revisão simulada ainda não foi realizada.

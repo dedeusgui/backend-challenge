@@ -40,7 +40,7 @@ is detected instead of silently overwriting.
 - Operations on different wallets never block each other (`test/concurrency`).
 - Locks are held for the duration of one short transaction. No SQS I/O happens
   inside it (ADR 0004).
-- Lock wait time is not yet exported as a metric (`OBS-03` remains partial).
+- Lock wait time is exported as a metric (`wallet_lock_wait_ms`, covering `OBS-03`).
 
 ## Evidence
 

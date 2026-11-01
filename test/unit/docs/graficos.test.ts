@@ -5,10 +5,13 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildAllGraficos,
+  countBlockedScenarios,
   escapeXml,
   linearScale,
   parseExperiment1Table,
   parseLoadScenario,
+  renderCargaTaxaP99Svg,
+  renderGateSuitesSvg,
 } from '../../../scripts/build-graficos';
 import { parseCheckAllLog } from '../../../scripts/record-gate';
 
@@ -234,6 +237,100 @@ describe('Gráficos e Gate', () => {
         expect(content).toContain('<svg');
         expect(content).toContain('</svg>');
       }
+    });
+
+    test('nenhum texto de SVG ultrapassa a largura do viewBox', async () => {
+      const files = [
+        'docs/graficos/carga-taxa-p99.svg',
+        'docs/graficos/carga-utilizacao.svg',
+        'docs/graficos/gatilho-custo.svg',
+        'docs/graficos/gate-suites.svg',
+        'docs/graficos/selo-gate.svg',
+        'docs/graficos/selo-cenarios.svg',
+      ];
+
+      const overflows: string[] = [];
+      for (const file of files) {
+        const content = await readFile(join(ROOT, file), 'utf8');
+        const viewBoxMatch = /viewBox="0\s+0\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)"/.exec(content);
+        if (viewBoxMatch === null) {
+          throw new Error(`SVG ${file} sem viewBox válido`);
+        }
+        const rawWidth = viewBoxMatch[1];
+        if (rawWidth === undefined) {
+          throw new Error(`SVG ${file} sem largura no viewBox`);
+        }
+        const viewBoxWidth = Number.parseFloat(rawWidth);
+
+        const textRegex = /<text\b([^>]*)>(.*?)<\/text>/gs;
+        let match: RegExpExecArray | null = textRegex.exec(content);
+        while (match !== null) {
+          const attributes = match[1] ?? '';
+          const rawText = match[2] ?? '';
+
+          const xMatch = /\bx="([\d.-]+)"/.exec(attributes);
+          const fontSizeMatch = /\bfont-size="([\d.]+)"/.exec(attributes);
+          const anchorMatch = /\btext-anchor="([^"]+)"/.exec(attributes);
+
+          const rawX = xMatch?.[1];
+          const rawFontSize = fontSizeMatch?.[1];
+          if (rawX !== undefined && rawFontSize !== undefined) {
+            const x = Number.parseFloat(rawX);
+            const fontSize = Number.parseFloat(rawFontSize);
+            const anchor = anchorMatch?.[1] ?? 'start';
+
+            const cleanText = rawText
+              .replace(/<[^>]+>/g, '')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"')
+              .replace(/&apos;/g, "'")
+              .replace(/&amp;/g, '&');
+
+            const estimatedWidth = 0.6 * fontSize * cleanText.length;
+            let rightEdge: number;
+            if (anchor === 'end') {
+              rightEdge = x;
+            } else if (anchor === 'middle') {
+              rightEdge = x + estimatedWidth / 2;
+            } else {
+              rightEdge = x + estimatedWidth;
+            }
+
+            if (rightEdge > viewBoxWidth) {
+              overflows.push(
+                `${file}: "${cleanText}" (x=${x}, font-size=${fontSize}, anchor=${anchor}, estimado=${estimatedWidth.toFixed(1)}, borda-direita=${rightEdge.toFixed(1)}) ultrapassa viewBox (${viewBoxWidth})`,
+              );
+            }
+          }
+          match = textRegex.exec(content);
+        }
+      }
+
+      expect(overflows).toEqual([]);
+    });
+
+    test('conta cenários marcados @bloqueado em test/features via grep', () => {
+      const count = countBlockedScenarios(join(ROOT, 'test/features'));
+      expect(count).toBe(2);
+    });
+
+    test('renderGateSuitesSvg formata rótulo de Gherkin com cenários e passos e adiciona nota @bloqueado', () => {
+      const gate = parseCheckAllLog(CHECK_ALL_SAMPLE);
+      const svg = renderGateSuitesSvg(gate, 2);
+      expect(svg).toContain('73 cenários · 365 passos');
+      expect(svg).not.toContain('73 passou');
+      expect(svg).toContain('2 cenários marcados @bloqueado ficam fora do gate');
+    });
+
+    test('renderCargaTaxaP99Svg possui dois eixos para separar taxa e latência', () => {
+      const sample = parseLoadScenario(SCENARIO_SAMPLE, 'apis1-workers2-cpus2');
+      const svg = renderCargaTaxaP99Svg([sample]);
+      expect(svg).toContain('Taxa acordada (req/s)');
+      expect(svg).toContain('p99 (ms)');
+      // Verifica presença de dois caminhos de eixo
+      const axisMatches = svg.match(/<path d="M \d+\.?\d* \d+ H \d+\.?\d* M/g);
+      expect(axisMatches?.length).toBe(2);
     });
   });
 });

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -206,8 +207,32 @@ export function renderCargaTaxaP99Svg(scenarios: readonly LoadScenario[]): strin
   const top = 86;
   const rowHeight = 43;
   const height = top + scenarios.length * rowHeight + 58;
-  const x0 = 340;
-  const xMax = width - 34;
+
+  const rateLabels = scenarios.map((item) =>
+    item.agreedRate === null ? 'lacuna req/s' : `${item.agreedRate} req/s`,
+  );
+  const p99Labels = scenarios.map((item) =>
+    item.p99AtAgreed === null ? 'lacuna ms' : `${item.p99AtAgreed.toFixed(1)} ms`,
+  );
+  const maxRateLabelLen = Math.max(1, ...rateLabels.map((l) => l.length));
+  const maxP99LabelLen = Math.max(1, ...p99Labels.map((l) => l.length));
+  const rateLabelWidth = Math.ceil(0.6 * 11 * maxRateLabelLen);
+  const p99LabelWidth = Math.ceil(0.6 * 11 * maxP99LabelLen);
+
+  const rightMargin = p99LabelWidth + 24;
+  const p1_x0 = 220;
+  const availableWidth = width - rightMargin - p1_x0;
+  const gapCol = 10;
+  const gapPanels = 30;
+  const axisWidth = Math.floor((availableWidth - (gapCol * 2 + rateLabelWidth + gapPanels)) / 2);
+
+  const p1_xMax = p1_x0 + axisWidth;
+  const p1_valX = p1_xMax + gapCol;
+
+  const p2_x0 = p1_valX + rateLabelWidth + gapPanels;
+  const p2_xMax = p2_x0 + axisWidth;
+  const p2_valX = p2_xMax + gapCol;
+
   const maxRate = Math.max(
     1,
     ...scenarios.flatMap((item) => (item.agreedRate === null ? [] : [item.agreedRate])),
@@ -218,27 +243,33 @@ export function renderCargaTaxaP99Svg(scenarios: readonly LoadScenario[]): strin
   );
   const body: string[] = [xmlStart('Carga acordada e p99 no passo acordado', width, height)];
   body.push(
-    text(x0, 61, 'Taxa acordada (req/s)', 12, BLUE),
-    text(x0 + 250, 61, 'p99 (ms)', 12, ORANGE),
+    text(p1_x0, 61, 'Taxa acordada (req/s)', 12, BLUE),
+    text(p2_x0, 61, 'p99 (ms)', 12, ORANGE),
   );
-  body.push(axis(x0, top, xMax, top + scenarios.length * rowHeight));
+  body.push(
+    axis(p1_x0, top, p1_xMax, top + scenarios.length * rowHeight),
+    axis(p2_x0, top, p2_xMax, top + scenarios.length * rowHeight),
+  );
   scenarios.forEach((item, index) => {
     const y = top + index * rowHeight + 24;
     body.push(text(24, y + 4, item.scenarioName, 12));
-    if (item.agreedRate === null) body.push(text(x0, y + 4, 'lacuna req/s', 11, ORANGE));
-    else {
-      const rateEnd = linearScale(item.agreedRate, 0, maxRate, x0, xMax);
+    if (item.agreedRate === null) {
+      body.push(text(p1_valX, y + 4, 'lacuna req/s', 11, ORANGE));
+    } else {
+      const rateEnd = linearScale(item.agreedRate, 0, maxRate, p1_x0, p1_xMax);
       body.push(
-        `<rect x="${x0}" y="${y - 8}" width="${Math.max(1, rateEnd - x0)}" height="16" fill="${BLUE}"/>`,
-        text(rateEnd + 5, y + 4, `${item.agreedRate} req/s`, 11),
+        `<rect x="${p1_x0}" y="${y - 8}" width="${Math.max(1, rateEnd - p1_x0)}" height="16" fill="${BLUE}"/>`,
+        text(p1_valX, y + 4, `${item.agreedRate} req/s`, 11),
       );
     }
-    if (item.p99AtAgreed === null) body.push(text(x0 + 250, y + 4, 'lacuna ms', 11, ORANGE));
-    else {
-      const markerX = x0 + 250 + linearScale(item.p99AtAgreed, 0, maxP99, 0, xMax - x0 - 250);
+    if (item.p99AtAgreed === null) {
+      body.push(text(p2_valX, y + 4, 'lacuna ms', 11, ORANGE));
+    } else {
+      const markerX = linearScale(item.p99AtAgreed, 0, maxP99, p2_x0, p2_xMax);
       body.push(
+        `<line x1="${p2_x0}" y1="${y}" x2="${markerX.toFixed(1)}" y2="${y}" stroke="${ORANGE}" stroke-width="1.2" stroke-dasharray="3 3"/>`,
         `<path d="M ${markerX.toFixed(1)} ${y - 10} V ${y + 10}" stroke="${ORANGE}" stroke-width="4"/>`,
-        text(markerX + 5, y + 4, `${item.p99AtAgreed.toFixed(1)} ms`, 11),
+        text(p2_valX, y + 4, `${item.p99AtAgreed.toFixed(1)} ms`, 11),
       );
     }
   });
@@ -290,7 +321,14 @@ export function renderGatilhoCustoSvg(rows: readonly ExperimentRow[]): string {
   const groupHeight = 92;
   const height = top + groups.length * groupHeight + 40;
   const x0 = 310;
-  const xMax = width - 70;
+  const rowLabels = rows.map(
+    (row) =>
+      `${row.semTriggersMs.toFixed(2)} / ${row.comTriggersMs.toFixed(2)} ms; Δ ${row.diffMs >= 0 ? '+' : ''}${row.diffMs.toFixed(2)} ms`,
+  );
+  const maxLabelLen = Math.max(1, ...rowLabels.map((l) => l.length));
+  const maxLabelWidth = Math.ceil(0.6 * 10 * maxLabelLen);
+  const rightMargin = maxLabelWidth + 24;
+  const xMax = width - rightMargin;
   const max = Math.max(1, ...rows.flatMap((row) => [row.semTriggersMs, row.comTriggersMs]));
   const body = [
     xmlStart('Custo dos triggers por carga e quantil', width, height),
@@ -327,13 +365,36 @@ export function renderGatilhoCustoSvg(rows: readonly ExperimentRow[]): string {
   return body.join('\n');
 }
 
-export function renderGateSuitesSvg(gate: GateRecord): string {
+export function countBlockedScenarios(featuresDir: string): number {
+  try {
+    const output = execSync(`grep -ro "@bloqueado" "${featuresDir}" 2>/dev/null | wc -l`, {
+      encoding: 'utf8',
+    });
+    const parsed = Number.parseInt(output.trim(), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function renderGateSuitesSvg(gate: GateRecord, blockedScenarios?: number): string {
+  const blocked =
+    blockedScenarios ??
+    countBlockedScenarios(resolve(fileURLToPath(new URL('..', import.meta.url)), 'test/features'));
   const width = 780;
   const top = 90;
   const rowHeight = 42;
-  const height = top + gate.suites.length * rowHeight + 42;
+  const height = top + gate.suites.length * rowHeight + 56;
   const x0 = 210;
-  const xMax = width - 80;
+  const suiteLabels = gate.suites.map((suite) =>
+    suite.key === 'features'
+      ? `${gate.cucumber.scenarios.passed} cenários · ${gate.cucumber.steps.passed} passos`
+      : `${suite.passed} passou · ${suite.failed} falhou`,
+  );
+  const maxLabelLen = Math.max(1, ...suiteLabels.map((l) => l.length));
+  const maxLabelWidth = Math.ceil(0.6 * 11 * maxLabelLen);
+  const rightMargin = maxLabelWidth + 24;
+  const xMax = width - rightMargin;
   const max = Math.max(1, ...gate.suites.map((suite) => suite.total));
   const body = [
     xmlStart(
@@ -349,11 +410,15 @@ export function renderGateSuitesSvg(gate: GateRecord): string {
     body.push(text(24, y + 4, suite.name));
     const end = linearScale(suite.total, 0, max, x0, xMax);
     const color = suite.failed > 0 ? ORANGE : BLUE;
+    const label = suiteLabels[index] ?? `${suite.passed} passou · ${suite.failed} falhou`;
     body.push(
       `<rect x="${x0}" y="${y - 8}" width="${Math.max(1, end - x0)}" height="16" fill="${color}"/>`,
-      text(end + 6, y + 4, `${suite.passed} passou · ${suite.failed} falhou`, 11),
+      text(end + 6, y + 4, label, 11),
     );
   });
+  body.push(
+    text(24, height - 16, `${blocked} cenários marcados @bloqueado ficam fora do gate`, 11),
+  );
   body.push('</svg>');
   return body.join('\n');
 }
@@ -392,13 +457,14 @@ export async function buildAllGraficos(options: BuildOptions = {}): Promise<void
     await readFile(join(root, 'docs/gate/ultimo-gate.json'), 'utf8'),
   );
   const parsedGate = parseGateRecord(gate);
+  const blockedScenarios = countBlockedScenarios(join(root, 'test/features'));
   const output = join(root, 'docs/graficos');
   await mkdir(output, { recursive: true });
   const charts: ReadonlyArray<readonly [string, string]> = [
     ['carga-taxa-p99.svg', renderCargaTaxaP99Svg(scenarios)],
     ['carga-utilizacao.svg', renderCargaUtilizacaoSvg(scenarios)],
     ['gatilho-custo.svg', renderGatilhoCustoSvg(experiment)],
-    ['gate-suites.svg', renderGateSuitesSvg(parsedGate)],
+    ['gate-suites.svg', renderGateSuitesSvg(parsedGate, blockedScenarios)],
     ['selo-gate.svg', renderSeloGateSvg(parsedGate)],
     ['selo-cenarios.svg', renderSeloCenariosSvg(parsedGate)],
   ];

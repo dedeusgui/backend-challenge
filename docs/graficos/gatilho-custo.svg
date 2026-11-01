@@ -2,45 +2,45 @@
 <rect x="0.5" y="0.5" width="1039" height="420" rx="10" fill="#ffffff" stroke="#687066"/>
 <text x="24" y="34" font-size="20" font-weight="700" fill="#1d1f1c">Custo dos triggers por carga e quantil</text>
 <text x="310.0" y="65.0" text-anchor="start" font-size="12" fill="#1d1f1c">Latência (ms); diferença indicada no rótulo</text>
-<path d="M 310 105 H 970 M 310 105 V 381" fill="none" stroke="#596158" stroke-width="1.2"/>
+<path d="M 310 105 H 848 M 310 105 V 381" fill="none" stroke="#596158" stroke-width="1.2"/>
 <text x="24.0" y="141.0" text-anchor="start" font-size="12" fill="#1d1f1c">uma wallet, sequencial</text>
 <text x="298.0" y="130.0" text-anchor="end" font-size="11" fill="#1d1f1c">p50</text>
-<rect x="310" y="119" width="61.257785204314146" height="8" fill="#3973a5"/>
-<rect x="310" y="128" width="62.26036761355005" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
-<text x="377.3" y="130.0" text-anchor="start" font-size="10" fill="#1d1f1c">6.11 / 6.21 ms; Δ +0.10 ms</text>
+<rect x="310" y="119" width="49.93437642412274" height="8" fill="#3973a5"/>
+<rect x="310" y="128" width="50.75163299407565" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
+<text x="365.8" y="130.0" text-anchor="start" font-size="10" fill="#1d1f1c">6.11 / 6.21 ms; Δ +0.10 ms</text>
 <text x="298.0" y="152.0" text-anchor="end" font-size="11" fill="#1d1f1c">p95</text>
-<rect x="310" y="141" width="81.10891690718518" height="8" fill="#8b63a8"/>
-<rect x="310" y="150" width="85.42002126689958" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
-<text x="400.4" y="152.0" text-anchor="start" font-size="10" fill="#1d1f1c">8.09 / 8.52 ms; Δ +0.43 ms</text>
+<rect x="310" y="141" width="66.11605650919033" height="8" fill="#8b63a8"/>
+<rect x="310" y="150" width="69.63025975998784" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
+<text x="384.6" y="152.0" text-anchor="start" font-size="10" fill="#1d1f1c">8.09 / 8.52 ms; Δ +0.43 ms</text>
 <text x="298.0" y="174.0" text-anchor="end" font-size="11" fill="#1d1f1c">p99</text>
-<rect x="310" y="163" width="96.44842776849461" height="8" fill="#bd5728"/>
-<rect x="310" y="172" width="105.4716694516178" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
-<text x="420.5" y="174.0" text-anchor="start" font-size="10" fill="#1d1f1c">9.62 / 10.52 ms; Δ +0.90 ms</text>
+<rect x="310" y="163" width="78.62008202946984" height="8" fill="#bd5728"/>
+<rect x="310" y="172" width="85.97539115904603" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
+<text x="401.0" y="174.0" text-anchor="start" font-size="10" fill="#1d1f1c">9.62 / 10.52 ms; Δ +0.90 ms</text>
 <text x="24.0" y="233.0" text-anchor="start" font-size="12" fill="#1d1f1c">120 wallets, sequencial</text>
 <text x="298.0" y="222.0" text-anchor="end" font-size="11" fill="#1d1f1c">p50</text>
-<rect x="310" y="211" width="61.35804344523773" height="8" fill="#3973a5"/>
-<rect x="310" y="220" width="61.959592890779284" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
-<text x="377.0" y="222.0" text-anchor="start" font-size="10" fill="#1d1f1c">6.12 / 6.18 ms; Δ +0.06 ms</text>
+<rect x="310" y="211" width="50.016102081118035" height="8" fill="#3973a5"/>
+<rect x="310" y="220" width="50.506456023089775" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
+<text x="365.5" y="222.0" text-anchor="start" font-size="10" fill="#1d1f1c">6.12 / 6.18 ms; Δ +0.06 ms</text>
 <text x="298.0" y="244.0" text-anchor="end" font-size="11" fill="#1d1f1c">p95</text>
-<rect x="310" y="233" width="80.6076257025672" height="8" fill="#8b63a8"/>
-<rect x="310" y="242" width="82.31201579826828" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
-<text x="397.3" y="244.0" text-anchor="start" font-size="10" fill="#1d1f1c">8.04 / 8.21 ms; Δ +0.17 ms</text>
+<rect x="310" y="233" width="65.70742822421387" height="8" fill="#8b63a8"/>
+<rect x="310" y="242" width="67.09676439313384" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
+<text x="382.1" y="244.0" text-anchor="start" font-size="10" fill="#1d1f1c">8.04 / 8.21 ms; Δ +0.17 ms</text>
 <text x="298.0" y="266.0" text-anchor="end" font-size="11" fill="#1d1f1c">p99</text>
-<rect x="310" y="255" width="92.73887285432174" height="8" fill="#bd5728"/>
-<rect x="310" y="264" width="99.35591675527876" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
-<text x="414.4" y="266.0" text-anchor="start" font-size="10" fill="#1d1f1c">9.25 / 9.91 ms; Δ +0.66 ms</text>
+<rect x="310" y="255" width="75.59623272064408" height="8" fill="#bd5728"/>
+<rect x="310" y="264" width="80.99012608233329" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
+<text x="396.0" y="266.0" text-anchor="start" font-size="10" fill="#1d1f1c">9.25 / 9.91 ms; Δ +0.66 ms</text>
 <text x="24.0" y="325.0" text-anchor="start" font-size="12" fill="#1d1f1c">uma wallet, 8 workers</text>
 <text x="298.0" y="314.0" text-anchor="end" font-size="11" fill="#1d1f1c">p50</text>
-<rect x="310" y="303" width="394.61643627525444" height="8" fill="#3973a5"/>
-<rect x="310" y="312" width="413.0639526051952" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
-<text x="728.1" y="314.0" text-anchor="start" font-size="10" fill="#1d1f1c">39.36 / 41.20 ms; Δ +1.84 ms</text>
+<rect x="310" y="303" width="321.67218593346496" height="8" fill="#3973a5"/>
+<rect x="310" y="312" width="336.7097068205985" height="8" fill="#3973a5" opacity="0.48" stroke="#3973a5"/>
+<text x="651.7" y="314.0" text-anchor="start" font-size="10" fill="#1d1f1c">39.36 / 41.20 ms; Δ +1.84 ms</text>
 <text x="298.0" y="336.0" text-anchor="end" font-size="11" fill="#1d1f1c">p95</text>
-<rect x="310" y="325" width="501.3914628588789" height="8" fill="#8b63a8"/>
-<rect x="310" y="334" width="538.888044964302" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
-<text x="853.9" y="336.0" text-anchor="start" font-size="10" fill="#1d1f1c">50.01 / 53.75 ms; Δ +3.74 ms</text>
+<rect x="310" y="325" width="408.71001063344977" height="8" fill="#8b63a8"/>
+<rect x="310" y="334" width="439.2754063496886" height="8" fill="#8b63a8" opacity="0.48" stroke="#8b63a8"/>
+<text x="754.3" y="336.0" text-anchor="start" font-size="10" fill="#1d1f1c">50.01 / 53.75 ms; Δ +3.74 ms</text>
 <text x="298.0" y="358.0" text-anchor="end" font-size="11" fill="#1d1f1c">p99</text>
-<rect x="310" y="347" width="655.0873461947441" height="8" fill="#bd5728"/>
-<rect x="310" y="356" width="660" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
-<text x="975.0" y="358.0" text-anchor="start" font-size="10" fill="#1d1f1c">65.34 / 65.83 ms; Δ +0.48 ms</text>
+<rect x="310" y="347" width="533.9954428072308" height="8" fill="#bd5728"/>
+<rect x="310" y="356" width="538" height="8" fill="#bd5728" opacity="0.48" stroke="#bd5728"/>
+<text x="853.0" y="358.0" text-anchor="start" font-size="10" fill="#1d1f1c">65.34 / 65.83 ms; Δ +0.48 ms</text>
 <text x="24.0" y="407.0" text-anchor="start" font-size="11" fill="#1d1f1c">Barras sólidas: sem triggers · barras claras: com triggers</text>
 </svg>

@@ -1,23 +1,46 @@
-name: Bun checks
+name: CI gates
+
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  checks:
+  quality:
+    name: Quality gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      # Full history: the static showcase lists the commits after the review base, and a shallow clone
-      # does not contain that commit, so its unit test would fail. The image job does not need history.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.4.4'
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      # The same compose file as local development, so the queues are provisioned by the same init script.
+      - name: Fast quality checks
+        run: bun run check:fast
+
+  integration:
+    name: Integration gate
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # Full history is required by the static showcase tests in check:all.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.4'
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      # The same compose file as local development, so queues are provisioned by the same init script.
       - name: Start PostgreSQL and LocalStack
         run: bun run infra:up
       - name: Full gate (typecheck, lint, format, unit, integration, concurrency, e2e)
@@ -25,10 +48,66 @@ jobs:
       - name: Stop infrastructure
         if: always()
         run: docker compose down -v
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
 
-  image:
+  runtime:
+    name: Docker and runtime gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: Build the API image from the Dockerfile in this repository
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build API image
         run: docker build -t wagering-api:ci .
+      - name: Start stack
+        run: docker compose up -d --wait --build
+      - name: Check API readiness
+        run: curl --fail --show-error --retry 30 --retry-connrefused --retry-delay 2 http://localhost:3000/health/ready
+      - name: Collect Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color > docker-compose-logs.txt 2>&1 || true
+      - name: Upload Compose logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-compose-logs-${{ github.sha }}
+          path: docker-compose-logs.txt
+          if-no-files-found: ignore
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
+
+  security:
+    name: Security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build API image for scanning
+        run: docker build -t wagering-api:ci .
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wagering-api:ci
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan repository for vulnerabilities and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'

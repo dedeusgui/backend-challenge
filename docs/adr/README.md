@@ -13,3 +13,4 @@ para o detalhamento dos motivos.
 | [0005](0005-reference-hold-and-bounded-retries.md) | Retenção de transações para referências ausentes, com retentativas limitadas            | aceito               |
 | [0006](0006-authentication-deferred.md)            | Autenticação adiada, com ponto de extensão explícito                                    | substituído por 0007 |
 | [0007](0007-api-key-authentication.md)             | Chaves de API com dois papéis e escopo de provedor                                      | aceito               |
+| [0008](0008-enums-como-union-de-const.md)          | Enums como união de tipos com const                                                     | aceito               |

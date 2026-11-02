@@ -15,3 +15,4 @@ reasoning.
 | [0005](0005-reference-hold-and-bounded-retries.en.md) | Hold transactions for missing references, with bounded retries          | accepted           |
 | [0006](0006-authentication-deferred.en.md)            | Authentication deferred, with an explicit extension point               | superseded by 0007 |
 | [0007](0007-api-key-authentication.en.md)             | API keys with two roles, and provider scope                             | accepted           |
+| [0008](0008-enums-como-union-de-const.en.md)          | Enums as const union types                                              | accepted           |

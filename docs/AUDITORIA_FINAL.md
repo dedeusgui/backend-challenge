@@ -197,8 +197,8 @@ desta rodada, não resultados hospedados nem prova de CI em um SHA publicado.
 - **Smoke e proteção:** `demo:finance` e `smoke:sqs-worker` passaram contra a stack Compose já em execução; o segundo
   publicou dois envelopes distintos ao worker real e verificou uma única BET, saldo 99.00 e ledger reconciliado.
   `test/edge/protected-mode.test.ts` passou 12 testes e 85 assertions em um projeto isolado.
-- **Pages:** `site:build` passou, mas a execução observada antes dos commits ainda embutiu `37ff489`; ela será repetida
-  sobre o commit de documentação final.
+- **Pages:** uma nova execução de `bun run site:build` passou em `2b69cbb` e validou 375 links do repositório; a
+  execução final após este adendo é registrada junto ao SHA final no relatório de release.
 - **Limite de imagem:** o Dockerfile versionado permaneceu por mais de dois minutos parado em `bun install` mesmo com
   proxy e CA configurados; o build foi interrompido sem produzir uma imagem. O smoke SQS usou a stack real já
   disponível, portanto não comprova rebuild do Dockerfile desta rodada.

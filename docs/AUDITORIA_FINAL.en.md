@@ -197,8 +197,8 @@ of CI on a published SHA.
 - **Runtime and protection smoke:** `demo:finance` and `smoke:sqs-worker` passed against the already-running Compose
   stack; the latter sent two distinct envelopes to the real worker and verified one BET, balance 99.00 and a
   reconciled ledger. `test/edge/protected-mode.test.ts` passed 12 tests and 85 assertions in an isolated project.
-- **Pages:** `site:build` passed, but the observed run before the commits still embedded `37ff489`; it will be repeated
-  on the final documentation commit.
+- **Pages:** a fresh `bun run site:build` passed on `2b69cbb` and checked 375 repository links; the run after this
+  addendum is recorded with the final SHA in the release report.
 - **Image build limit:** the versioned Dockerfile stayed at `bun install` for over two minutes even with proxy and CA
   configured; the build was stopped without producing an image. The SQS smoke used the real stack already available,
   so it does not prove a rebuild of this round's Dockerfile.

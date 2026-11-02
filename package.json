@@ -16,6 +16,7 @@
     "infra:up": "docker compose up -d --wait postgres localstack",
     "test:integration": "bun test test/integration",
     "test:containers": "bun run scripts/test-containers/run.ts",
+    "check:financial-invariants": "bun run scripts/check-financial-invariants.ts",
     "check:all": "bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features",
     "test:concurrency": "bun test test/concurrency",
     "test:e2e": "bun test test/e2e",

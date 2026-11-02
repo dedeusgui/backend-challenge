@@ -1,0 +1,179 @@
+import { randomUUID } from 'node:crypto';
+import { delimiter, dirname, join, resolve } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
+import { LocalstackContainer, type StartedLocalStackContainer } from '@testcontainers/localstack';
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { Wait } from 'testcontainers';
+
+const suites = process.argv.slice(2).filter((argument) => argument !== '--');
+if (suites.length === 0) {
+  suites.push(
+    'test/integration/support/test-database-cleanup.test.ts',
+    'test/integration/support/sqs-test-queues.test.ts',
+    'test/integration/persistence/wallet-persistence.test.ts',
+    'test/integration/messaging/broker-redrive.test.ts',
+    'test/concurrency/support/process-cluster.test.ts',
+    'test/concurrency/three-processes.test.ts',
+  );
+}
+
+let postgres: StartedPostgreSqlContainer | undefined;
+let localstack: StartedLocalStackContainer | undefined;
+let status = 0;
+const failures: unknown[] = [];
+const postgresLogs: string[] = [];
+const localstackLogs: string[] = [];
+const testOutput: string[] = [];
+const testErrors: string[] = [];
+const startupStartedAt = performance.now();
+let startupMs: number | undefined;
+let requestedSignal: NodeJS.Signals | undefined;
+let testProcess: ReturnType<typeof Bun.spawn> | undefined;
+
+function handleSignal(signal: NodeJS.Signals) {
+  requestedSignal ??= signal;
+  status = requestedSignal === 'SIGINT' ? 130 : 143;
+  testProcess?.kill(requestedSignal);
+}
+
+process.on('SIGINT', handleSignal);
+process.on('SIGTERM', handleSignal);
+
+function captureLogs(chunks: string[]) {
+  let bytes = 0;
+  return (stream: Readable) => {
+    stream.on('data', (chunk: Buffer | string) => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString();
+      chunks.push(text);
+      bytes += Buffer.byteLength(text);
+      while (bytes > 64 * 1024 && chunks.length > 1) {
+        bytes -= Buffer.byteLength(chunks.shift() ?? '');
+      }
+    });
+  };
+}
+
+function forwardAndCapture(chunks: string[], target: NodeJS.WriteStream) {
+  let bytes = 0;
+  return async (stream: ReadableStream<Uint8Array>) => {
+    for await (const chunk of stream) {
+      const text = new TextDecoder().decode(chunk);
+      target.write(text);
+      chunks.push(text);
+      bytes += Buffer.byteLength(text);
+      while (bytes > 64 * 1024 && chunks.length > 1) {
+        bytes -= Buffer.byteLength(chunks.shift() ?? '');
+      }
+    }
+  };
+}
+
+try {
+  postgres = await new PostgreSqlContainer('postgres:17-alpine')
+    .withDatabase('wagering')
+    .withUsername('wagering')
+    .withPassword('wagering')
+    .withLogConsumer(captureLogs(postgresLogs))
+    .withStartupTimeout(60_000)
+    .withAutoRemove(true)
+    .start();
+
+  const localstackInit = resolve(import.meta.dir, '../../docker/localstack/init-sqs.sh');
+  localstack = await new LocalstackContainer('localstack/localstack:4.14.0')
+    .withEnvironment({ SERVICES: 'sqs', AWS_DEFAULT_REGION: 'us-east-1' })
+    .withBindMounts([
+      {
+        source: localstackInit,
+        target: '/etc/localstack/init/ready.d/init-sqs.sh',
+        mode: 'ro',
+      },
+    ])
+    .withLogConsumer(captureLogs(localstackLogs))
+    .withWaitStrategy(Wait.forHttp('/_localstack/health', 4566).forStatusCode(200))
+    .withStartupTimeout(90_000)
+    .withAutoRemove(true)
+    .start();
+  startupMs = performance.now() - startupStartedAt;
+
+  const testEnvironment = {
+    ...process.env,
+    PATH: [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter),
+    DATABASE_URL: postgres.getConnectionUri(),
+    SQS_ENDPOINT: localstack.getConnectionUri(),
+    TEST_RESOURCE_NAMESPACE: randomUUID().replaceAll('-', '').slice(0, 12),
+  };
+  const testsStartedAt = performance.now();
+  if (requestedSignal === undefined) {
+    const testRun = Bun.spawn([process.execPath, 'test', ...suites], {
+      env: testEnvironment,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    testProcess = testRun;
+    const [testStatus] = await Promise.all([
+      testRun.exited,
+      forwardAndCapture(testOutput, process.stdout)(testRun.stdout),
+      forwardAndCapture(testErrors, process.stderr)(testRun.stderr),
+    ]);
+    testProcess = undefined;
+    if (requestedSignal !== undefined) {
+      status = requestedSignal === 'SIGINT' ? 130 : 143;
+    } else {
+      status = testStatus;
+    }
+    if (testStatus !== 0) failures.push(new Error(`Test process exited with ${testStatus}`));
+  } else {
+    status = requestedSignal === 'SIGINT' ? 130 : 143;
+  }
+  console.log(
+    `[test:containers] startup=${((startupMs ?? 0) / 1000).toFixed(2)}s tests=${((performance.now() - testsStartedAt) / 1000).toFixed(2)}s`,
+  );
+} catch (error) {
+  failures.push(error);
+  if (status === 0) status = 1;
+} finally {
+  process.off('SIGINT', handleSignal);
+  process.off('SIGTERM', handleSignal);
+  for (const container of [localstack, postgres]) {
+    if (container !== undefined) {
+      try {
+        await container.stop();
+      } catch (error) {
+        failures.push(error);
+        if (status === 0) status = 1;
+      }
+    }
+  }
+  if (failures.length > 0) {
+    const postgresOutput = postgresLogs.join('');
+    const localstackOutput = localstackLogs.join('');
+    console.error('PostgreSQL container logs:\n', postgresOutput);
+    console.error('LocalStack container logs:\n', localstackOutput);
+    const directory = process.env.TESTCONTAINERS_DIAGNOSTICS_DIR;
+    if (directory !== undefined && directory.trim() !== '') {
+      try {
+        await mkdir(directory, { recursive: true });
+        await Promise.all([
+          writeFile(join(directory, 'postgres.log'), postgresOutput),
+          writeFile(join(directory, 'localstack.log'), localstackOutput),
+          writeFile(join(directory, 'test-output.log'), testOutput.join('')),
+          writeFile(join(directory, 'test-error.log'), testErrors.join('')),
+          writeFile(
+            join(directory, 'failure.txt'),
+            failures
+              .map((failure) =>
+                failure instanceof Error ? (failure.stack ?? failure.message) : String(failure),
+              )
+              .join('\n\n'),
+          ),
+        ]);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    console.error(new AggregateError(failures, 'Testcontainers run failed'));
+  }
+}
+
+process.exitCode = status;

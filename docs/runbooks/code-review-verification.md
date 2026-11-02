@@ -10,7 +10,7 @@ Use ao revisar uma mudança, preparar sua conclusão ou registrar evidências ve
 - `bun run arch:check` verifica dependências entre módulos.
 - `bun run deadcode:check` procura código não usado.
 - `bun run check:all` é o gate final e requer infraestrutura.
-- `bun run agent:verify` está pendente de integração pelo coordenador.
+- `bun run agent:verify` executa `check:fast` e `deadcode:check`. Mudanças financeiras, de persistência ou infraestrutura também exigem `bun run check:all`.
 
 ## Invariantes e evidências
 

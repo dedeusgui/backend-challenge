@@ -22,7 +22,12 @@ import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-
 import { advanceOutboxClock } from '../support/outbox-clock';
 import { advanceReferenceClock } from '../support/reference-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 import { ConcurrencyConflictError } from '../../../src/shared/application/application-errors';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { required } from '../../support/required';
@@ -51,7 +56,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 /** Fails once, after the work has run and before the transaction commits. */

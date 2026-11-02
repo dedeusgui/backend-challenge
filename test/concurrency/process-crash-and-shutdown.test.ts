@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { SqsQueue } from '../../src/modules/messaging/infrastructure/sqs/sqs-queue';
+import { CreateApiClient } from '../../src/modules/auth/application/create-api-client.use-case';
+import { MikroOrmApiClientRepository } from '../../src/modules/auth/infrastructure/mikro-orm-api-client.repository';
 import { OpenWallet } from '../../src/modules/wallet/application/open-wallet.use-case';
 import { Money } from '../../src/shared/domain/money';
 import { MikroOrmFinancialUnitOfWork } from '../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
@@ -160,6 +162,143 @@ describe('a worker killed inside a transaction, before commit', () => {
     // Each test stops the workers it started, so that the next one owns the queue.
     restarted.process.kill('SIGTERM');
     expect(await exitOrTimeout(restarted, 60_000)).toBe(0);
+  }, 120_000);
+});
+
+describe('an HTTP process killed inside a transaction, before commit', () => {
+  test('rolls back the wager and a retry applies it once', async () => {
+    const wallet = await openWalletWith('100.00');
+    const externalTransactionId = `http-pre-commit-${randomUUID()}`;
+    const providerKey = (
+      await new CreateApiClient({
+        repository: new MikroOrmApiClientRepository(cluster.database.orm),
+        clock: () => NOW,
+        newId: randomUUID,
+      }).execute({ name: 'crash-test-provider', role: 'PROVIDER', providerId: 'provider-a' })
+    ).apiKey;
+    const apiUrl = await cluster.startApi('http-killed-in-transaction');
+
+    await cluster.database.orm.em.getConnection().execute(`
+      CREATE FUNCTION test_pause_ledger_insert() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        PERFORM pg_sleep(60);
+        RETURN NEW;
+      END;
+      $$
+    `);
+    await cluster.database.orm.em.getConnection().execute(`
+      CREATE TRIGGER test_pause_ledger_insert
+      BEFORE INSERT ON wallet_ledger_entries
+      FOR EACH ROW EXECUTE FUNCTION test_pause_ledger_insert()
+    `);
+
+    const requestBody = {
+      providerId: 'provider-a',
+      externalTransactionId,
+      playerId: wallet.playerId,
+      walletId: wallet.walletId,
+      roundId: 'round-987',
+      gameId: 'fortune-chimp',
+      kind: 'BET',
+      money: { amount: '25.00', currency: 'BRL' },
+    };
+    const headers = {
+      authorization: `Bearer ${providerKey}`,
+      'content-type': 'application/json',
+      'idempotency-key': `provider-a:${externalTransactionId}`,
+    };
+    const request = fetch(`${apiUrl}/wagering/transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    }).then(
+      async (response) => ({ status: response.status, body: await response.json() }),
+      (error: unknown) => ({ error }),
+    );
+    const api = required(
+      cluster.processes.find(({ name }) => name === 'http-killed-in-transaction'),
+      'the HTTP process under test',
+    );
+
+    try {
+      await waitFor(
+        async () =>
+          (await scalar(`
+            SELECT count(*)::text
+            FROM pg_stat_activity
+            WHERE wait_event = 'PgSleep'
+              AND query ILIKE '%wallet_ledger_entries%'
+          `)) === '1',
+        30_000,
+      );
+      api.process.kill('SIGKILL');
+      expect(await exitOrTimeout(api, 30_000)).toBe(137);
+      expect('error' in (await request)).toBe(true);
+      await waitFor(
+        async () =>
+          (await scalar(`
+            SELECT count(*)::text
+            FROM pg_stat_activity
+            WHERE wait_event = 'PgSleep'
+              AND query ILIKE '%wallet_ledger_entries%'
+          `)) === '0',
+        30_000,
+      );
+    } finally {
+      if (api.process.exitCode === null) {
+        api.process.kill('SIGKILL');
+        await api.process.exited;
+      }
+      await cluster.database.orm.em
+        .getConnection()
+        .execute('DROP TRIGGER IF EXISTS test_pause_ledger_insert ON wallet_ledger_entries');
+      await cluster.database.orm.em
+        .getConnection()
+        .execute('DROP FUNCTION IF EXISTS test_pause_ledger_insert()');
+    }
+
+    expect(await scalar(`SELECT balance::text FROM wallets WHERE id = ?`, [wallet.walletId])).toBe(
+      '100.00',
+    );
+    expect(
+      await scalar(
+        `SELECT count(*)::text FROM wager_transactions WHERE wallet_id = ? AND external_transaction_id = ?`,
+        [wallet.walletId, externalTransactionId],
+      ),
+    ).toBe('0');
+    expect(
+      await scalar(`SELECT count(*)::text FROM wallet_ledger_entries WHERE wallet_id = ?`, [
+        wallet.walletId,
+      ]),
+    ).toBe('1');
+    expect(
+      await scalar(`SELECT count(*)::text FROM outbox_messages WHERE payload::text LIKE ?`, [
+        `%${externalTransactionId}%`,
+      ]),
+    ).toBe('0');
+
+    const retryApi = await cluster.startApi('http-retry-after-kill');
+    const retry = await fetch(`${retryApi}/wagering/transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    expect(retry.status).toBe(201);
+    expect(await scalar(`SELECT balance::text FROM wallets WHERE id = ?`, [wallet.walletId])).toBe(
+      '75.00',
+    );
+    expect(
+      await scalar(
+        `SELECT count(*)::text FROM wager_transactions WHERE wallet_id = ? AND external_transaction_id = ? AND status = 'PROCESSED'`,
+        [wallet.walletId, externalTransactionId],
+      ),
+    ).toBe('1');
+    expect(
+      await scalar(`SELECT count(*)::text FROM wallet_ledger_entries WHERE wallet_id = ?`, [
+        wallet.walletId,
+      ]),
+    ).toBe('2');
   }, 120_000);
 });
 

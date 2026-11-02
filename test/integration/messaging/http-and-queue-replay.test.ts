@@ -12,7 +12,12 @@ import { WagerCommandConsumer } from '../../../src/modules/messaging/application
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 import { required } from '../../support/required';
 
 /**
@@ -40,7 +45,11 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 /** The HTTP path calls the use case with no inbound message. */

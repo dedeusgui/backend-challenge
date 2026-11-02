@@ -1,14 +1,19 @@
+# syntax=docker/dockerfile:1
 # Bun version is pinned to match .github/workflows/ci.yml and the local toolchain.
-# The digest keeps the base image reproducible: the publisher can move a tag, but not a digest.
 FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d
 WORKDIR /app
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+COPY --chown=bun:bun package.json bun.lock ./
+RUN --mount=type=secret,id=proxy_ca,required=false \
+    if [ -s /run/secrets/proxy_ca ]; then \
+      NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca bun install --frozen-lockfile --production; \
+    else \
+      bun install --frozen-lockfile --production; \
+    fi
 
-COPY tsconfig.json bunfig.toml ./
-COPY src ./src
-COPY docs/openapi.json ./docs/openapi.json
+COPY --chown=bun:bun tsconfig.json bunfig.toml ./
+COPY --chown=bun:bun src ./src
+COPY --chown=bun:bun docs/openapi.json ./docs/openapi.json
 
 # The process needs no root: it reads the code and talks to the network only.
 USER bun

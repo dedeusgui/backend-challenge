@@ -18,7 +18,12 @@ import { SqsEventTransport } from '../../../src/modules/messaging/infrastructure
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { advanceOutboxClock } from '../support/outbox-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 import { required } from '../../support/required';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
@@ -44,7 +49,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 /** Records every send per event id, so a test can prove that no event was transmitted twice by the publisher. */

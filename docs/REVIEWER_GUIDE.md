@@ -36,9 +36,24 @@ bun run check:all
 ```
 
 `check:all` roda tipos, lint, formato, os testes unitários, o teste de infraestrutura, a integração, a concorrência e
-o e2e, contra PostgreSQL 17 e LocalStack reais. Os números de cada suíte mudam conforme você adiciona testes; o gate
-exige que todos passem. Neste ambiente, as suítes levaram cerca de 100 s: unitários 6 s, integração 61 s, concorrência
-26 s e e2e 3 s, sem contar a subida da infraestrutura.
+o e2e, contra PostgreSQL 17 e LocalStack reais. Os números e tempos mudam por commit e ambiente; use o relatório da
+execução que informa SHA e runner, sem tratar medições antigas como atuais.
+
+O comando recomendado continua sendo o gate sobre a stack Compose. Para um piloto local alternativo, use
+`bun run test:containers`; para escolher arquivos, acrescente `-- <arquivo>`. Os resultados medidos e os limites do
+piloto estão em [TEST_STRATEGY.md](TEST_STRATEGY.md), incluindo o que não foi testado sobre `SIGKILL`.
+
+### Verificador SQL read-only
+
+Com a stack em execução e as migrações aplicadas, este comando inspeciona o banco em uma transação read-only:
+
+```bash
+bun run check:financial-invariants
+```
+
+O comando usa `DATABASE_URL` quando definida; sem ela, usa o padrão local. `bun run agent:verify` executa o gate rápido e a verificação de dead code; mudanças financeiras, de persistência ou infraestrutura também exigem `bun run check:all`. O comando SQL não altera dados nem substitui os testes. As consultas SQL não provam sozinhas propriedades de comportamento como o uso
+de `Money` em TypeScript, a ausência de lock global ou a publicação após commit. Veja
+[INVARIANT_REVIEW.md](INVARIANT_REVIEW.md) para os limites completos.
 
 ## 4. Os três testes que mais importam (5 min)
 
@@ -121,3 +136,8 @@ nomear a BET, é contado como segundo crédito. Uma segunda liquidação da mesm
 
 - Uma mensagem em voo que roda além de 300 s é liberada, e dois consumidores podem processar o mesmo comando ao mesmo
   tempo. A identidade da transação mantém o efeito em um (`slow-message-hold.test.ts`).
+
+## 11. Automação de segurança
+
+CodeQL, Trivy, Dependency Review e Dependabot estão configurados nos workflows. Resultados hospedados no GitHub e
+execuções de PR não foram executados nem revisados nesta sessão. Veja [SECURITY_AUTOMATION.md](SECURITY_AUTOMATION.md).

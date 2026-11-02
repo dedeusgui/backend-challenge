@@ -14,6 +14,7 @@ o que as evidências de mutação dizem sobre se elas podem falhar.
 | `bun run format:check`     | Prettier                                                                                                                                                                                                                    | nenhuma                         |
 | `bun run test:unit`        | `test/unit`: regras de domínio, lógica pura, formatos de log e métrica, as regras de autenticação, os loops dos workers                                                                                                     | nenhuma                         |
 | `bun run test:integration` | `test/integration`: esquema e migrações, persistência, casos de uso, mensageria, falhas, a tabela de autenticação                                                                                                           | PostgreSQL e LocalStack         |
+| `bun run test:containers`  | piloto opcional: inicia PostgreSQL e LocalStack em containers efêmeros e roda seis arquivos representativos; aceita arquivos específicos após `--`                                                                          | Testcontainers e Docker         |
 | `bun run test:concurrency` | `test/concurrency`: conexões paralelas, três processos de API e dois workers, crashes, encerramento                                                                                                                         | PostgreSQL e LocalStack         |
 | `bun run test:e2e`         | `test/e2e`: a aplicação Nest via HTTP, com chaves de API e o contrato de entrada (entrada malformada é 400)                                                                                                                 | PostgreSQL e LocalStack         |
 | `bun run test:load`        | `test/load`: execução opcional de carga por contagem de CPUs; grava em `docs/load/results` e `docs/LOAD_TEST_RESULTS.md`, ou em `LOAD_RESULTS_DIR` e `LOAD_REPORT_PATH` quando definidos                                    | PostgreSQL e LocalStack         |
@@ -33,6 +34,49 @@ onde é executado.
 Inicie a infraestrutura com `bun run infra:up`. As suítes leem `DATABASE_URL` (padrão
 `postgresql://wagering:wagering@localhost:5432/wagering`) e `SQS_ENDPOINT` (padrão
 `http://localhost:4566`).
+
+### Piloto opcional com Testcontainers
+
+Compose permanece como caminho principal para desenvolvimento e para o gate `bun run check:all`. O piloto
+`bun run test:containers` é uma alternativa local para executar uma seleção de testes sem subir a stack Compose.
+Requer um daemon Docker acessível. A cada invocação, inicia PostgreSQL 17 e LocalStack 4.14 em portas dinâmicas, cria
+seus recursos para os testes e remove os containers ao encerrar. Por padrão, executa seis arquivos: limpeza do banco de teste, criação de filas SQS,
+persistência de carteira, redrive do broker, cluster de processos e testes de três processos.
+
+Para passar um ou mais arquivos explicitamente, use `--` antes dos caminhos:
+
+```bash
+bun run test:containers -- test/integration/persistence/wallet-persistence.test.ts
+```
+
+O tratamento de `SIGINT` e `SIGTERM` foi validado: o runner encerra o processo de teste e tenta parar os containers.
+`SIGKILL` enviado ao próprio runner não foi validado e não permite executar a limpeza do processo. Um teste-probe
+deliberadamente falho retornou código 1, preservou `test-output.log`, `test-error.log`, `postgres.log`,
+`localstack.log` e `failure.txt` no diretório definido por `TESTCONTAINERS_DIAGNOSTICS_DIR`, e removeu os containers.
+
+#### Resultados históricos do piloto
+
+As duas medições abaixo foram feitas em execuções limpas antes do commit `9eb46c0b0745879a34d37558a40fe932a90698ac`
+e antes da pequena alteração de captura de saída. São resultados históricos sem associação a um SHA. Cada execução
+anterior passou 20/20 testes, com 94 asserções em seis arquivos:
+
+| Execução | Inicialização dos containers |  Testes |
+| -------- | ---------------------------: | ------: |
+| 1        |                      22,96 s |  8,51 s |
+| 2        |                      35,53 s | 10,27 s |
+
+#### Reexecução local associada ao commit
+
+No commit `9eb46c0b0745879a34d37558a40fe932a90698ac`, a bateria passou 20/20 testes, com 94 asserções em seis
+arquivos. Inicialização dos containers: 35,95 s; testes: 9,52 s.
+
+Uma comparação com Compose registrou, em uma única medição, 19,01 s para inicialização fria mais 7,82 s de testes;
+com a stack Compose já aquecida, os testes levaram 7,82 s. É uma observação pontual, não um benchmark nem uma base
+para afirmar que uma opção é mais rápida.
+
+O workflow `.github/workflows/ci.yml` já tem um job dedicado `testcontainers` que chama `bun run test:containers`.
+A configuração está versionada, mas a execução hospedada ainda não foi observada. Compose continua como caminho
+principal de desenvolvimento e para o gate `check:all`.
 
 ## O que a especificação pede e onde cada item é comprovado
 
@@ -101,6 +145,7 @@ invariante de propósito.
 | Após o commit, antes da confirmação SQS                    | o processo do worker é encerrado com código 137 em um ponto de entrada apenas de teste (`test/support/crashing-worker.ts`) | `test/concurrency/three-processes.test.ts`            |
 | Dentro de uma transação, antes do commit                   | o processo do worker é encerrado com código 137 após as escritas, antes do commit (`crashing-before-commit-worker.ts`)     | `test/concurrency/process-crash-and-shutdown.test.ts` |
 | Um worker encerrado enquanto outro assume a mesma carteira | `SIGKILL` em um dos dois workers no meio de uma contenção                                                                  | `test/concurrency/distributed-contention.test.ts`     |
+| API HTTP encerrada dentro de uma transação                 | `SIGKILL` enquanto o banco aguarda dentro da inserção do ledger; rollback e repetição verificados                          | `test/concurrency/process-crash-and-shutdown.test.ts` |
 | Antes do commit, em um processo                            | a unidade de trabalho executa seu trabalho, depois lança um erro antes de fazer o commit                                   | `test/integration/faults/fault-injection.test.ts`     |
 | Após aceitação pelo broker, antes de marcar como publicado | o armazenamento da outbox rejeita a marcação uma vez                                                                       | `test/integration/faults/fault-injection.test.ts`     |
 | Durante a resolução de uma referência retida               | a unidade de trabalho lança um erro antes do commit, uma vez                                                               | `test/integration/faults/fault-injection.test.ts`     |
@@ -112,9 +157,9 @@ invariante de propósito.
 A recuperação é sempre verificada lendo o estado persistido posteriormente: saldo, ledger, outbox e
 fila.
 
-**Não injetado:** um crash do processo da API HTTP dentro de uma transação. A API é coberta em
-processo apenas pelos testes de concorrência e por falhas em processo. Uma retentativa de um provedor sob a mesma
-chave de idempotência é coberta em processo.
+**Lacuna remanescente:** não há uma injeção de `SIGKILL` da API HTTP depois do commit e antes da resposta HTTP. O crash
+antes do commit e a repetição posterior da mesma operação são exercitados em
+`test/concurrency/process-crash-and-shutdown.test.ts`.
 
 ## Evidência de mutação
 

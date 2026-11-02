@@ -10,7 +10,12 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '../integration/support/test-database';
-import { createTestQueues, testSqsClient } from '../integration/support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../integration/support/sqs-test-queues';
 import { OutboxPublisher } from '../../src/modules/messaging/application/outbound/outbox-publisher';
 import { MikroOrmOutboxStore } from '../../src/modules/messaging/infrastructure/mikro-orm-outbox.store';
 import { SqsEventTransport } from '../../src/modules/messaging/infrastructure/sqs/sqs-event-transport';
@@ -22,52 +27,59 @@ const LEASE_MS = 30_000;
 
 const database = await createTestDatabase({ verifyLedgerInvariant: false });
 const sqs = testSqsClient();
-const queues = await createTestQueues(sqs);
-const connection = database.orm.em.getConnection();
+let queues: TestQueues | undefined;
+try {
+  queues = await createTestQueues(sqs);
+  const connection = database.orm.em.getConnection();
 
-await connection.execute(
-  `INSERT INTO outbox_messages (id, aggregate_id, event_type, payload, occurred_at, next_attempt_at)
+  await connection.execute(
+    `INSERT INTO outbox_messages (id, aggregate_id, event_type, payload, occurred_at, next_attempt_at)
    SELECT gen_random_uuid(), 'agg-' || g, 'WalletBalanceChanged',
           jsonb_build_object('eventId', gen_random_uuid()::text, 'eventType', 'WalletBalanceChanged',
             'aggregateId', 'agg-' || g, 'correlationId', 'corr', 'occurredAt', now()::text, 'version', 1,
             'data', jsonb_build_object('walletVersion', 1)),
           now(), now()
      FROM generate_series(1, ?) AS g`,
-  [EVENTS],
-);
+    [EVENTS],
+  );
 
-const publisher = new OutboxPublisher({
-  store: new MikroOrmOutboxStore(database.orm),
-  transport: new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)),
-  clock: () => new Date(),
-  newLeaseToken: randomUUID,
-  leaseDurationMs: LEASE_MS,
-  batchSize: BATCH,
-});
+  const publisher = new OutboxPublisher({
+    store: new MikroOrmOutboxStore(database.orm),
+    transport: new SqsEventTransport(new SqsQueue(sqs, queues.eventsQueueUrl)),
+    clock: () => new Date(),
+    newLeaseToken: randomUUID,
+    leaseDurationMs: LEASE_MS,
+    batchSize: BATCH,
+  });
 
-let published = 0;
-const started = performance.now();
-for (;;) {
-  const pass = await publisher.publishOnce();
-  if (pass === 0) {
-    break;
+  let published = 0;
+  const started = performance.now();
+  for (;;) {
+    const pass = await publisher.publishOnce();
+    if (pass === 0) {
+      break;
+    }
+    published += pass;
   }
-  published += pass;
-}
-const seconds = (performance.now() - started) / 1000;
-const remaining = (await connection.execute(
-  `SELECT count(*)::text AS n FROM outbox_messages WHERE published_at IS NULL`,
-)) as Array<{ n: string }>;
+  const seconds = (performance.now() - started) / 1000;
+  const remaining = (await connection.execute(
+    `SELECT count(*)::text AS n FROM outbox_messages WHERE published_at IS NULL`,
+  )) as Array<{ n: string }>;
 
-console.log(
-  JSON.stringify({
-    events: EVENTS,
-    batch: BATCH,
-    published,
-    remaining: remaining[0]?.n ?? 'unknown',
-    seconds: Number(seconds.toFixed(2)),
-    eventsPerSecond: Math.round(published / seconds),
-  }),
-);
-await database.drop();
-process.exit(0);
+  console.log(
+    JSON.stringify({
+      events: EVENTS,
+      batch: BATCH,
+      published,
+      remaining: remaining[0]?.n ?? 'unknown',
+      seconds: Number(seconds.toFixed(2)),
+      eventsPerSecond: Math.round(published / seconds),
+    }),
+  );
+} finally {
+  try {
+    await closeTestSqs(sqs, queues);
+  } finally {
+    await database.drop();
+  }
+}

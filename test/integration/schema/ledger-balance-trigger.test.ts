@@ -45,6 +45,53 @@ describe('wallet balance ledger constraint trigger', () => {
     expect(sqlState(caught)).toBe('23514');
   });
 
+  test('rejects a ledger entry that breaks the balance chain when its net sum matches the wallet', async () => {
+    const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
+    const playerId = `player-${randomUUID()}`;
+    const { walletId } = await new OpenWallet({
+      unitOfWork,
+      clock: () => NOW,
+      newId: randomUUID,
+    }).execute({
+      playerId,
+      initialBalance: Money.from({ amount: '100.00', currency: 'BRL' }),
+    });
+    const transactionId = randomUUID();
+    const externalId = `bet-${randomUUID()}`;
+    let caught: unknown;
+
+    try {
+      await database.orm.em.fork().transactional(async (em) => {
+        await em.execute(
+          `INSERT INTO wager_transactions (
+             id, provider_id, external_transaction_id, idempotency_key, payload_hash,
+             wallet_id, player_id, round_id, game_id, kind, amount, currency,
+             status, resulting_balance, processed_at, created_at)
+           VALUES (?, 'provider-a', ?, ?, ?, ?, ?, 'round-1', 'game-1', 'BET',
+                   10.00, 'BRL', 'PROCESSED', 90.00, now(), now())`,
+          [transactionId, externalId, externalId, 'a'.repeat(64), walletId, playerId],
+        );
+        await em.execute('UPDATE wallets SET balance = 90.00, version = version + 1 WHERE id = ?', [
+          walletId,
+        ]);
+        await em.execute(
+          `INSERT INTO wallet_ledger_entries (
+             id, wallet_id, transaction_id, direction, currency, amount,
+             balance_before, balance_after, created_at)
+           VALUES (?, ?, ?, 'DEBIT', 'BRL', 10.00, 50.00, 40.00, now())`,
+          [randomUUID(), walletId, transactionId],
+        );
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(sqlState(caught)).toBe('23514');
+    expect(caught instanceof Error ? caught.message : '').toContain(
+      'does not continue the balance chain',
+    );
+  });
+
   test('allows an empty zero balance wallet and normal wallet and wager flows', async () => {
     const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
     const openWallet = new OpenWallet({ unitOfWork, clock: () => NOW, newId: randomUUID });

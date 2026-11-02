@@ -12,7 +12,7 @@ Use this guide to review a change, prepare its completion report, or record veri
 - `bun run arch:check` checks module dependencies.
 - `bun run deadcode:check` looks for unused code.
 - `bun run check:all` is the final gate and requires infrastructure.
-- `bun run agent:verify` is pending integration by the coordinator.
+- `bun run agent:verify` runs `check:fast` and `deadcode:check`. Financial, persistence, or infrastructure changes also require `bun run check:all`.
 
 ## Invariants and evidence
 

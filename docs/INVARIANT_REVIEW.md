@@ -3,9 +3,11 @@
 > **Apêndice.** A revisão do proprietário para cada invariante e restrição. As decisões para as quais solicita confirmação do proprietário
 > estão listadas em [ARCHITECTURE.md](../ARCHITECTURE.md) seção 13.
 
-Revisado antes do push deste branch para `main`. A revisão abrange cada invariante da
+Registro histórico da revisão do branch de finalização, anterior à sua integração na `main`. A revisão abrangeu cada invariante da
 matriz de requisitos, cada restrição de banco de dados nas migrações e cada
 decisão em `docs/adr/` e em `ARCHITECTURE.md` seção 13.
+
+Os resultados e commits abaixo descrevem aquele snapshot; não são um gate do HEAD atual.
 
 Cada invariante é listado com o ponto que o impõe e o teste que o comprova. Nomes de teste
 são aqueles nos arquivos citados. Os identificadores da matriz são descrições curtas, e cada um cita um arquivo que
@@ -40,6 +42,24 @@ dela e passa após ela.
 Verificado por leitura de código, não por teste: que `Wallet.credit` não verifica por si próprio o valor máximo do banco de dados (a
 liquidação verifica `canCredit` primeiro, e o banco recusa o excedente); que o worker de referências adquire o lock da carteira
 antes de reler uma transação retida; que o consumidor confirma (ACK) apenas após o retorno da unidade de trabalho.
+
+### Verificação SQL read-only
+
+O verificador `scripts/check-financial-invariants.ts` executa `scripts/financial-invariants.sql` dentro de uma
+transação `READ ONLY`. Com PostgreSQL disponível e o schema migrado, rode da raiz do repositório:
+
+```bash
+bun run check:financial-invariants
+```
+
+O `DATABASE_URL` pode apontar para outro banco; sem ele, o comando usa o padrão local do projeto. O SQL verifica
+as invariantes financeiras `INV-01` a `INV-11` e as verificações adicionais de estrutura do banco `DB-01` a `DB-11`.
+`INV-12` apenas informa a contagem de migrações (expectativa atual: 17) e não falha se ela diferir.
+
+Este verificador é uma inspeção pontual do estado e da estrutura observáveis no banco. Não prova sozinho que o tipo
+`Money` é usado no TypeScript, que não existe lock global, que o lock correto é aplicado em cada fluxo, nem que a
+publicação ocorre após o commit. Esses comportamentos dependem de leitura de código e dos testes correspondentes. O
+resultado SQL também não substitui o gate de testes nem uma execução em CI.
 
 ## 1. Defeitos encontrados nesta revisão e suas correções
 
@@ -254,8 +274,8 @@ Não imposto pelo banco de dados, e o porquê:
 
 ## 6. Lacunas remanescentes e o que significam
 
-- **Um crash em nível de processo da API dentro de uma transação** não é testado. O fluxo HTTP é
-  coberto em processo, e a retentativa de um provedor sob a mesma chave de idempotência é testada.
+- **Crash HTTP após o commit, antes da resposta** ainda não é injetado em nível de processo. O crash durante uma
+  transação aberta e a recuperação com uma retentativa são cobertos por `test/concurrency/process-crash-and-shutdown.test.ts`.
 - **Chaves não expiram nem rotacionam**, e a API atende em HTTP simples. Uma implantação real deve adicionar TLS
   e um provedor de identidade (D5).
 - **Mensagens da fila não são autenticadas.** O desafio trata a fila como um canal interno.

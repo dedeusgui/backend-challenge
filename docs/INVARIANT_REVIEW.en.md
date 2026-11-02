@@ -5,9 +5,11 @@
 > **Appendix.** The owner's review of every invariant and constraint. The decisions confirmed on 2026-11-01 are
 > listed in [ARCHITECTURE.md](../ARCHITECTURE.en.md) section 13.
 
-Reviewed before the push of this branch to `main`. The review covers every invariant of the
+Historical record of the finalization branch review, before its integration into `main`. The review covered every invariant of the
 requirements matrix, every database constraint in the migrations, and every
 decision in `docs/adr/` and `ARCHITECTURE.md` section 13.
+
+The results and commits below describe that snapshot; they are not a gate for the current HEAD.
 
 Each invariant is listed with the point that enforces it and the test that proves it. Test names
 are the ones in the cited files. Matrix labels are short descriptions, and each cites a file that
@@ -42,6 +44,24 @@ it and passes after it.
 Checked by reading the code, not by a test: that `Wallet.credit` does not check the database's maximum itself (the
 settlement checks `canCredit` first, and the database refuses the rest); that the reference worker takes the wallet
 lock before it re-reads a held transaction; that the consumer acknowledges only after the unit of work returns.
+
+### Read-only SQL verification
+
+The verifier `scripts/check-financial-invariants.ts` runs `scripts/financial-invariants.sql` inside a `READ ONLY`
+transaction. With PostgreSQL available and the schema migrated, run it from the repository root:
+
+```bash
+bun run check:financial-invariants
+```
+
+`DATABASE_URL` can point to another database; when unset, the command uses the project's local default. The SQL checks
+financial invariants `INV-01` through `INV-11` and additional database-structure checks `DB-01` through `DB-11`.
+`INV-12` only reports the migration count (current expectation: 17) and does not fail when it differs.
+
+This verifier is a point-in-time inspection of database state and structure. It does not by itself prove that the
+TypeScript `Money` type is used, that there is no global lock, that every flow applies the correct lock, or that
+publication happens after commit. Those behaviors require code review and the corresponding tests. The SQL result also
+does not replace the test gate or a CI run.
 
 ## 1. Defects found in this review, and their fixes
 
@@ -256,8 +276,8 @@ Not enforced by the database, and why:
 
 ## 6. Gaps that remain, and what they mean
 
-- **A process-level crash of the API inside a transaction** is not tested. The HTTP path is
-  covered in-process, and a provider's retry under the same idempotency key is tested.
+- **An HTTP crash after commit but before the response** is not yet injected at the process level. A crash inside an
+  open transaction and recovery through a retry are covered by `test/concurrency/process-crash-and-shutdown.test.ts`.
 - **Keys do not expire or rotate**, and the API serves plain HTTP. A real deployment must add TLS
   and an identity provider (D5).
 - **Queue messages are not authenticated.** The challenge treats the queue as an internal channel.

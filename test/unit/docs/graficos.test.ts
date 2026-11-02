@@ -16,6 +16,11 @@ import {
 import { parseCheckAllLog } from '../../../scripts/record-gate';
 
 const ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+const GATE_METADATA = {
+  commitSha: 'ef7b98f85e853a8c34e7cf9d86c4c34579dab02b',
+  environment: 'fixture/test',
+  recordedAt: '2026-11-01T22:26:40.041Z',
+};
 
 const CHECK_ALL_SAMPLE = `
 $ bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features
@@ -50,7 +55,7 @@ bun test v1.4.4 (38afee6c8)
  100 pass
  0 fail
 Ran 100 tests across 8 files. [8.4s]
-$ bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' 'test/features/**/*.feature'
+$ mkdir -p test-results && bun --bun node_modules/.bin/cucumber-js --tags 'not @bloqueado' --require 'test/features/steps/**/*.ts' --format progress --format junit:test-results/cucumber.junit.xml --format message:test-results/cucumber.ndjson 'test/features/**/*.feature'
 .....
 
 73 scenarios (73 passed)
@@ -144,7 +149,7 @@ describe('Gráficos e Gate', () => {
 
   describe('Parser do log do check:all', () => {
     test('extrai suítes, contagens e exit code da amostra', () => {
-      const gate = parseCheckAllLog(CHECK_ALL_SAMPLE);
+      const gate = parseCheckAllLog(CHECK_ALL_SAMPLE, GATE_METADATA);
       expect(gate.exitCode).toBe(0);
       expect(gate.passed).toBe(true);
 
@@ -316,7 +321,7 @@ describe('Gráficos e Gate', () => {
     });
 
     test('renderGateSuitesSvg formata rótulo de Gherkin com cenários e passos e adiciona nota @bloqueado', () => {
-      const gate = parseCheckAllLog(CHECK_ALL_SAMPLE);
+      const gate = parseCheckAllLog(CHECK_ALL_SAMPLE, GATE_METADATA);
       const svg = renderGateSuitesSvg(gate, 2);
       expect(svg).toContain('73 cenários · 365 passos');
       expect(svg).not.toContain('73 passou');

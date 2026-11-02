@@ -14,6 +14,7 @@ Para verificar a solução em cerca de 40 minutos, comece pelo [README](../READM
 4. [Arquitetura](../ARCHITECTURE.md): fluxos e decisões principais, com a tabela de decisões no início.
 5. [Glossário do domínio](DOMAIN_GLOSSARY.md): os termos do domínio e seus nomes no código.
 6. [Contrato HTTP](openapi.json): o contrato OpenAPI, verificado contra as rotas reais.
+7. [Automação de segurança](SECURITY_AUTOMATION.md): workflows configurados e limites da evidência disponível.
 
 ## Perguntas do avaliador
 

@@ -14,11 +14,23 @@ function withDatabase(url: string, databaseName: string): string {
 /** Opens a short-lived connection to the maintenance database for DDL that cannot run in a transaction. */
 async function withAdminConnection<T>(work: (orm: MikroORM) => Promise<T>): Promise<T> {
   const admin = await MikroORM.init(ormOptions(withDatabase(DATABASE_URL, 'postgres')));
+  const failures: unknown[] = [];
+  let result: T | undefined;
   try {
-    return await work(admin);
-  } finally {
-    await admin.close(true);
+    result = await work(admin);
+  } catch (error) {
+    failures.push(error);
   }
+  try {
+    await admin.close(true);
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(failures, 'Admin database operation and close failed');
+  }
+  return result as T;
 }
 
 /** Fails the suite when any wallet's materialized balance disagrees with its ledger. */
@@ -55,30 +67,93 @@ export interface TestDatabaseOptions {
    * and turn this off; every flow-level suite keeps it on.
    */
   verifyLedgerInvariant?: boolean;
+  /** Replaces migrations in helper tests that exercise setup-failure cleanup. */
+  migrate?: (orm: MikroORM, url: string) => Promise<void>;
 }
 
 export async function createTestDatabase(options: TestDatabaseOptions = {}): Promise<TestDatabase> {
   const name = `wagering_test_${crypto.randomUUID().replaceAll('-', '')}`;
-  await withAdminConnection((admin) =>
-    admin.em.getConnection().execute(`CREATE DATABASE "${name}"`),
-  );
-
   const url = withDatabase(DATABASE_URL, name);
-  const orm = await MikroORM.init(ormOptions(url));
-  await orm.migrator.up();
+  let orm: MikroORM | undefined;
+  let created = false;
+  try {
+    await withAdminConnection(async (admin) => {
+      await admin.em.getConnection().execute(`CREATE DATABASE "${name}"`);
+      created = true;
+    });
+    orm = await MikroORM.init(ormOptions(url));
+    if (options.migrate === undefined) await orm.migrator.up();
+    else await options.migrate(orm, url);
+  } catch (setupError) {
+    const cleanupErrors: unknown[] = [];
+    try {
+      await orm?.close(true);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    if (created) {
+      try {
+        await dropDatabase(name);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [setupError, ...cleanupErrors],
+        'Test database setup and cleanup failed',
+        { cause: setupError },
+      );
+    }
+    throw setupError;
+  }
+
+  if (orm === undefined) throw new Error('Test database ORM was not initialized');
+  const connectedOrm = orm;
+  let dropPromise: Promise<void> | undefined;
+  let dropped = false;
 
   return {
-    orm,
+    orm: connectedOrm,
     url,
-    async drop() {
-      // Every test database ends with the global invariant: each wallet's balance equals its ledger sum.
-      if (options.verifyLedgerInvariant ?? true) {
-        await assertLedgerInvariant(orm);
-      }
-      await orm.close(true);
-      await withAdminConnection((admin) =>
-        admin.em.getConnection().execute(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`),
-      );
+    drop() {
+      if (dropped) return Promise.resolve();
+      if (dropPromise) return dropPromise;
+      dropPromise = (async () => {
+        const failures: unknown[] = [];
+        // Every test database ends with the global invariant: each wallet's balance equals its ledger sum.
+        if (options.verifyLedgerInvariant ?? true) {
+          try {
+            await assertLedgerInvariant(connectedOrm);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+        try {
+          await connectedOrm.close(true);
+        } catch (error) {
+          failures.push(error);
+        }
+        try {
+          await dropDatabase(name);
+          dropped = true;
+        } catch (error) {
+          failures.push(error);
+        }
+        if (failures.length === 1) throw failures[0];
+        if (failures.length > 1) {
+          throw new AggregateError(failures, 'Test database teardown failed');
+        }
+      })().finally(() => {
+        dropPromise = undefined;
+      });
+      return dropPromise;
     },
   };
+}
+
+async function dropDatabase(name: string): Promise<void> {
+  await withAdminConnection((admin) =>
+    admin.em.getConnection().execute(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`),
+  );
 }

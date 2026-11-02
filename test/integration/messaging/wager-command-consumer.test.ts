@@ -12,7 +12,12 @@ import type { MessageQueue } from '../../../src/modules/messaging/application/po
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import type { OperationLog } from '../../../src/shared/observability/structured-log';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 import { required } from '../../support/required';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
@@ -38,7 +43,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 function consumerWith(

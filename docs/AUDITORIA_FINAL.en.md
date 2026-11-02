@@ -8,22 +8,23 @@ Raw execution data is not versioned in the repository.
 
 ## 1. Audited code
 
-- **Commit:** `bffe108`
+- **Commit reviewed in that audit:** `bffe108`
 - **Command used:** `git log -1 --format=%h -- src test`
 - **Date:** 2026-11-01 (19:21:49 -0300)
 
-Commits following this hash modified documentation and catalog files only.
+This is the historical scope of that review. The current HEAD has later code and CI changes; this record does not
+claim they were reviewed or validated.
 
 ## 2. How it was verified
 
-| Verification                 | Command                                                                | Result                                                                                                                                                                                                                                                                                                                        |
-| :--------------------------- | :--------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Validation gate              | `bun run check:all`                                                    | Recorded in `docs/gate/ultimo-gate.json` (2026-11-01T20:40:46.191Z, exitCode 0). 937 tests without failures: 490 unit, 4 infrastructure, 247 integration, 23 concurrency, 100 e2e, and 73 Gherkin scenarios (365 steps).                                                                                                      |
-| Static and unit verification | `bun run check:fast`                                                   | Passed 512 unit tests (0 failures), `tsc --noEmit` without errors, `oxlint` without warnings across 256 files, and `prettier --check` passed.                                                                                                                                                                                 |
-| Load and capacity            | `bun run test:load`                                                    | Benchmarks recorded in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md), and the local baseline in [LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md) (cloud measurement across 1, 2, and 4 CPUs at 100, 200, and 400 req/s) and in [LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md) (local measurement with 13 scenarios). |
-| Financial demonstration      | `bun run demo:finance`                                                 | ExitCode 0 against the container stack: validates BET, WIN, REFUND, ROLLBACK, replay, and reconciliation.                                                                                                                                                                                                                     |
-| HTTP API contract            | `bun test test/unit/openapi/` and `test/e2e/openapi-responses.test.ts` | Routes, schemas, and live responses validated against `docs/openapi.json`.                                                                                                                                                                                                                                                    |
-| Static showcase              | `bun test test/unit/site/static-showcase.test.ts`                      | Static generation validated, published, and returning HTTP 200 via GitHub Pages.                                                                                                                                                                                                                                              |
+| Verification                 | Command                                                                | Result                                                                                                                                                                                                             |
+| :--------------------------- | :--------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation gate              | `bun run check:all`                                                    | Older records reported 937 and later 516 passes, but had no SHA or environment. The current file marks them invalid; they are historical evidence and do not prove this HEAD.                                      |
+| Static and unit verification | `bun run check:fast`                                                   | Historical record: 512 unit tests, `tsc --noEmit`, `oxlint` and `prettier --check` were reported as passing. No associated SHA or environment means this does not prove the current HEAD.                          |
+| Load and capacity            | `bun run test:load`                                                    | Cloud campaign in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md); local baseline in [LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md), with 13 scenarios. These are earlier measurements, not a run of this HEAD. |
+| Financial demonstration      | `bun run demo:finance`                                                 | ExitCode 0 against the container stack: validates BET, WIN, REFUND, ROLLBACK, replay, and reconciliation.                                                                                                          |
+| HTTP API contract            | `bun test test/unit/openapi/` and `test/e2e/openapi-responses.test.ts` | Routes, schemas, and live responses validated against `docs/openapi.json`.                                                                                                                                         |
+| Static showcase              | `bun test test/unit/site/static-showcase.test.ts`                      | Static generation validated, published, and returning HTTP 200 via GitHub Pages.                                                                                                                                   |
 
 ## 3. Status of each quality bar item (docs/CHALLENGE.md §14)
 
@@ -39,7 +40,7 @@ Estimates cited from the internal review bar (estimated target of 90/100 points)
 
 - **Bar score:** 20 points in specification (§14). Estimated target in simulated review: 19 points.
 - **Evidence:** `test/concurrency/hot-wallet.test.ts` (50 identical concurrent requests against a single wallet under pessimistic `SELECT FOR UPDATE` locks, exact final balance without negative balance); `test/concurrency/three-processes.test.ts` (50 identical concurrent requests distributed across 3 independent worker processes apply debit exactly once); `test/concurrency/distributed-contention.test.ts` (two concurrent workers with `SIGKILL` injected into one); `test/integration/persistence/wallet-persistence.test.ts` (rejects persistence when expected version is stale).
-- **Known gap:** Mutant M3 survived in `test/concurrency/distributed-contention.test.ts` (`SKIP LOCKED` in outbox claim is functionally equivalent for safety, but no test measures lock wait time). Abrupt crash (`SIGKILL`) of an HTTP API process during an active transaction is not tested at the operating system process level.
+- **Known gap at that commit:** Mutant M3 survived in `test/concurrency/distributed-contention.test.ts` (`SKIP LOCKED` in outbox claim is functionally equivalent for safety, but no test measures lock wait time). At that snapshot, an HTTP API crash during a transaction also lacked process-level coverage. Later, `test/concurrency/process-crash-and-shutdown.test.ts` added `SIGKILL` before commit and recovery by retry; a crash after commit and before the HTTP response still has no process-level injection.
 
 ### 3.3 Idempotency
 
@@ -57,13 +58,13 @@ Estimates cited from the internal review bar (estimated target of 90/100 points)
 
 - **Bar score:** 10 points in specification (§14). Estimated target in simulated review: 9 points.
 - **Evidence:** Inbound and outbound flow mapping in `ARCHITECTURE.md` §1; decoupled ports in `src/wagering/application/ports/` and `src/shared/application/ports/`; clean separation in `messaging/application/inbound/` and `messaging/application/outbound/`; financial invariants encapsulated inside domain entities and `src/wagering/domain/transaction-settlement.ts`; architecture boundaries test in `test/unit/architecture/domain-boundaries.test.ts` (domain free of framework or cloud SDK imports).
-- **Known gap:** Contract decisions F-03 (returning 404 for transactions belonging to other providers) and F-13 (persisting `FAILED` and emitting `WagerTransactionFailed`) were confirmed on 2026-11-01.
+- **Known gap:** Contract decisions F-03 (returning 404 for transactions belonging to other providers) and F-13 (persisting `FAILED` and emitting `WagerTransactionFailed`) are open decisions, owned by the challenge owner.
 
 ### 3.6 Tests
 
 - **Bar score:** 10 points in specification (§14). Estimated target in simulated review: 9 points.
-- **Evidence:** 937 tests without PostgreSQL or LocalStack mocks across integration, concurrency, and e2e suites (`docs/gate/ultimo-gate.json`); 73 executable Gherkin scenarios with 365 steps (`test/features/`); fault injection with OS process termination via `SIGKILL` and `SIGTERM` (`test/concurrency/three-processes.test.ts` and `test/concurrency/process-crash-and-shutdown.test.ts`).
-- **Known gap:** Two scenarios tagged `@bloqueado` in `test/features/mensageria.feature` do not run in the feature gate; 22 IDs from `docs/audit/EDGE_CASE_MATRIX.md` lack the `@edge:` tag in feature files; no test covers ROLLBACK arriving before BET and applied successfully after BET arrives (§13.7); no continuous mutation testing integrated in CI.
+- **Historical evidence:** older versions of the gate record reported 937 and later 516 passes, including 73 Gherkin scenarios and 365 steps, but lacked a SHA or environment. The current file marks the record without provenance as invalid; do not use it as evidence that this HEAD passed. Coverage for a ROLLBACK held before its BET exists in `test/integration/wagering/pending-reference.test.ts` (`a held ROLLBACK is applied once its BET has been processed, and balances the ledger`).
+- **Known gap:** Two scenarios tagged `@bloqueado` in `test/features/mensageria.feature` do not run in the feature gate; 22 IDs from `docs/audit/EDGE_CASE_MATRIX.md` lack the `@edge:` tag in feature files; no continuous mutation testing integrated in CI.
 
 ### 3.7 Observability
 
@@ -87,13 +88,13 @@ Source: [FINDINGS.md](audit/FINDINGS.md). Total of 15 evaluated findings: 11 clo
 | :--- | :---------------------------------------------------------------------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-01 | Malformed outbox envelope halted batch publication                      | Closed      | Commit `2905535` (migration 9 with `CHECK outbox_envelope_shape` constraint). Test: `test/integration/messaging/outbox-malformed-row.test.ts`.                                                                 |
 | F-02 | Same `messageId` with distinct `idempotencyKey` accepted as duplicate   | Closed      | Commit `2ec4d5e` (included key in `wagerMessageFingerprint`). Test: `test/integration/messaging/inbox-message-identity.test.ts`.                                                                               |
-| F-03 | 403 response for another provider's transaction revealed existence      | Closed      | Commit `154b52a` (uniform 404 response). Test: `test/e2e/authorization-adversarial.test.ts`. Contract confirmed on 2026-11-01.                                                                                 |
+| F-03 | 403 response for another provider's transaction revealed existence      | Closed      | Commit `154b52a` (uniform 404 response). Test: `test/e2e/authorization-adversarial.test.ts`. Contract confirmation is an open decision, owned by the challenge owner.                                          |
 | F-04 | Slow batch left in-flight messages visible to other consumers           | Closed      | Commit `b398e22` (`ChangeMessageVisibilityBatch` before each message). Test: `test/integration/messaging/visibility-during-batch.test.ts`.                                                                     |
 | F-05 | Test fault hooks inside production code                                 | Closed      | Commit `489df8b` (extracted to `assembleWorker` and seams in `test/support/worker-seams.ts`). Suites pass without modified assertions.                                                                         |
 | F-06 | Balance-ledger agreement was not enforced by database schema            | Closed      | Migration 12 in commit `c5ddca9` (`wallets_ledger_balance_check` and `wallet_ledger_entries_balance_check` triggers). Test: `test/integration/schema/ledger-agreement-trigger.test.ts`.                        |
 | F-07 | Outbox lease compared expiration against caller's local clock           | Closed      | Commits `433ebe2` and `c952ba2` (ownership and rescheduling via database `now()`). Tests: `test/integration/messaging/outbox-lease-clock.test.ts` and `test/integration/messaging/outbox-retry-clock.test.ts`. |
 | F-08 | Ledger summary during reconciliation read outside transaction           | Closed      | Commit `0f4fa19` (read via `em.execute` inside transaction under lock). Test: `test/integration/schema/wallet-ledger-summary.test.ts`.                                                                         |
-| F-13 | Transaction with permanent failure stalled worker; `FAILED` lacked path | Closed      | Commit `c8ffbcc` (recorded `FAILED` with `WagerTransactionFailed` event). Test: `test/integration/wagering/held-failure.test.ts`. Contract confirmed on 2026-11-01.                                            |
+| F-13 | Transaction with permanent failure stalled worker; `FAILED` lacked path | Closed      | Commit `c8ffbcc` (recorded `FAILED` with `WagerTransactionFailed` event). Test: `test/integration/wagering/held-failure.test.ts`. Contract confirmation is an open decision, owned by the challenge owner.     |
 | F-14 | Message exceeding visibility window was redelivered during processing   | Closed      | Commit `6b3b23e` (renewed at each third of visibility window up to 300 s). Tests: `test/integration/messaging/slow-message-hold.test.ts` and `test/unit/messaging/application/wager-command-hold.test.ts`.     |
 | F-15 | Worker decided reference deadline using its local clock                 | Closed      | Commit `fc3862c` (`DatabaseClock` reading database `now()` within transaction). Test: `test/integration/wagering/database-clock-references.test.ts`.                                                           |
 
@@ -101,31 +102,31 @@ Confirmation of closure for F-06 is found in migration 12 history (`git log --on
 
 ### 4.2 Open findings (4)
 
-| ID   | Description                                                   | Status                                     | Details                                                                                                                                                                                    |
-| :--- | :------------------------------------------------------------ | :----------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F-09 | Ledger query plan depends on PostgreSQL planner statistics    | Open                                       | Requires monitoring with `EXPLAIN` in production. Measured queries: sequential scan at 1,000 entries (0.68 ms), index scan at 100,000 (0.44 ms) and 1,000,000 (0.50 ms).                   |
-| F-10 | `ROLLBACK` of BET after `ROLLBACK` of REFUND is rejected      | Closed by decision confirmed on 2026-11-01 | Contract decision D4 confirmed on 2026-11-01. Code enforces rejection with `REFERENCE_ALREADY_REVERSED`, fixed in tests.                                                                   |
-| F-11 | Results without reference cannot be bounded to one per BET    | Open                                       | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md).                                     |
-| F-12 | Repository Docker image does not build in sandbox environment | Open                                       | Sandbox TLS proxy emits self-signed certificate (`SELF_SIGNED_CERT_IN_CHAIN`) during `bun install`. Bypassed in sandbox using an external test image; build verified in GitHub Actions CI. |
+| ID   | Description                                                   | Status | Details                                                                                                                                                                                    |
+| :--- | :------------------------------------------------------------ | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-09 | Ledger query plan depends on PostgreSQL planner statistics    | Open   | Requires monitoring with `EXPLAIN` in production. Measured queries: sequential scan at 1,000 entries (0.68 ms), index scan at 100,000 (0.44 ms) and 1,000,000 (0.50 ms).                   |
+| F-10 | `ROLLBACK` of BET after `ROLLBACK` of REFUND is rejected      | Open   | Contract decision (D4) is an open decision, owned by the challenge owner. Code enforces rejection with `REFERENCE_ALREADY_REVERSED`, fixed in tests.                                       |
+| F-11 | Results without reference cannot be bounded to one per BET    | Open   | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md).                                     |
+| F-12 | Repository Docker image does not build in sandbox environment | Open   | Sandbox TLS proxy emits self-signed certificate (`SELF_SIGNED_CERT_IN_CHAIN`) during `bun install`. Bypassed in sandbox using an external test image; build verified in GitHub Actions CI. |
 
-## 5. Contract decisions and their status
+## 5. Challenge owner decisions that remain open
 
-F-03, F-13 and D1 to D4 were confirmed on 2026-11-01; only D5 remains open. The implementation follows the documented choices.
+Eight decisions remain open awaiting confirmation by the challenge owner. The implementation follows the documented choice in each case.
 
-- **F-03 (HTTP status for transaction of another provider):** In `GET /wagering/transactions/:id`, a transaction belonging to another provider returns `404 TRANSACTION_NOT_FOUND`, identical to a non-existent identifier, to avoid enumeration of external transactions. Confirmed on 2026-11-01: another provider and a missing transaction receive the same 404 and body, to avoid revealing existence.
-- **F-10 (ROLLBACK of BET after ROLLBACK of REFUND):** When a REFUND is reversed by ROLLBACK, a subsequent ROLLBACK of the BET is rejected with `REFERENCE_ALREADY_REVERSED`. D4 confirmed on 2026-11-01: at most one effective reversal per reference, whatever its kind. This is an additional interpretation, not the specification’s literal text.
-- **F-13 (Execution path for FAILED and new domain event):** A held transaction that encounters an unrecoverable failure is recorded as `FAILED` and publishes `WagerTransactionFailed` (event not listed in specification §6.3). Confirmed on 2026-11-01 as an extension: `FAILED` is an auditable state for permanent failures and `WagerTransactionFailed` is an additional event; the specification requires four events.
-- **D1 (Results without reference):** The specification (§6.3 and §7) allows WIN and LOSS to omit the reference to the bet. Without a reference, the system cannot link the result to the BET or block a subsequent REFUND or second result. Confirmed on 2026-11-01: WIN/LOSS may omit a reference; when they name a BET, they validate the full context. No association is inferred from roundId or a heuristic; an unreferenced WIN does not demonstrate uniqueness per BET.
-- **D2 (ROLLBACK in any state of the bet):** A ROLLBACK is accepted against any state of the source transaction, including after a processed WIN, returning the stake while the win credit remains. Confirmed on 2026-11-01: ROLLBACK of the BET reverses only that transaction and does not cancel a processed WIN. The WIN needs its own ROLLBACK to reverse its credit; there is no implicit cascade.
-- **D3 (REFUND only for BET without result):** A REFUND is accepted only if the bet has no processed outcome (WIN or LOSS). If a result exists, it is rejected with `REFERENCE_ALREADY_SETTLED`. Confirmed on 2026-11-01: REFUND only for a PROCESSED BET with no result; it is refused after WIN, LOSS, or a conflicting reversal. A BET is not reopened when its REFUND is reversed.
-- **D4 (At most one reversal per reference):** The system limits any reference to at most one reversal, whether REFUND or ROLLBACK. Rule 4 of the specification ("cannot be reversed twice by the same operation type"), read literally, would allow a REFUND followed by a ROLLBACK on the same bet, crediting the stake twice. Confirmed on 2026-11-01: at most one effective reversal per reference. This is an additional interpretation, not the specification’s literal text.
-- **D5 (Static API key authentication):** Authentication implemented using static API keys with provider scope and roles (`operator` and `provider`), as described in ADR 0007, rather than an external identity provider (IdP) mentioned in specification (§2). D5 remains open; this instruction does not decide static API key authentication.
+- **F-03 (HTTP status for transaction of another provider):** In `GET /wagering/transactions/:id`, a transaction belonging to another provider returns `404 TRANSACTION_NOT_FOUND`, identical to a non-existent identifier, to avoid enumeration of external transactions. Open decision, owned by the challenge owner: confirm uniform 404 or revert to 403.
+- **F-10 (ROLLBACK of BET after ROLLBACK of REFUND):** When a REFUND is reversed by ROLLBACK, a subsequent ROLLBACK of the BET is rejected with `REFERENCE_ALREADY_REVERSED`. Open decision, owned by the challenge owner: confirm whether a reference admits at most one reversal in total (preventing double credit of stake) or admits net reversals.
+- **F-13 (Execution path for FAILED and new domain event):** A held transaction that encounters an unrecoverable failure is recorded as `FAILED` and publishes `WagerTransactionFailed` (event not listed in specification §6.3). Open decision, owned by the challenge owner: confirm persisting `FAILED` and introducing this event.
+- **D1 (Results without reference):** The specification (§6.3 and §7) allows WIN and LOSS to omit the reference to the bet. Without a reference, the system cannot link the result to the BET or block a subsequent REFUND or second result. Open decision, owned by the challenge owner: accept the economic risk of unlinked results or make the reference to BET mandatory for all results.
+- **D2 (ROLLBACK in any state of the bet):** A ROLLBACK is accepted against any state of the source transaction, including after a processed WIN, returning the stake while the win credit remains. Open decision, owned by the challenge owner: confirm whether cancelling the bet may leave winnings intact or whether ROLLBACK of a BET with a win must be rejected until the WIN is reversed first.
+- **D3 (REFUND only for BET without result):** A REFUND is accepted only if the bet has no processed outcome (WIN or LOSS). If a result exists, it is rejected with `REFERENCE_ALREADY_SETTLED`. Open decision, owned by the challenge owner: confirm requiring providers to reverse outcomes before requesting refunds.
+- **D4 (At most one reversal per reference):** The system limits any reference to at most one reversal, whether REFUND or ROLLBACK. Rule 4 of the specification ("cannot be reversed twice by the same operation type"), read literally, would allow a REFUND followed by a ROLLBACK on the same bet, crediting the stake twice. Open decision, owned by the challenge owner: confirm strict constraint against duplicate credit.
+- **D5 (Static API key authentication):** Authentication implemented using static API keys with provider scope and roles (`operator` and `provider`), as described in ADR 0007, rather than an external identity provider (IdP) mentioned in specification (§2). Open decision, owned by the challenge owner: confirm this authentication simplification adopted for the challenge scope.
 
 ## 6. Gaps not covered by tests
 
 Technical limitations of the test suites and measurements:
 
-- **§13.7 (ROLLBACK before reference):** An automated test exists for REFUND arriving before BET in `test/integration/wagering/pending-reference.test.ts`. For ROLLBACK arriving before BET and settling successfully after the bet arrives, no test exists in the repository. The test in `test/integration/wagering/database-clock-references.test.ts` (lines 158 to 191) covers only retention and rejection upon exhaustion of attempts.
+- **§13.7 (out-of-order reference):** REFUND arriving before BET is covered in `test/integration/wagering/pending-reference.test.ts`. ROLLBACK arriving before BET and settling after the bet arrives is covered in the same file (`a held ROLLBACK is applied once its BET has been processed, and balances the ledger`). `database-clock-references.test.ts` separately covers retention and rejection after exhausting attempts.
 - **Gherkin scenarios tagged `@bloqueado`:** The command `grep -c "@bloqueado" test/features/*.feature` reports 2 scenarios in `test/features/mensageria.feature`:
   1. Line 71: "Uma mensagem que falha em dez entregas vai para a DLQ pelo redrive" (`@edge:QU-04`). Reason: the isolated BDD harness does not receive SQS redrive policy; real coverage is proven in `test/integration/messaging/broker-redrive.test.ts`.
   2. Line 91: "SIGTERM durante um lote conclui o item atual e devolve o restante" (`@edge:QU-07`). Reason: the BDD harness cannot control OS processes; real coverage is proven in `test/concurrency/process-crash-and-shutdown.test.ts`.
@@ -165,42 +166,8 @@ History of simulated reviews with internal estimated scores (not an evaluation p
   - Missing `retries_total` metric (§12): implemented and exposed at `/metrics` in commit `4ee8f72`.
   - Absence of executable BDD suite linked to edge matrix: implemented with 73 Gherkin scenarios in `test/features/` in commits `3620d74` and `c8320ea`.
 
-## 8. Final verification of this round
+## 8. Security automation
 
-Measurements of 2026-11-01. The full gate ran on commit `a6bbd82`. Figures from earlier runs were not reused as if they
-belonged to this round. The commands cited exist in `package.json`.
-
-- **Full gate (`bun run check:all`), `a6bbd82`:** passed. 519 unit, 4 infrastructure, 248 integration, 23 concurrency,
-  104 e2e and 73 Gherkin scenarios (365 steps). The two `@bloqueado` scenarios stay outside the run; their equivalent
-  coverage is in `test/integration/messaging/broker-redrive.test.ts` and
-  `test/concurrency/process-crash-and-shutdown.test.ts`.
-- **Cucumber reports:** `bun run test:features` writes `test-results/cucumber.junit.xml` (73 cases, no failures) and
-  `test-results/cucumber.ndjson` (Cucumber Messages). The CI integration job publishes that directory with the SHA.
-- **Financial demonstration (`bun run demo:finance`)**, against the `docker compose up --build` stack: passed all five
-  steps. The balance closes at 75.00 after BET, WIN and ROLLBACK; the second ROLLBACK is refused with
-  `REFERENCE_ALREADY_REVERSED`; the replay returns the balance observed; the ledger sums to the balance.
-- **Invariants by independent SQL** (`scripts/financial-invariants.sql`, read-only), on the development database after the
-  demonstration: INV-1 to INV-11 with zero violations. The sample has six ledger entries. The result proves these queries
-  on that data, not the absence of violations in general; the rules are enforced by the suites and the database constraints.
-- **Migrations:** the `migrate` service applied all 16 migrations with exit 0. `test/integration/schema/migrations.test.ts`
-  covers creation from scratch, full rollback and re-application. An upgrade from a partial schema was not tested separately.
-- **Docker build without cache:** passed, with the base image pinned by digest (commit `db756c7`).
-- **Stack smoke test:** `/health/live` and `/health/ready` answered 200, with the database and SQS `up`. `/metrics` requires
-  an API key and answers 401 without one.
-- **Trivy:** on `wagering-api:digest-check`, CRITICAL and HIGH vulnerabilities with `ignore-unfixed`: zero for the
-  debian 13.7 and node-pkg targets. On the filesystem of a clean export of `HEAD`, zero vulnerabilities in `bun.lock` and
-  no secrets. `ignore-unfixed` hides findings that have no available fix.
-- **Multi-process concurrency with failure and recovery:** `test/concurrency/process-crash-and-shutdown.test.ts` and
-  `test/concurrency/three-processes.test.ts` passed in the gate.
-- **Load, final, 2 CPUs** (default topology of three APIs and two workers, same method as
-  `docs/load/results/cpus-2.json`): the agreed rate is 200 req/s, equal to the baseline. At 300 req/s the step fails in
-  both measurements. In the final measurement there was 1 loss in 6,000 requests and a p99 of 7.6 s
-  (`docs/load/final-90f5332/`). Repeated alone, the step lost 2,230 of 6,000 and had a p99 of 9.9 s
-  (`docs/load/final-90f5332-repeat-300/`). The baseline also fails at 300 req/s, with a p99 of 3.8 s and no losses.
-  At 200 req/s the p99 was 308.7 ms against 260.9 ms in the baseline; that difference is within what a single run can
-  separate. There is no basis to claim a capacity above 200 req/s. No performance gain is attributed to this round's
-  changes. A development agent was active on the same machine during the measurement, uncontrolled.
-- **Resource cleanup:** 10 `wagering_test_*` databases existed before this round and remain the same after a full gate, so
-  there is no new leak. The origin of the 10 was not investigated.
-- **Not verified in this round:** the GitHub workflows (CI, CodeQL, Dependency Review and the CI Trivy) run only after a
-  push. None of them has been executed on the runners.
+CodeQL, Trivy, Dependency Review and Dependabot workflows are configured; their configuration and triggers are
+documented in [SECURITY_AUTOMATION.en.md](SECURITY_AUTOMATION.en.md). Hosted GitHub results and pull request runs
+were not executed or reviewed in this audit.

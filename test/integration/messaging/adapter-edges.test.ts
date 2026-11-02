@@ -9,7 +9,12 @@ import { MikroOrmWagerTransactionRepository } from '../../../src/modules/wagerin
 import { WagerTransaction } from '../../../src/modules/wagering/domain/wager-transaction';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 
 /**
  * The edges of the adapters: what the broker refuses, what a lease cannot take, and what a unique identity
@@ -30,7 +35,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 function refusedBy(action: () => Promise<unknown>): Promise<string> {

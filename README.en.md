@@ -51,6 +51,7 @@ Solution to the [technical challenge](docs/CHALLENGE.md). Full documentation ind
 | What does the API look like?                       | OpenAPI contract, checked against the real responses                        | [docs/openapi.json](docs/openapi.json)                                                                      |
 | How much can the system take?                      | two measurements: local baseline (13 scenarios) and cloud (1, 2 and 4 CPUs) | [Measured performance](#measured-performance)                                                               |
 | What was audited adversarially?                    | findings, experiments and the proof of each guarantee                       | [docs/audit/README.md](docs/audit/README.md) (Portuguese)                                                   |
+| How is security automation configured?             | workflows and limits of the observed results                                | [docs/SECURITY_AUTOMATION.en.md](docs/SECURITY_AUTOMATION.en.md)                                            |
 | What is still open?                                | owner decisions and limitations                                             | [Limitations and open decisions](#limitations-and-open-decisions)                                           |
 | How does the project compare with other solutions? | what was adopted, what already existed and what was not adopted             | [Comparison with other implementations](#comparison-with-other-implementations)                             |
 | How is the solution published?                     | static showcase, generated from the repository                              | [technical showcase](https://dedeusgui.github.io/backend-challenge/)                                        |
@@ -87,7 +88,7 @@ reproduces it.
 | 8   | Correct with multiple instances                           | three independent processes over the same database and queue                                                                  | `test/concurrency/three-processes.test.ts`                                       |
 | 9   | Uniqueness, immutability and non-negativity in the schema | `CHECK`, `UNIQUE`, `FK` and triggers in the migrations                                                                        | `test/integration/schema`                                                        |
 
-All 16 migrations have `up` and `down`. The rollback test is in `test/integration/schema/migrations.test.ts`.
+All 17 migrations have `up` and `down`. The rollback test is in `test/integration/schema/migrations.test.ts`.
 
 ## How the work was done
 
@@ -177,7 +178,7 @@ Known limits on how far the automated proofs reach:
 
 - **Temporal order of test writing:** the Git history does not prove that each test failed before the code was written. The order is required by [CLAUDE.md](CLAUDE.md), and the technical evidence of test sensitivity is in the mutation tests ([docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)).
 - **Gherkin scenarios tagged `@bloqueado`:** two scenarios in [test/features/mensageria.feature](test/features/mensageria.feature) (lines 71 and 91) are outside the BDD harness run. Scenario line 71 (DLQ redrive after ten failures) is covered by the integration test [test/integration/messaging/broker-redrive.test.ts](test/integration/messaging/broker-redrive.test.ts). Scenario line 91 (SIGTERM shutdown during batch processing) is covered by the real-process test [test/concurrency/process-crash-and-shutdown.test.ts](test/concurrency/process-crash-and-shutdown.test.ts).
-- **HTTP API process crash during an open transaction:** an abrupt termination (`SIGKILL`) of an HTTP process in the middle of an open transaction is not injected at the operating-system level. The API is covered in-process by the concurrency and fault-injection tests ([docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)).
+- **HTTP API process crash:** `test/concurrency/process-crash-and-shutdown.test.ts` sends `SIGKILL` while a ledger insert holds the transaction open, then verifies full rollback and that a retry applies the wager once. A process crash after commit but before the HTTP response is not yet injected at the operating-system level ([docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)).
 - **Equivalent outbox wait mutant:** the suite does not detect the removal of the `SKIP LOCKED` clause in the outbox query (mutant M3 in [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)), because it only introduces ordered waiting without breaking data integrity, and no test measures lock wait times.
 - **Load test after migration 12:** the full 13-scenario load test suite was not rerun after the balance-agreement triggers of migration 12 were added ([ARCHITECTURE.en.md](ARCHITECTURE.en.md)).
 
@@ -429,6 +430,7 @@ LocalStack measurements, not AWS SQS; there is no long soak test and no validate
 | `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure                                                                    |
 | `bun run check:all`        | the full gate: everything above, plus infrastructure, integration, concurrency, e2e and Gherkin. This is what CI runs             |
 | `bun run test:integration` | real PostgreSQL and LocalStack: schema, persistence, messaging, faults                                                            |
+| `bun run test:containers`  | optional local pilot with temporary containers; details and limits in [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)        |
 | `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped                                                             |
 | `bun run test:e2e`         | the HTTP application, with API keys                                                                                               |
 | `bun run test:features`    | the Gherkin scenarios of `test/features/`, run by Cucumber on Bun                                                                 |

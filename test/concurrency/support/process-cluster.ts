@@ -26,7 +26,8 @@ export class ProcessCluster {
   private constructor(
     readonly database: TestDatabase,
     readonly queues: TestQueues,
-    readonly queueNames: { command: string; deadLetter: string; events: string },
+    readonly queueNames: TestQueues['names'],
+    private readonly sqs: ReturnType<typeof testSqsClient>,
     /** A taskset CPU list. When set, every process of the cluster is pinned to it. */
     private readonly cpus: string | undefined,
   ) {}
@@ -34,13 +35,38 @@ export class ProcessCluster {
   static async create(options: { cpus?: string } = {}): Promise<ProcessCluster> {
     const database = await createTestDatabase();
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
-    const queueNames = {
+    const requestedNames = {
       command: `commands-${suffix}.fifo`,
       deadLetter: `dead-letter-${suffix}.fifo`,
       events: `events-${suffix}.fifo`,
     };
-    const queues = await createTestQueues(testSqsClient(), queueNames);
-    return new ProcessCluster(database, queues, queueNames, options.cpus);
+    let sqs: ReturnType<typeof testSqsClient> | undefined;
+    let queues: TestQueues | undefined;
+    try {
+      sqs = testSqsClient();
+      queues = await createTestQueues(sqs, requestedNames);
+      return new ProcessCluster(database, queues, queues.names, sqs, options.cpus);
+    } catch (error) {
+      const failures = [error];
+      try {
+        await queues?.close();
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+      try {
+        await database.drop();
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      } finally {
+        sqs?.destroy();
+      }
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'Process cluster setup and cleanup failed', {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   /** Environment shared by every process of this cluster. */
@@ -115,14 +141,40 @@ export class ProcessCluster {
     return this.spawn(name, script, extra);
   }
 
-  async close(): Promise<void> {
-    for (const managed of this.processes) {
-      if (managed.process.exitCode === null) {
-        managed.process.kill('SIGKILL');
+  private closePromise: Promise<void> | undefined;
+  private closed = false;
+
+  close(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (this.closePromise) return this.closePromise;
+    this.closePromise = (async () => {
+      const errors: unknown[] = [];
+      for (const managed of this.processes) {
+        try {
+          if (managed.process.exitCode === null) managed.process.kill('SIGKILL');
+          await managed.process.exited;
+        } catch (error) {
+          errors.push(error);
+        }
       }
-      await managed.process.exited;
-    }
-    await this.database.drop();
+      try {
+        await this.queues.close();
+      } catch (error) {
+        errors.push(error);
+      } finally {
+        this.sqs.destroy();
+      }
+      try {
+        await this.database.drop();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length > 0) throw new AggregateError(errors, 'Process cluster cleanup failed');
+      this.closed = true;
+    })().finally(() => {
+      this.closePromise = undefined;
+    });
+    return this.closePromise;
   }
 }
 

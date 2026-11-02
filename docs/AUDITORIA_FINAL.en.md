@@ -188,7 +188,7 @@ of CI on a published SHA.
   not stated literally in the challenge, is a contract question rather than an unfixed defect.
 - **HTTP crashes:** `test/concurrency/process-crash-and-shutdown.test.ts` kills the API before commit and after commit,
   before the response. The post-commit retry returns a replay and preserves one financial debit, one row and one event.
-- **Local gates:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 unit tests, 19,903 assertions),
+- **Local gates:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 unit tests passed, 0 failures),
   `bun run check:all` and `bun run check:financial-invariants` passed. Cucumber produced 73/73 scenarios and 438/438
   steps passed; two `@bloqueado` scenarios remain excluded. The SQL verifier returned zero for INV-1 through INV-11
   and expected 17 migrations in INV-12.

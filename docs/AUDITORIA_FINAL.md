@@ -188,7 +188,7 @@ desta rodada, não resultados hospedados nem prova de CI em um SHA publicado.
   no enunciado é uma questão de contrato, não um defeito sem correção.
 - **Crashes HTTP:** `test/concurrency/process-crash-and-shutdown.test.ts` mata a API antes do commit e depois do commit,
   antes da resposta. O retry após commit retorna replay e mantém um débito, uma linha financeira e um evento.
-- **Gate local:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 testes unitários, 19.903 assertions),
+- **Gate local:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 testes unitários aprovados, 0 falhas),
   `bun run check:all` e `bun run check:financial-invariants` passaram. O Cucumber gerou 73/73 cenários e 438/438
   passos aprovados; dois cenários `@bloqueado` permanecem fora da execução. O verificador SQL retornou zero em INV-1
   a INV-11 e esperava 17 migrations em INV-12.

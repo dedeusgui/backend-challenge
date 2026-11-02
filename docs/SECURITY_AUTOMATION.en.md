@@ -13,15 +13,18 @@ prove it ran successfully.
 ## Observed status on 2026-11-02
 
 The public checks page for `37ff489977e817ecac98b9c86efc5ba9a5fe5932` said “There are no checks for this commit”; the
-public Actions list inspected ended with runs for SHA `2a2fb182`. Those older results do not validate later HEADs. The
-repository does not show which credential created the push or the repository's Actions settings, so the missing runs'
-cause cannot be determined. No workflow in this repository commits or pushes back to the repository.
+inspected list ended with runs for SHA `2a2fb182`. Later, the push of `47617e76f5c44507a92e7a6fe80b1a2403bd40ca` to
+`main` was accepted, but that commit's public checks page also said “There are no checks for this commit”. The
+versioned CI workflow declares an unfiltered `push` trigger and `workflow_dispatch`; no workflow in this repository
+commits or pushes back. The exact cause of the missing run is unconfirmed.
 
-The main CI and CodeQL workflows now support `workflow_dispatch`, as well as `push` and `pull_request`. This allows a
-manual run for a selected ref. Pushes made with `GITHUB_TOKEN` generally do not start new workflow runs; an automation
-that pushes code and needs subsequent checks must use an authorized GitHub App/PAT token or dispatch the workflow
-manually. Dependency Review still requires a pull request targeting `main`. None of these routes ran in this review
-because no valid GitHub credential was available.
+The main CI and CodeQL workflows support `workflow_dispatch` as well as automatic triggers. In this review, `GH_TOKEN`
+was rejected as invalid, `gh` had no authenticated session without that variable, and an explicit dispatch attempt
+received `Forbidden` from `api.github.com`. Public `github.com` pages and the Git remote push were available. The push
+actor or credential type and the repository's Actions settings could not be inspected; suppression of runs from
+`GITHUB_TOKEN` pushes is a possibility, not a confirmed cause. Dependency Review still requires a pull request
+targeting `main`. No hosted result for the published SHA was observed for CI, CodeQL, Trivy, Dependency Review or manual
+dispatch.
 
 ## How to review
 

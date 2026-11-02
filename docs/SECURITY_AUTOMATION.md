@@ -13,16 +13,18 @@ não prova que ele foi executado com sucesso.
 ## Estado observado em 2026-11-02
 
 A página pública de checks de `37ff489977e817ecac98b9c86efc5ba9a5fe5932` informou “There are no checks for this commit”; a
-lista pública de Actions consultada terminava em execuções do SHA `2a2fb182`. Portanto, esses resultados antigos não
-validam o HEAD posterior. O repositório não revela qual credencial originou o push nem as configurações de Actions,
-então não é possível determinar por que os eventos não geraram execuções. Não há workflow neste repositório que faça
-commit ou push de volta.
+lista consultada terminava em execuções do SHA `2a2fb182`. Depois, o push de `47617e76f5c44507a92e7a6fe80b1a2403bd40ca`
+para `main` foi aceito, mas a página pública desse commit também informou “There are no checks for this commit”. O
+workflow CI versionado declara `push` sem filtro de branch e `workflow_dispatch`; não há workflow neste repositório que
+faça commit ou push de volta. A causa exata da ausência de execução não foi comprovada.
 
-O CI geral e o CodeQL agora aceitam `workflow_dispatch`, além de `push` e `pull_request`. Isso permite uma execução
-manual para um ref selecionado. Pushes feitos com `GITHUB_TOKEN` normalmente não iniciam novas execuções de workflows;
-para publicar código via automação e obter os checks seguintes, use um token de GitHub App/PAT autorizado ou dispare o
-workflow manualmente. Dependency Review continua exigindo uma pull request destinada a `main`. Nenhuma dessas rotas
-foi executada nesta revisão por falta de credencial GitHub válida.
+O CI geral e o CodeQL aceitam `workflow_dispatch`, além dos gatilhos automáticos. Nesta revisão, `GH_TOKEN` foi
+rejeitado como inválido, `gh` não tinha sessão autenticada sem essa variável e a tentativa de dispatch recebeu
+`Forbidden` de `api.github.com`. As páginas públicas de `github.com` e o push Git remoto estavam acessíveis. O ator ou
+tipo de credencial usado no push e as configurações de Actions da organização não puderam ser inspecionados; a supressão
+de execuções em pushes feitos com `GITHUB_TOKEN` é uma possibilidade, não uma causa confirmada. Dependency Review
+continua exigindo uma pull request destinada a `main`. CodeQL, Trivy, Dependency Review e dispatch manual não tiveram
+resultados hospedados observados para o SHA publicado.
 
 ## Como revisar
 

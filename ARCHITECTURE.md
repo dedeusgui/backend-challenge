@@ -435,7 +435,6 @@ sequenceDiagram
       P->>DB: reschedule with backoff WHERE lease = token
     end
   end
-  end
 ```
 
 Um publicador pode travar além de seu lease. Seu envio fica em trânsito enquanto o lease expira, logo o próximo

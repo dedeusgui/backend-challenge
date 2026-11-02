@@ -437,7 +437,6 @@ sequenceDiagram
       P->>DB: reschedule with backoff WHERE lease = token
     end
   end
-  end
 ```
 
 A publisher can stall past its lease. Its send is in flight while the lease expires, so the next

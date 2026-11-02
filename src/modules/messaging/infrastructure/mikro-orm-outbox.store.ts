@@ -72,9 +72,8 @@ export class MikroOrmOutboxStore implements OutboxStore {
   constructor(private readonly orm: MikroORM) {}
 
   async claimDue(request: ClaimRequest): Promise<OutboxMessage[]> {
-    // Every time in this statement is the database's now(). The UPDATE returns its rows in no particular order, so the
-    // order is applied after it: a batch is sent in the order its events became due, and the events of one wallet keep
-    // their commit order.
+    // Every time in this statement is the database's now(). Order the claimed batch by due time and occurrence.
+    // Retries and concurrent publishers can still emit wallet events out of order; consumers order them by walletVersion.
     const result: unknown = await this.orm.em.getConnection().execute(
       `WITH claimed AS (
          UPDATE outbox_messages

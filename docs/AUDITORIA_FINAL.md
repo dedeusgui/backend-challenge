@@ -188,17 +188,17 @@ desta rodada, não resultados hospedados nem prova de CI em um SHA publicado.
   no enunciado é uma questão de contrato, não um defeito sem correção.
 - **Crashes HTTP:** `test/concurrency/process-crash-and-shutdown.test.ts` mata a API antes do commit e depois do commit,
   antes da resposta. O retry após commit retorna replay e mantém um débito, uma linha financeira e um evento.
-- **Gate local:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 testes unitários, 19.891 assertions),
+- **Gate local:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 testes unitários, 19.903 assertions),
   `bun run check:all` e `bun run check:financial-invariants` passaram. O Cucumber gerou 73/73 cenários e 438/438
   passos aprovados; dois cenários `@bloqueado` permanecem fora da execução. O verificador SQL retornou zero em INV-1
   a INV-11 e esperava 17 migrations em INV-12.
-- **Testcontainers:** `bun run test:containers` passou com 20 testes e 94 assertions; startup medido em 35,85 s e
-  testes em 9,07 s. A comparação pontual com Compose continua não sendo benchmark.
+- **Testcontainers:** `bun run test:containers` passou com 20 testes e 94 assertions; no rerun desta revisão, startup
+  foi 26,92 s e testes 9,46 s. A comparação pontual com Compose continua não sendo benchmark.
 - **Smoke e proteção:** `demo:finance` e `smoke:sqs-worker` passaram contra a stack Compose já em execução; o segundo
   publicou dois envelopes distintos ao worker real e verificou uma única BET, saldo 99.00 e ledger reconciliado.
   `test/edge/protected-mode.test.ts` passou 12 testes e 85 assertions em um projeto isolado.
-- **Pages:** uma nova execução de `bun run site:build` passou em `2b69cbb` e validou 375 links do repositório; a
-  execução final após este adendo é registrada junto ao SHA final no relatório de release.
+- **Pages:** `bun run site:build` passou em `a415235` e validou 376 links do repositório; a execução após este ajuste
+  de documentação é registrada junto ao SHA final no relatório de release.
 - **Limite de imagem:** o Dockerfile versionado permaneceu por mais de dois minutos parado em `bun install` mesmo com
   proxy e CA configurados; o build foi interrompido sem produzir uma imagem. O smoke SQS usou a stack real já
   disponível, portanto não comprova rebuild do Dockerfile desta rodada.

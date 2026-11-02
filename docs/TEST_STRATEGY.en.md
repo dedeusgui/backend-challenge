@@ -16,6 +16,7 @@ what mutation evidence says about whether they can fail.
 | `bun run format:check`     | Prettier                                                                                                                                                                                                          | none                          |
 | `bun run test:unit`        | `test/unit`: domain rules, pure logic, log and metric shapes, the auth rules, the worker loops                                                                                                                    | none                          |
 | `bun run test:integration` | `test/integration`: schema and migrations, persistence, use cases, messaging, faults, the auth table                                                                                                              | PostgreSQL and LocalStack     |
+| `bun run test:containers`  | optional pilot: starts PostgreSQL and LocalStack in temporary containers and runs six representative files; accepts explicit file paths after `--`                                                                | Testcontainers and Docker     |
 | `bun run test:concurrency` | `test/concurrency`: parallel connections, three API processes and two workers, crashes, shutdown                                                                                                                  | PostgreSQL and LocalStack     |
 | `bun run test:e2e`         | `test/e2e`: the Nest application over HTTP, with API keys and the input contract (malformed input is 400)                                                                                                         | PostgreSQL and LocalStack     |
 | `bun run test:load`        | `test/load`: optional load run per CPU count; writes `docs/load/results` and `docs/LOAD_TEST_RESULTS.md`, or `LOAD_RESULTS_DIR` and `LOAD_REPORT_PATH` when set                                                   | PostgreSQL and LocalStack     |
@@ -35,6 +36,39 @@ it runs on.
 Start the infrastructure with `bun run infra:up`. The suites read `DATABASE_URL` (default
 `postgresql://wagering:wagering@localhost:5432/wagering`) and `SQS_ENDPOINT` (default
 `http://localhost:4566`).
+
+### Optional Testcontainers pilot
+
+Compose remains the primary path for development and for the `bun run check:all` gate. The optional local
+`bun run test:containers` command runs a selected test set without starting the Compose stack. Each invocation starts
+It requires an accessible Docker daemon. Each invocation starts PostgreSQL 17 and LocalStack 4.14 on dynamic ports,
+creates their test resources, and removes the containers when it exits. By default, it runs six files: test-database cleanup, SQS queue creation, wallet persistence, broker redrive,
+the process cluster and the three-process tests.
+
+To pass one or more explicit files, put `--` before their paths:
+
+```bash
+bun run test:containers -- test/integration/persistence/wallet-persistence.test.ts
+```
+
+`SIGINT` and `SIGTERM` handling was validated: the runner stops the test process and attempts to stop the containers.
+Sending `SIGKILL` to the runner itself was not validated and does not allow process cleanup. A deliberately failing
+probe returned exit code 1, preserved `test-output.log`, `test-error.log`, `postgres.log`, `localstack.log` and
+`failure.txt` in the directory set by `TESTCONTAINERS_DIAGNOSTICS_DIR`, and removed the containers.
+
+#### Observed results
+
+The pilot was run with Bun 1.4.4 against code commit `9eb46c0b0745879a34d37558a40fe932a90698ac`, using PostgreSQL
+17 and LocalStack 4.14. Across two clean runs, each run passed 20/20 tests, with 94 assertions in six files:
+
+| Run | Container startup |   Tests |
+| --- | ----------------: | ------: |
+| 1   |           22.96 s |  8.51 s |
+| 2   |           35.53 s | 10.27 s |
+
+A Compose comparison recorded 19.01 s for a single cold start plus 7.82 s of tests; with the Compose stack already
+warm, tests took 7.82 s. This is one observation, not a benchmark or a basis to claim that either option is faster.
+CI still starts Compose and runs `check:all`; the pilot was not added to the workflow.
 
 ## What the spec asks for, and where each item is proven
 

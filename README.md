@@ -30,27 +30,27 @@ documentação: [docs/README.md](docs/README.md).
 
 ## Onde está cada coisa
 
-| Pergunta                                      | Resposta                                                                | Onde                                                                                                     |
-| --------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| O que o desafio pede?                         | o enunciado, sem alterações                                             | [docs/CHALLENGE.md](docs/CHALLENGE.md)                                                                   |
-| Como o trabalho foi conduzido?                | ciclo de desenvolvimento, episódios, fatias e revisões                  | [Como o trabalho foi conduzido](#como-o-trabalho-foi-conduzido)                                          |
-| Por onde começar a avaliação?                 | roteiro com tempo estimado e o que cada passo prova                     | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md)                                                         |
-| Cada requisito tem uma prova?                 | matriz de requisito para teste, com o status de cada linha              | [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md)                                               |
-| Como o sistema é organizado?                  | camadas, fluxos, invariantes, trade-offs e limitações                   | [ARCHITECTURE.md](ARCHITECTURE.md)                                                                       |
-| Por que cada escolha?                         | decisões, alternativas e evidência                                      | [DECISIONS.md](DECISIONS.md) e [docs/adr/](docs/adr/README.md)                                           |
-| Como o dinheiro é representado?               | `Money`, sobre decimal, sem `number`                                    | [src/shared/domain/money.ts](src/shared/domain/money.ts)                                                 |
-| Como saldo e ledger são protegidos?           | trava por carteira, versão, triggers de imutabilidade e de concordância | [src/modules/wallet/](src/modules/wallet/) e [migrações](src/shared/infrastructure/database/migrations/) |
-| Onde mora a regra de liquidação?              | entidade e serviço de liquidação, chamados pela HTTP e pela fila        | [transaction-settlement.ts](src/modules/wagering/application/transaction-settlement.ts)                  |
-| Como a mensageria funciona?                   | inbox, outbox, consumidor, publicador, DLQ e quarentena                 | [src/modules/messaging/](src/modules/messaging/)                                                         |
-| Quais testes provam o quê?                    | suítes por tipo, e o que cada uma não substitui                         | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) e [test/](test/)                                          |
-| Os cenários de negócio, em linguagem legível? | Gherkin executável, com o harness do Cucumber sobre Bun                 | [test/features/](test/features/)                                                                         |
-| Como é a API?                                 | contrato OpenAPI, verificado contra as respostas reais                  | [docs/openapi.json](docs/openapi.json)                                                                   |
-| Quanto o sistema aguenta?                     | duas medições: baseline local (13 cenários) e de nuvem (1, 2 e 4 CPUs)  | [Desempenho medido](#desempenho-medido)                                                                  |
-| O que foi auditado de forma adversarial?      | achados, experimentos e a prova de cada garantia                        | [docs/audit/README.md](docs/audit/README.md)                                                             |
-| Como a automação de segurança está configurada? | workflows e limites dos resultados observados                          | [docs/SECURITY_AUTOMATION.md](docs/SECURITY_AUTOMATION.md)                                              |
-| O que ainda está em aberto?                   | decisões do dono e limitações                                           | [Limitações e decisões em aberto](#limitações-e-decisões-em-aberto)                                      |
-| Como o projeto se compara a outras soluções?  | o que foi adotado, o que já existia e o que não foi adotado             | [Comparação com outras implementações](#comparação-com-outras-implementações)                            |
-| Como a solução está publicada?                | vitrine estática, gerada a partir do repositório                        | [vitrine técnica](https://dedeusgui.github.io/backend-challenge/)                                        |
+| Pergunta                                        | Resposta                                                                | Onde                                                                                                     |
+| ----------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| O que o desafio pede?                           | o enunciado, sem alterações                                             | [docs/CHALLENGE.md](docs/CHALLENGE.md)                                                                   |
+| Como o trabalho foi conduzido?                  | ciclo de desenvolvimento, episódios, fatias e revisões                  | [Como o trabalho foi conduzido](#como-o-trabalho-foi-conduzido)                                          |
+| Por onde começar a avaliação?                   | roteiro com tempo estimado e o que cada passo prova                     | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md)                                                         |
+| Cada requisito tem uma prova?                   | matriz de requisito para teste, com o status de cada linha              | [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md)                                               |
+| Como o sistema é organizado?                    | camadas, fluxos, invariantes, trade-offs e limitações                   | [ARCHITECTURE.md](ARCHITECTURE.md)                                                                       |
+| Por que cada escolha?                           | decisões, alternativas e evidência                                      | [DECISIONS.md](DECISIONS.md) e [docs/adr/](docs/adr/README.md)                                           |
+| Como o dinheiro é representado?                 | `Money`, sobre decimal, sem `number`                                    | [src/shared/domain/money.ts](src/shared/domain/money.ts)                                                 |
+| Como saldo e ledger são protegidos?             | trava por carteira, versão, triggers de imutabilidade e de concordância | [src/modules/wallet/](src/modules/wallet/) e [migrações](src/shared/infrastructure/database/migrations/) |
+| Onde mora a regra de liquidação?                | entidade e serviço de liquidação, chamados pela HTTP e pela fila        | [transaction-settlement.ts](src/modules/wagering/application/transaction-settlement.ts)                  |
+| Como a mensageria funciona?                     | inbox, outbox, consumidor, publicador, DLQ e quarentena                 | [src/modules/messaging/](src/modules/messaging/)                                                         |
+| Quais testes provam o quê?                      | suítes por tipo, e o que cada uma não substitui                         | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) e [test/](test/)                                          |
+| Os cenários de negócio, em linguagem legível?   | Gherkin executável, com o harness do Cucumber sobre Bun                 | [test/features/](test/features/)                                                                         |
+| Como é a API?                                   | contrato OpenAPI, verificado contra as respostas reais                  | [docs/openapi.json](docs/openapi.json)                                                                   |
+| Quanto o sistema aguenta?                       | duas medições: baseline local (13 cenários) e de nuvem (1, 2 e 4 CPUs)  | [Desempenho medido](#desempenho-medido)                                                                  |
+| O que foi auditado de forma adversarial?        | achados, experimentos e a prova de cada garantia                        | [docs/audit/README.md](docs/audit/README.md)                                                             |
+| Como a automação de segurança está configurada? | workflows e limites dos resultados observados                           | [docs/SECURITY_AUTOMATION.md](docs/SECURITY_AUTOMATION.md)                                               |
+| O que ainda está em aberto?                     | decisões do dono e limitações                                           | [Limitações e decisões em aberto](#limitações-e-decisões-em-aberto)                                      |
+| Como o projeto se compara a outras soluções?    | o que foi adotado, o que já existia e o que não foi adotado             | [Comparação com outras implementações](#comparação-com-outras-implementações)                            |
+| Como a solução está publicada?                  | vitrine estática, gerada a partir do repositório                        | [vitrine técnica](https://dedeusgui.github.io/backend-challenge/)                                        |
 
 ## Como o projeto responde à avaliação (§14)
 
@@ -425,6 +425,7 @@ medições com LocalStack, não AWS SQS; não há soak test prolongado nem SLO d
 | `bun run check:fast`       | tipos, lint, formato e testes unitários, sem infraestrutura                                                                 |
 | `bun run check:all`        | o gate completo: tudo acima, mais infraestrutura, integração, concorrência, e2e e Gherkin. É o que o CI roda                |
 | `bun run test:integration` | PostgreSQL e LocalStack reais: esquema, persistência, mensageria, falhas                                                    |
+| `bun run test:containers`  | piloto local opcional com containers efêmeros; detalhes e limites em [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)         |
 | `bun run test:concurrency` | conexões paralelas, três processos da API, worker morto ou parado                                                           |
 | `bun run test:e2e`         | a aplicação HTTP, com chaves de API                                                                                         |
 | `bun run test:features`    | os cenários Gherkin de `test/features/`, executados pelo Cucumber sobre Bun                                                 |

@@ -51,7 +51,7 @@ Solution to the [technical challenge](docs/CHALLENGE.md). Full documentation ind
 | What does the API look like?                       | OpenAPI contract, checked against the real responses                        | [docs/openapi.json](docs/openapi.json)                                                                      |
 | How much can the system take?                      | two measurements: local baseline (13 scenarios) and cloud (1, 2 and 4 CPUs) | [Measured performance](#measured-performance)                                                               |
 | What was audited adversarially?                    | findings, experiments and the proof of each guarantee                       | [docs/audit/README.md](docs/audit/README.md) (Portuguese)                                                   |
-| How is security automation configured?             | workflows and limits of the observed results                                  | [docs/SECURITY_AUTOMATION.en.md](docs/SECURITY_AUTOMATION.en.md)                                             |
+| How is security automation configured?             | workflows and limits of the observed results                                | [docs/SECURITY_AUTOMATION.en.md](docs/SECURITY_AUTOMATION.en.md)                                            |
 | What is still open?                                | owner decisions and limitations                                             | [Limitations and open decisions](#limitations-and-open-decisions)                                           |
 | How does the project compare with other solutions? | what was adopted, what already existed and what was not adopted             | [Comparison with other implementations](#comparison-with-other-implementations)                             |
 | How is the solution published?                     | static showcase, generated from the repository                              | [technical showcase](https://dedeusgui.github.io/backend-challenge/)                                        |
@@ -430,6 +430,7 @@ LocalStack measurements, not AWS SQS; there is no long soak test and no validate
 | `bun run check:fast`       | typecheck, lint, format and unit tests, with no infrastructure                                                                    |
 | `bun run check:all`        | the full gate: everything above, plus infrastructure, integration, concurrency, e2e and Gherkin. This is what CI runs             |
 | `bun run test:integration` | real PostgreSQL and LocalStack: schema, persistence, messaging, faults                                                            |
+| `bun run test:containers`  | optional local pilot with temporary containers; details and limits in [docs/TEST_STRATEGY.en.md](docs/TEST_STRATEGY.en.md)        |
 | `bun run test:concurrency` | parallel connections, three API processes, a worker killed or stopped                                                             |
 | `bun run test:e2e`         | the HTTP application, with API keys                                                                                               |
 | `bun run test:features`    | the Gherkin scenarios of `test/features/`, run by Cucumber on Bun                                                                 |

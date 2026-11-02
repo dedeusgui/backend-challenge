@@ -40,6 +40,10 @@ o e2e, contra PostgreSQL 17 e LocalStack reais. Os números de cada suíte mudam
 exige que todos passem. Neste ambiente, as suítes levaram cerca de 100 s: unitários 6 s, integração 61 s, concorrência
 26 s e e2e 3 s, sem contar a subida da infraestrutura.
 
+O comando recomendado continua sendo o gate sobre a stack Compose. Para um piloto local alternativo, use
+`bun run test:containers`; para escolher arquivos, acrescente `-- <arquivo>`. Os resultados medidos e os limites do
+piloto estão em [TEST_STRATEGY.md](TEST_STRATEGY.md), incluindo o que não foi testado sobre `SIGKILL`.
+
 ### Verificador SQL read-only
 
 Com a stack em execução e as migrações aplicadas, este comando inspeciona o banco em uma transação read-only:

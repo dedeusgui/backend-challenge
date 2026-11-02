@@ -19,8 +19,8 @@ rollback do ganho. Ela confere cada saldo, recusa um segundo rollback, repete um
 do ledger com o saldo e com a reconciliação. Cada passo imprime o que foi observado. Ela não simula nada: chama a API.
 
 Se `docker compose up --build` falhar num ambiente com proxy TLS que bloqueia o download de pacotes durante o build,
-o problema é do ambiente, não da aplicação. A imagem também é construída pelo CI (execução `41251559996`), e
-[ARCHITECTURE.md §14](../ARCHITECTURE.md) descreve o contorno usado na sandbox.
+consulte [ARCHITECTURE.md §14](../ARCHITECTURE.md) para a limitação observada naquele ambiente. A execução antiga
+`41251559996` é histórica e não comprova build nem CI do HEAD atual.
 
 ## 2. Ler a arquitetura, pela tabela de decisões (5 min)
 
@@ -41,7 +41,7 @@ execução que informa SHA e runner, sem tratar medições antigas como atuais.
 
 O comando recomendado continua sendo o gate sobre a stack Compose. Para um piloto local alternativo, use
 `bun run test:containers`; para escolher arquivos, acrescente `-- <arquivo>`. Os resultados medidos e os limites do
-piloto estão em [TEST_STRATEGY.md](TEST_STRATEGY.md), incluindo o que não foi testado sobre `SIGKILL`.
+piloto estão em [TEST_STRATEGY.md](TEST_STRATEGY.md), incluindo os pontos de falha cobertos com `SIGKILL`.
 
 ### Verificador SQL read-only
 
@@ -57,11 +57,12 @@ de `Money` em TypeScript, a ausência de lock global ou a publicação após com
 
 ## 4. Os três testes que mais importam (5 min)
 
-| Requisito                                        | Comando                                                                                      | O que observar                                         |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 50 apostas idênticas em paralelo, três processos | `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`            | um débito; as outras são replays                       |
-| Disputa pelo mesmo saldo (cenário da §8)         | `bun test test/concurrency/hot-wallet.test.ts`                                               | exatamente uma aposta de 80.00 é aplicada sobre 100.00 |
-| Worker morto depois do commit e antes do ACK     | `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"` | a reentrega aplica uma vez; saldo e ledger batem       |
+| Requisito                                        | Comando                                                                                              | O que observar                                         |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 50 apostas idênticas em paralelo, três processos | `bun test test/concurrency/three-processes.test.ts -t "fifty identical requests"`                    | um débito; as outras são replays                       |
+| Disputa pelo mesmo saldo (cenário da §8)         | `bun test test/concurrency/hot-wallet.test.ts`                                                       | exatamente uma aposta de 80.00 é aplicada sobre 100.00 |
+| Worker morto depois do commit e antes do ACK     | `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`         | a reentrega aplica uma vez; saldo e ledger batem       |
+| API morta depois do commit e antes da resposta   | `bun test test/concurrency/process-crash-and-shutdown.test.ts -t "HTTP process killed after commit"` | o retry devolve replay; débito e evento não duplicam   |
 
 Para ver que os testes de concorrência não estão vazios, veja as mutações registradas em
 [TEST_STRATEGY.md](TEST_STRATEGY.md), na seção "Evidência de mutação": removendo a trava ou a guarda de versão, o teste falha.
@@ -73,10 +74,10 @@ Para qualquer outra garantia, o índice [audit/README.md](audit/README.md) apont
 - `test/e2e/auth-http.test.ts`: o que cada papel pode fazer.
 - `test/e2e/authorization-adversarial.test.ts`: 28 tentativas de contornar a regra, por caminho, por cabeçalho,
   por identificador e por chave revogada.
-- A decisão que você deve questionar: uma chave de provedor que pede a transação de **outro** provedor, pelo id
-  interno, recebe `404`, a mesma resposta de um id inexistente. Antes isso era `403`, o que revelava que o id
-  existia. A mudança altera um status documentado e aguarda confirmação do dono do desafio; ver
-  [ARCHITECTURE.md §12](../ARCHITECTURE.md) e `docs/audit/FINDINGS.md`.
+- A decisão aplicada: uma chave de provedor que pede a transação de **outro** provedor, pelo id interno,
+  recebe `404`, igual a um id inexistente. O teste adversarial comprova o isolamento e evita revelar existência.
+  O achado de implementação F-03 está fechado; a questão de contrato histórico está registrada em
+  [AUDITORIA_FINAL.md](AUDITORIA_FINAL.md).
 
 ## 6. Contrato HTTP (5 min)
 
@@ -88,14 +89,18 @@ achou uma divergência, e o contrato foi corrigido: `seq` do ledger é texto.
 ## 7. Modo protegido e exposição de portas (5 min)
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
-bun run test:edge
-docker compose -f docker-compose.yml -f docker-compose.protected.yml down
+export COMPOSE_PROJECT_NAME="edge-review-$(date +%s)"
+export EDGE_NETWORK="${COMPOSE_PROJECT_NAME}_default"
+export EDGE_HOST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+bun run edge:check
 ```
 
 No modo padrão, PostgreSQL, LocalStack e a API publicam porta apenas em `127.0.0.1`. No modo protegido, só a borda
 publica, também em `127.0.0.1`. `test/infra` e o `test:edge` verificam isso no Compose efetivo e no contêiner em
 execução.
+
+O job `protected-edge` executa esse mesmo comando com nome de projeto, rede e porta exclusivos para cada execução
+do CI; os logs do Compose são anexados se o teste falhar.
 
 ## 8. Mensageria: o que é garantido e o que não é
 
@@ -109,6 +114,11 @@ Desde esta rodada, o lease e o reagendamento do outbox são decididos pelo reló
 (`database-clock-references.test.ts`). Uma mensagem em voo é renovada enquanto o seu comando roda, até 300 s
 (`slow-message-hold.test.ts`). Uma retenção com falha permanente vira `FAILED` e é anunciada como
 `WagerTransactionFailed`, evento que a especificação não lista (ver F-13 em [FINDINGS.md](audit/FINDINGS.md)).
+
+Para verificar o consumidor real da stack, suba o Compose completo e execute `bun run smoke:sqs-worker` com
+`API_URL`, `DATABASE_URL` e `SQS_ENDPOINT` apontando para a stack. O smoke abre uma carteira pela API, envia dois
+comandos distintos para a fila FIFO (o segundo repete a mesma operação financeira), aguarda o worker do Compose,
+confere saldo, status e ledger pelo PostgreSQL/API e exige um único débito. Ele não instancia um consumer de teste.
 
 ## 9. O que não foi feito, e por quê
 

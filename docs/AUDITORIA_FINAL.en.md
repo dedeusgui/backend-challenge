@@ -171,3 +171,39 @@ History of simulated reviews with internal estimated scores (not an evaluation p
 CodeQL, Trivy, Dependency Review and Dependabot workflows are configured; their configuration and triggers are
 documented in [SECURITY_AUTOMATION.en.md](SECURITY_AUTOMATION.en.md). Hosted GitHub results and pull request runs
 were not executed or reviewed in this audit.
+
+## 9. Final review update (2026-11-02)
+
+Sections 1–8 above remain the historical snapshot for commit `bffe108`. This round's code and workflows start from
+`37ff489`; local commits are `e486d38` (real-worker SQS smoke, Money properties and protected-mode isolation) and
+`b85af0e` (manual dispatch, protected job and SBOM). The results below are local checks, not hosted results or proof
+of CI on a published SHA.
+
+- **Financial decisions:** D1–D4 were confirmed on 2026-11-01. An unreferenced WIN still cannot be associated with a
+  BET to prove uniqueness; D2 remains an individual reversal with no cascade. A ROLLBACK held before its BET is
+  applied once the BET arrives in `test/integration/wagering/pending-reference.test.ts`.
+- **F-03 and F-13:** the implementation defects are closed with regression tests: uniform 404 for another provider's
+  transaction (`test/e2e/authorization-adversarial.test.ts`) and a terminal `FAILED` path with an event for permanent
+  failure (`test/integration/wagering/held-failure.test.ts`). The historical question about these details, which are
+  not stated literally in the challenge, is a contract question rather than an unfixed defect.
+- **HTTP crashes:** `test/concurrency/process-crash-and-shutdown.test.ts` kills the API before commit and after commit,
+  before the response. The post-commit retry returns a replay and preserves one financial debit, one row and one event.
+- **Local gates:** `bun install --frozen-lockfile`, `bun run agent:verify` (538 unit tests, 19,891 assertions),
+  `bun run check:all` and `bun run check:financial-invariants` passed. Cucumber produced 73/73 scenarios and 438/438
+  steps passed; two `@bloqueado` scenarios remain excluded. The SQL verifier returned zero for INV-1 through INV-11
+  and expected 17 migrations in INV-12.
+- **Testcontainers:** `bun run test:containers` passed with 20 tests and 94 assertions; startup measured 35.85 s and
+  tests 9.07 s. The point-in-time Compose comparison remains a non-benchmark.
+- **Runtime and protection smoke:** `demo:finance` and `smoke:sqs-worker` passed against the already-running Compose
+  stack; the latter sent two distinct envelopes to the real worker and verified one BET, balance 99.00 and a
+  reconciled ledger. `test/edge/protected-mode.test.ts` passed 12 tests and 85 assertions in an isolated project.
+- **Pages:** `site:build` passed, but the observed run before the commits still embedded `37ff489`; it will be repeated
+  on the final documentation commit.
+- **Image build limit:** the versioned Dockerfile stayed at `bun install` for over two minutes even with proxy and CA
+  configured; the build was stopped without producing an image. The SQS smoke used the real stack already available,
+  so it does not prove a rebuild of this round's Dockerfile.
+- **GitHub Actions and security:** the public checks page for `37ff489` said “There are no checks for this commit”,
+  and the inspected Actions list ended at `2a2fb182`. The repository cannot show which credential created the push or
+  the organization settings. This executor has no valid GitHub credential and could not resolve `github.com`; no PR,
+  `workflow_dispatch`, hosted Dependency Review, CodeQL, Trivy or SBOM run occurred this round. Workflow changes are
+  not represented as passing checks.

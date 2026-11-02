@@ -25,7 +25,7 @@ numbered sections below develop them, and the ADRs and `DECISIONS.md` keep the a
 | One settlement path for HTTP, the queue and the worker (§1)          | The financial rule exists in one implementation.                                                                            | Requests and messages share one use case.                        | `test/concurrency/distributed-contention.test.ts`                                  | [DECISIONS.md](DECISIONS.en.md)                                    |
 | API keys with two roles, and provider scope (§12)                    | Identity without an identity provider, stated and tested.                                                                   | No rotation or login, and plain HTTP.                            | `test/e2e/auth-http.test.ts`                                                       | [ADR 0007](docs/adr/0007-api-key-authentication.en.md)             |
 | A stable failure code and a status per outcome (§3, §10)             | A provider decides from the code whether to resend, correct or give up.                                                     | Codes are a contract, and renaming one is breaking.              | `test/e2e/wagering-http.test.ts`, `test/e2e/input-contract-http.test.ts`           | [DECISIONS.md](DECISIONS.en.md)                                    |
-| Each open question of the specification, decided and tested (§13)    | Every gap is decided in one place, tested, and marked for the owner.                                                        | Some readings need the owner's confirmation, and §13 says which. | `test/unit`, `test/integration`                                                    | [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md)            |
+| Specification interpretations documented and tested (§13)            | Each interpretation has a decision, tests and explicit limits.                                                              | D5 (key expiration and rotation) remains out of scope.           | `test/unit`, `test/integration`                                                    | [docs/INVARIANT_REVIEW.md](docs/INVARIANT_REVIEW.en.md)            |
 
 ## 1. Components and boundaries
 
@@ -626,17 +626,17 @@ These are choices the specification leaves open. Each one is tested.
   optional: it requires one only for REFUND and ROLLBACK. A named result is checked against its
   BET, so a second result, or a REFUND after a result, is refused. An unnamed result cannot be tied
   to a BET, so those rules do not apply to it. A REFUND of the same BET may follow an unnamed WIN,
-  and both credits stay. That is the cost of following the specification, and the owner must accept
-  it or require the reference. The win's amount is not bound to the bet's. The owner should
-  confirm this reading.
+  and both credits stay. This follows the specification's optional reference and was confirmed on
+  2026-11-01. The win's amount is not bound to the bet's. The limitation that an unnamed WIN cannot
+  prove uniqueness remains explicit.
 - A `BET` has at most one result. A second WIN or LOSS on it is `REFERENCE_ALREADY_SETTLED`.
   Before this rule a BET could be credited by two WINs.
 - A `REFUND` applies only to a `BET` with no result. After a WIN or a LOSS it is
-  `REFERENCE_ALREADY_SETTLED`. This is the owner's decision.
+  `REFERENCE_ALREADY_SETTLED`. This interpretation was confirmed on 2026-11-01.
 - A `ROLLBACK` applies in every state of the transaction it reverses, with or without a
   result. After a WIN, rolling back the BET returns its stake and the WIN credit stays, so the
-  round is cancelled only when the WIN is rolled back too. This is the owner's decision. Its
-  economic effect should be confirmed.
+  round is cancelled only when the WIN is rolled back too. This individual reversal, with no implicit
+  cascade, was confirmed on 2026-11-01.
 - A missing wallet is `404` and writes nothing over HTTP. From the queue it is permanent,
   so the message goes to the dead-letter queue.
 - A currency or player mismatch is a persisted rejection, not an HTTP error, so the
@@ -651,7 +651,7 @@ These are choices the specification leaves open. Each one is tested.
   credits are never duplicated, so the stricter reading is adopted. Enforced in code and by the
   partial unique index `wager_one_processed_reversal_per_reference`. A rolled-back refund does not free
   its BET: a second reversal of the BET is `REFERENCE_ALREADY_REVERSED` (tested). The specification owner
-  should confirm this reading.
+  confirmed this reading on 2026-11-01.
 - `playerId` is the provider's identifier. It is text, not a UUID, although the specification's examples
   use UUIDs. A value that is not a UUID is accepted, and it cannot cause a server error. Control
   characters are refused.
@@ -679,11 +679,11 @@ What is not claimed, and why:
 - **Broker redrive is checked on the provisioned queue** (section 7), not on a queue the test creates.
 - **Metrics are per process.** No aggregation or dashboard.
 - **Fault injection is partial.** Crash after commit and before acknowledgement, and crash
-  before commit, are real process crashes of a worker (exit 137, `test/concurrency`). A
+  before commit, are real worker and HTTP API process crashes (exit 137, `test/concurrency`). A
   SIGTERM during a batch is a real process stop. After the broker accepts and before the mark,
   and during reference resolution, faults are injected around real components in one process.
-  The HTTP API is not crashed at process level inside a transaction: a provider's retry under
-  the same idempotency key is covered in-process only.
+  `test/concurrency/process-crash-and-shutdown.test.ts` kills the API after commit and before the response;
+  a new API retries the same operation and confirms the result was not duplicated.
 - **Restart after a crash is configuration, not a test.** Compose restarts the `api` and
   `worker` services unless they were stopped (`restart: unless-stopped`). `docker compose
 config` validates the file. No test starts a container and kills it.

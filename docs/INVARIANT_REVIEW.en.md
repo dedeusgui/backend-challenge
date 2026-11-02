@@ -82,10 +82,11 @@ Defects 1 and 2 were double credits. Defect 3 made 1 and 2 impossible to check. 
 were rules that only the domain enforced. Defect 7 was caught by two existing tests, not by
 reasoning, which is why the full gate ran before each commit.
 
-## 2. Decisions that need the owner
+## 2. Decisions and owner questions
 
-These are interpretations, not facts from the specification. Each is written into ARCHITECTURE
-section 13, and each changes behaviour that a provider sees.
+These are interpretations, not literal facts from the specification. D1–D4 were confirmed on 2026-11-01;
+D5 and the remaining limitations are recorded so the implementation does not imply guarantees it lacks.
+Each decision is written into ARCHITECTURE section 13 and changes behaviour that a provider sees.
 
 | #   | Decision                                                                                                                                        | Why                                                                                                                              | Risk if the owner disagrees                                                                                                                                                                 |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -269,15 +270,16 @@ Not enforced by the database, and why:
 | ARCHITECTURE section 13: one reversal per reference (D4)                  | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01; additional interpretation to rule 4                         |
 | Section 13: WIN and LOSS may name their BET (D1)                          | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01; an unreferenced WIN does not demonstrate uniqueness per BET |
 | Section 13: one result per BET, REFUND only without a result (D3)         | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01                                                              |
-| Section 13: ROLLBACK in every state (D2)                                  | `ARCHITECTURE.md`    | Implemented. Confirmed on 2026-11-01. Economic effect to confirm                                  |
+| Section 13: ROLLBACK in every state (D2)                                  | `ARCHITECTURE.md`    | Implemented. Economic effect confirmed on 2026-11-01; individual reversal, no implicit cascade    |
 | Section 13: player and currency mismatch is a persisted REJECTED row (D6) | `ARCHITECTURE.md`    | Implemented                                                                                       |
 | Section 13: OPENING under the internal provider id `system`               | `ARCHITECTURE.md`    | Implemented                                                                                       |
 | Compose restarts api and worker (not covered by a test)                   | `docker-compose.yml` | Configuration only. Checked with `docker compose config`                                          |
 
 ## 6. Gaps that remain, and what they mean
 
-- **An HTTP crash after commit but before the response** is not yet injected at the process level. A crash inside an
-  open transaction and recovery through a retry are covered by `test/concurrency/process-crash-and-shutdown.test.ts`.
+- **An HTTP crash after commit but before the response** is covered at the process level by
+  `test/concurrency/process-crash-and-shutdown.test.ts`: the new API retries the operation, and the test checks a
+  replay, one debit and one event.
 - **Keys do not expire or rotate**, and the API serves plain HTTP. A real deployment must add TLS
   and an identity provider (D5).
 - **Queue messages are not authenticated.** The challenge treats the queue as an internal channel.
@@ -287,6 +289,14 @@ Not enforced by the database, and why:
 - **Reconciliation is on demand**, with no schedule.
 - **The remaining matrix labels are descriptive.** Each cites a file that exists, and the named
   tests in this document were checked by name.
+
+### HEAD status update (2026-11-02)
+
+This addendum does not change the historical results above. D1–D4 were confirmed in the 2026-11-01 instruction;
+a ROLLBACK held before its BET and applied once the BET arrives remains covered by
+`test/integration/wagering/pending-reference.test.ts`. Implementation defects F-03 and F-13 are closed with regression
+tests; the audit distinguishes those fixes from contract details not stated literally in the challenge. HTTP crash
+coverage after commit is in `test/concurrency/process-crash-and-shutdown.test.ts`.
 
 ## 7. How this review was checked
 

@@ -80,10 +80,11 @@ Os defeitos 1 e 2 eram créditos duplicados. O defeito 3 tornava 1 e 2 impossív
 eram regras que apenas o domínio impunha. O defeito 7 foi capturado por dois testes existentes, não por
 raciocínio teórico, razão pela qual a verificação completa (gate) executou antes de cada commit.
 
-## 2. Decisões que dependem do proprietário
+## 2. Decisões e questões do proprietário
 
-Estas são interpretações, não fatos da especificação. Cada uma está documentada em ARCHITECTURE
-seção 13, e cada uma altera o comportamento observado por um provedor.
+Estas são interpretações, não fatos literais da especificação. D1–D4 foram confirmadas em 2026-11-01;
+D5 e as demais limitações continuam registradas para evitar que a implementação sugira garantias inexistentes.
+Cada decisão está documentada em ARCHITECTURE seção 13 e altera o comportamento observado por um provedor.
 
 | #   | Decisão                                                                                                                                 | Motivo                                                                                                                      | Risco caso o proprietário discorde                                                                                                                                               |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -274,8 +275,9 @@ Não imposto pelo banco de dados, e o porquê:
 
 ## 6. Lacunas remanescentes e o que significam
 
-- **Crash HTTP após o commit, antes da resposta** ainda não é injetado em nível de processo. O crash durante uma
-  transação aberta e a recuperação com uma retentativa são cobertos por `test/concurrency/process-crash-and-shutdown.test.ts`.
+- **Crash HTTP após o commit, antes da resposta** é coberto em nível de processo por
+  `test/concurrency/process-crash-and-shutdown.test.ts`: a nova API repete a operação e o teste confere replay,
+  um único débito e um único evento.
 - **Chaves não expiram nem rotacionam**, e a API atende em HTTP simples. Uma implantação real deve adicionar TLS
   e um provedor de identidade (D5).
 - **Mensagens da fila não são autenticadas.** O desafio trata a fila como um canal interno.
@@ -285,6 +287,15 @@ Não imposto pelo banco de dados, e o porquê:
 - **A reconciliação é sob demanda**, sem cronograma automatizado.
 - **Os identificadores restantes da matriz são descritivos.** Cada um cita um arquivo que existe, e os testes
   mencionados neste documento foram verificados por nome.
+
+### Estado posterior do HEAD (2026-11-02)
+
+Este complemento não altera os resultados históricos acima. D1–D4 estão confirmadas na instrução de 2026-11-01;
+ROLLBACK retido antes da BET e aplicado após sua chegada continua coberto por
+`test/integration/wagering/pending-reference.test.ts`. Os defeitos de implementação F-03 e F-13 estão fechados e
+possuem testes de regressão; a auditoria distingue essas correções da confirmação de detalhes contratuais que não
+constam literalmente no enunciado. A cobertura de crash HTTP após commit está em
+`test/concurrency/process-crash-and-shutdown.test.ts`.
 
 ## 7. Como esta revisão foi checada
 

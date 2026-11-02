@@ -40,8 +40,8 @@ Start the infrastructure with `bun run infra:up`. The suites read `DATABASE_URL`
 ### Optional Testcontainers pilot
 
 Compose remains the primary path for development and for the `bun run check:all` gate. The optional local
-`bun run test:containers` command runs a selected test set without starting the Compose stack. Each invocation starts
-It requires an accessible Docker daemon. Each invocation starts PostgreSQL 17 and LocalStack 4.14 on dynamic ports,
+`bun run test:containers` command runs a selected test set without starting the Compose stack. It requires an
+accessible Docker daemon. Each invocation starts PostgreSQL 17 and LocalStack 4.14 on dynamic ports,
 creates their test resources, and removes the containers when it exits. By default, it runs six files: test-database cleanup, SQS queue creation, wallet persistence, broker redrive,
 the process cluster and the three-process tests.
 
@@ -56,10 +56,12 @@ Sending `SIGKILL` to the runner itself was not validated and does not allow proc
 probe returned exit code 1, preserved `test-output.log`, `test-error.log`, `postgres.log`, `localstack.log` and
 `failure.txt` in the directory set by `TESTCONTAINERS_DIAGNOSTICS_DIR`, and removed the containers.
 
-#### Observed results
+#### Historical pilot results
 
-The pilot was run with Bun 1.4.4 against code commit `9eb46c0b0745879a34d37558a40fe932a90698ac`, using PostgreSQL
-17 and LocalStack 4.14. Across two clean runs, each run passed 20/20 tests, with 94 assertions in six files:
+The two measurements below came from clean runs before commit `9eb46c0b0745879a34d37558a40fe932a90698ac` and before
+the small output-capture change. They are historical results with no association to the current SHA. A new run of the
+battery at that commit is pending; these numbers must not be used as evidence for it. Each earlier run passed 20/20
+tests, with 94 assertions in six files:
 
 | Run | Container startup |   Tests |
 | --- | ----------------: | ------: |
@@ -68,7 +70,10 @@ The pilot was run with Bun 1.4.4 against code commit `9eb46c0b0745879a34d37558a4
 
 A Compose comparison recorded 19.01 s for a single cold start plus 7.82 s of tests; with the Compose stack already
 warm, tests took 7.82 s. This is one observation, not a benchmark or a basis to claim that either option is faster.
-CI still starts Compose and runs `check:all`; the pilot was not added to the workflow.
+
+The `.github/workflows/ci.yml` workflow already has a dedicated `testcontainers` job that runs
+`bun run test:containers`. The job is configured, but its hosted execution has not yet been observed. Compose remains
+the primary development path and is used by the `check:all` gate.
 
 ## What the spec asks for, and where each item is proven
 

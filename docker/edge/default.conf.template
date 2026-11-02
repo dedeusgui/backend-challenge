@@ -55,12 +55,12 @@ server {
     }
 
     # Writes: a wallet opening and a submission. Their burst is the explicit allowance for a retry storm.
-    location = /wagering/transactions {
+    location ~ ^/wagering/transactions/?$ {
         limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
         include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;
     }
-    location = /wallets {
+    location ~ ^/wallets/?$ {
         limit_req zone=writes burst=${EDGE_WRITE_BURST} nodelay;
         include /etc/nginx/edge/proxy.conf;
         proxy_pass $api;

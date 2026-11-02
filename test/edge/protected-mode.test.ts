@@ -237,6 +237,28 @@ describe('protected mode: the edge is the only way in', () => {
     expect((ledger.json as { entries: unknown[] }).entries).toHaveLength(2);
   });
 
+  test('wallet creation remains under the write limit with a trailing slash', async () => {
+    await sleep(QUOTA_WINDOW_MS);
+
+    const statuses = await Promise.all(
+      Array.from({ length: 42 }, () => send('POST', '/wallets/').then((result) => result.status)),
+    );
+
+    expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0);
+  });
+
+  test('transaction submission remains under the write limit with a trailing slash', async () => {
+    await sleep(QUOTA_WINDOW_MS);
+
+    const statuses = await Promise.all(
+      Array.from({ length: 42 }, () =>
+        send('POST', '/wagering/transactions/').then((result) => result.status),
+      ),
+    );
+
+    expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0);
+  });
+
   test('a request without a key is refused by the API, through the edge, with its own code', async () => {
     const result = await send('GET', `/wallets/${walletId}`);
 

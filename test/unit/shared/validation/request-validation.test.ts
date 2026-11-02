@@ -49,6 +49,9 @@ describe('expectText', () => {
     ['a tab', 'a\tb'],
     ['a newline', 'a\nb'],
     ['DEL', 'a\u007fb'],
+    ['C1 control U+0080', 'a\u0080b'],
+    ['C1 control U+0085', 'a\u0085b'],
+    ['C1 control U+009F', 'a\u009fb'],
   ])('refuses %s', (_label, value) => {
     expect(rejectionOf(() => expectText(value, 'externalTransactionId'))).toBeInstanceOf(
       RequestValidationError,

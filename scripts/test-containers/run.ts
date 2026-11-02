@@ -25,6 +25,17 @@ const postgresLogs: string[] = [];
 const localstackLogs: string[] = [];
 const startupStartedAt = performance.now();
 let startupMs: number | undefined;
+let requestedSignal: NodeJS.Signals | undefined;
+let testProcess: ReturnType<typeof Bun.spawn> | undefined;
+
+function handleSignal(signal: NodeJS.Signals) {
+  requestedSignal ??= signal;
+  status = requestedSignal === 'SIGINT' ? 130 : 143;
+  testProcess?.kill(requestedSignal);
+}
+
+process.on('SIGINT', handleSignal);
+process.on('SIGTERM', handleSignal);
 
 function captureLogs(chunks: string[]) {
   let bytes = 0;
@@ -75,13 +86,24 @@ try {
     TEST_RESOURCE_NAMESPACE: randomUUID().replaceAll('-', '').slice(0, 12),
   };
   const testsStartedAt = performance.now();
-  const testRun = Bun.spawn([process.execPath, 'test', ...suites], {
-    env: testEnvironment,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  status = await testRun.exited;
-  if (status !== 0) failures.push(new Error(`Test process exited with ${status}`));
+  if (requestedSignal === undefined) {
+    const testRun = Bun.spawn([process.execPath, 'test', ...suites], {
+      env: testEnvironment,
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    testProcess = testRun;
+    const testStatus = await testRun.exited;
+    testProcess = undefined;
+    if (requestedSignal !== undefined) {
+      status = requestedSignal === 'SIGINT' ? 130 : 143;
+    } else {
+      status = testStatus;
+    }
+    if (testStatus !== 0) failures.push(new Error(`Test process exited with ${testStatus}`));
+  } else {
+    status = requestedSignal === 'SIGINT' ? 130 : 143;
+  }
   console.log(
     `[test:containers] startup=${((startupMs ?? 0) / 1000).toFixed(2)}s tests=${((performance.now() - testsStartedAt) / 1000).toFixed(2)}s`,
   );
@@ -89,6 +111,8 @@ try {
   failures.push(error);
   if (status === 0) status = 1;
 } finally {
+  process.off('SIGINT', handleSignal);
+  process.off('SIGTERM', handleSignal);
   for (const container of [localstack, postgres]) {
     if (container !== undefined) {
       try {

@@ -2,7 +2,7 @@
 
 > Reference copy in English. The primary document is [AUDITORIA_FINAL.md](AUDITORIA_FINAL.md).
 
-Final audit record for the submission: audited code, verification methods, status of each quality bar item, findings status, decisions awaiting confirmation from the challenge owner, known gaps not covered by tests, and simulated reviews.
+Final audit record for the historical review scope: audited code, verification methods, quality bar, findings, decisions then recorded as open, known test gaps, and simulated reviews.
 
 Raw execution data is not versioned in the repository.
 
@@ -109,9 +109,9 @@ Confirmation of closure for F-06 is found in migration 12 history (`git log --on
 | F-11 | Results without reference cannot be bounded to one per BET    | Open   | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md).                                     |
 | F-12 | Repository Docker image does not build in sandbox environment | Open   | Sandbox TLS proxy emits self-signed certificate (`SELF_SIGNED_CERT_IN_CHAIN`) during `bun install`. Bypassed in sandbox using an external test image; build verified in GitHub Actions CI. |
 
-## 5. Challenge owner decisions that remain open
+## 5. Decisions recorded as open in that snapshot
 
-Eight decisions remain open awaiting confirmation by the challenge owner. The implementation follows the documented choice in each case.
+This section describes the historical state of the `bffe108` review, not the current state. At that time, eight questions were recorded as awaiting confirmation; D1–D4 were confirmed on 2026-11-01, as noted in the later update. The remaining contract questions are questions for the specification owner, not pending internal approval.
 
 - **F-03 (HTTP status for transaction of another provider):** In `GET /wagering/transactions/:id`, a transaction belonging to another provider returns `404 TRANSACTION_NOT_FOUND`, identical to a non-existent identifier, to avoid enumeration of external transactions. Open decision, owned by the challenge owner: confirm uniform 404 or revert to 403.
 - **F-10 (ROLLBACK of BET after ROLLBACK of REFUND):** When a REFUND is reversed by ROLLBACK, a subsequent ROLLBACK of the BET is rejected with `REFERENCE_ALREADY_REVERSED`. Open decision, owned by the challenge owner: confirm whether a reference admits at most one reversal in total (preventing double credit of stake) or admits net reversals.
@@ -244,3 +244,14 @@ showed no run for this SHA. `gh` has no valid session (`GH_TOKEN` is invalid), a
 with 403; that host is absent from the observed allowlist. The cause of the missing workflow is still unproven. A
 maintainer must run CI and CodeQL for the release SHA in GitHub’s UI and open a PR to obtain Dependency Review. This
 update records evidence observed after pushing `440fc22`; it does not claim checks for the commit that records it.
+
+## 12. Later update: current evidence and status (2026-11-02)
+
+Sections 1–8 preserve the historical review record for `bffe108`. After that review, Money properties using `fast-check` were added in `e486d38`, and the independent financial reference model with generated sequences was added in `7bb288f`; the trailing-slash route limit was fixed in `01ec4a1`; workflows were adjusted in `b85af0e`, `17edca1` and `a3abbae`. This does not rewrite historical results or claim hosted validation for those commits.
+
+- **Confirmed technical decisions:** D1–D4 were confirmed on 2026-11-01 and are catalogued as R-01, R-04/R-05, R-03 and R-06 in [DECISIONS.en.md](../DECISIONS.en.md). They are implemented and tested interpretations, not awaiting internal approval.
+- **Additional interpretation of the brief:** D1 keeps the WIN/LOSS reference optional, and D4 limits a reference to one effective reversal although rule 4 mentions repetition “by the same operation type.” Both were confirmed for this implementation.
+- **Known limitation:** An unreferenced WIN cannot be associated with a BET to prove uniqueness per bet. A ROLLBACK of a BET after a WIN is individual: it returns the stake and does not reverse the WIN; each transaction requires its own reversal.
+- **Question for Jungle Gaming:** only Jungle Gaming can clarify whether it intended different semantics for these ambiguities or other contract questions (such as HTTP 404 status and the `WagerTransactionFailed` event). No internal decision is waiting for that confirmation.
+- **Current evidence:** `test/unit/shared/domain/money.property.test.ts`, `test/integration/model/financial-reference-model.test.ts`, `test/integration/model/random-sequences.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` and [TEST_STRATEGY.en.md](TEST_STRATEGY.en.md). Local verification claims are those recorded in earlier updates; this addendum makes no hosted-result claim for current HEAD.
+- **Remaining risks:** no hosted run is confirmed for current SHA; image build remains limited by the observed proxy; association of an unreferenced WIN remains impossible and SQS visibility renewal has a 300 s ceiling.

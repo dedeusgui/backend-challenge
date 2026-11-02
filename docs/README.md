@@ -4,12 +4,12 @@ Este é o ponto central da documentação do **Distributed Wagering Processor**.
 Nomes de arquivos, comandos, identificadores, campos JSON e trechos de código permanecem como estão no código.
 
 Para verificar a solução em cerca de 40 minutos, comece pelo [README](../README.md) e siga o
-[guia do avaliador](REVIEWER_GUIDE.md).
+[guia do avaliador](REVIEWER_GUIDE.md) ([English](REVIEWER_GUIDE.en.md)).
 
 ## Ordem de leitura
 
 1. [README](../README.md): como rodar a stack, a demonstração e as suítes de teste.
-2. [Guia do avaliador](REVIEWER_GUIDE.md): roteiro de verificação, com o que cada teste prova e o que não prova.
+2. [Guia do avaliador](REVIEWER_GUIDE.md): roteiro de verificação, com o que cada teste prova e o que não prova; [English](REVIEWER_GUIDE.en.md).
 3. [Matriz de requisitos](REQUIREMENTS_MATRIX.md): cada requisito ligado ao teste que o prova.
 4. [Arquitetura](../ARCHITECTURE.md): fluxos e decisões principais, com a tabela de decisões no início.
 5. [Glossário do domínio](DOMAIN_GLOSSARY.md): os termos do domínio e seus nomes no código.
@@ -34,14 +34,31 @@ Use esta tabela quando já souber o que procura. Cada resposta aponta para um ú
 | Qual é o contrato HTTP?                                                 | [OpenAPI](openapi.json) e [Arquitetura](../ARCHITECTURE.md), seção 10                                                                                                                |
 | Qual capacidade foi medida, e com quais ressalvas?                      | [README](../README.md), seção "Evidências de desempenho". Detalhes: [baseline de nuvem](LOAD_TEST_RESULTS.md) (em inglês) e [baseline local](LOAD_TEST_BASELINE.md), com 13 cenários |
 | Quais são os dois baselines de carga, e em qual ambiente cada um rodou? | [README](../README.md), seção "Dois baselines, dois ambientes"; e [baseline local](LOAD_TEST_BASELINE.md), seção "Dois baselines, dois ambientes"                                    |
-| Quais decisões dependem do dono do desafio?                             | [Auditoria final, §4](AUDITORIA_FINAL.md) e [achados](audit/FINDINGS.md), seção "Decisões que precisam do dono do desafio"                                                           |
+| Qual questão de contrato só o dono do enunciado pode esclarecer?        | [Auditoria final, §12](AUDITORIA_FINAL.md); D1–D4 estão confirmadas, e somente dúvidas adicionais de contrato dependem da Jungle Gaming.                                             |
 
-**Leitura principal:** README, Arquitetura e Guia do avaliador. Os demais são consulta. Apêndices e históricos
-(plano de implementação, histórico de carga, revisões de invariantes e de referências, auditoria final) registram como
-o projeto chegou aqui, e não precisam ser lidos para avaliar a solução.
+**Leitura principal:** README, Arquitetura, Guia do avaliador, matriz de requisitos, decisões/ADRs e estratégia de testes.
+As auditorias, matrizes extensas, benchmarks, experimentos de mutação, históricos, comparações públicas, relatórios de
+segurança e observabilidade são documentação de referência para consultas específicas.
 
 **Versões em inglês:** cada documento principal tem uma versão de referência em inglês, com o sufixo `.en.md`, como
 [README.en.md](../README.en.md) e [ARCHITECTURE.en.md](../ARCHITECTURE.en.md). O conteúdo é o mesmo.
+
+## Divisão da documentação
+
+### Documentação principal
+
+Leitura recomendada para entender e avaliar o sistema:
+
+- [README](../README.md): execução, demonstração e comandos.
+- [ARCHITECTURE](../ARCHITECTURE.md): desenho, decisões centrais e limites.
+- [REVIEWER_GUIDE](REVIEWER_GUIDE.md) ([English](REVIEWER_GUIDE.en.md)): roteiro de verificação.
+- [REQUIREMENTS_MATRIX](REQUIREMENTS_MATRIX.md): requisitos e evidências.
+- [DECISIONS](../DECISIONS.md) e [ADRs](adr/README.md): decisões consolidadas e seus registros.
+- [TEST_STRATEGY](TEST_STRATEGY.md): escopo e limites das suítes.
+
+### Documentação de referência
+
+Use conforme a pergunta: auditorias ([AUDITORIA_FINAL](AUDITORIA_FINAL.md), [INVARIANT_REVIEW](INVARIANT_REVIEW.md), [índice da auditoria](audit/README.md)), matrizes extensas ([FLOW_MATRIX](FLOW_MATRIX.md), matrizes em `audit/`), benchmarks ([LOAD_TEST_RESULTS](LOAD_TEST_RESULTS.md), [baseline local](LOAD_TEST_BASELINE.md), [comparação pública](audit/PERFORMANCE_COMPARISON.md)), experimentos de mutação ([TEST_STRATEGY](TEST_STRATEGY.md)), históricos ([LOAD_TEST_HISTORY](LOAD_TEST_HISTORY.md), [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)), relatórios de segurança ([SECURITY_AUTOMATION](SECURITY_AUTOMATION.md)) e observabilidade (métricas e health descritos em [ARCHITECTURE](../ARCHITECTURE.md)).
 
 ## Documentos por assunto
 

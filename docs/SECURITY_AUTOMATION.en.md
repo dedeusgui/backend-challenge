@@ -3,12 +3,14 @@
 This document describes the versioned workflows and the limits of hosted evidence. A workflow's presence does not
 prove it ran successfully.
 
-| Check             | Repository configuration                                                                                                                                                                     | Evidence limit                                                                                               |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| CodeQL            | `.github/workflows/codeql.yml`: pushes and pull requests to `main`, weekly schedule and `workflow_dispatch`; analyzes JavaScript/TypeScript. The workflow requests `security-events: write`. | YAML inspected; CodeQL run for the final SHA is not confirmed.                                               |
-| Trivy             | `.github/workflows/ci.yml`: scans the API image and repository for `HIGH`/`CRITICAL` vulnerabilities; generates a CycloneDX SBOM for the API image. Artifacts include the SHA and run id.    | The protected edge Nginx image is not scanned; hosted scans and uploads for the final SHA are not confirmed. |
-| Dependency Review | `.github/workflows/dependency-review.yml`: PRs targeting `main`; checkout does not persist credentials; fails from `low` severity.                                                           | Requires a real PR; no run for the final SHA was observed.                                                   |
-| Dependabot        | `.github/dependabot.yml`: weekly checks for npm, Docker and GitHub Actions; limit of five open pull requests per ecosystem.                                                                  | Configuration inspected; this does not assert that alerts or pull requests were created.                     |
+| Workflow                | Push         | Pull request  | `workflow_dispatch` / schedule      | Configuration dependencies                                                                                           |
+| ----------------------- | ------------ | ------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                | All branches | All branches  | Manual dispatch; no schedule        | No external setting declared in YAML. Rulesets/branch protection that require its job depend on repository settings. |
+| `codeql.yml`            | `main`       | Target `main` | Manual dispatch and weekly schedule | Alert publication depends on effective workflow permissions and platform settings.                                   |
+| `dependency-review.yml` | —            | Target `main` | —                                   | Runs only for a real PR; rulesets may require its result as a status check.                                          |
+| `pages.yml`             | `main`       | —             | Manual dispatch                     | Pages must be enabled with Source = GitHub Actions; deployment also depends on effective Pages permissions.          |
+
+Trivy and SBOM generation/upload are steps in `ci.yml`; they run when CI is triggered and reaches those steps. Dependabot is a weekly configuration in `.github/dependabot.yml`, not a GitHub Actions workflow in this repository. YAML confirms only declared triggers and steps; it does not prove a hosted run or result. Rulesets and the Pages setting are not versioned here and must be checked in repository settings.
 
 ## Observed status on 2026-11-02
 

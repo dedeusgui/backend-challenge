@@ -3,12 +3,14 @@
 Este documento descreve a configuração versionada e os limites da evidência hospedada. A existência de um workflow
 não prova que ele foi executado com sucesso.
 
-| Verificação       | Configuração no repositório                                                                                                                                                          | Limite desta evidência                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| CodeQL            | `.github/workflows/codeql.yml`: push e pull request para `main`, agenda semanal e `workflow_dispatch`; analisa JavaScript/TypeScript. O workflow solicita `security-events: write`.  | YAML conferido; execução CodeQL do SHA final ainda não confirmada.                                                |
-| Trivy             | `.github/workflows/ci.yml`: verifica vulnerabilidades `HIGH`/`CRITICAL` na imagem da API e no repositório; gera SBOM CycloneDX da imagem da API. Artefatos incluem o SHA e o run id. | A imagem Nginx da borda protegida não é varrida; varreduras e upload hospedados não confirmados para o SHA final. |
-| Dependency Review | `.github/workflows/dependency-review.yml`: PRs cujo destino é `main`; checkout sem credencial persistida; falha a partir de `low`.                                                   | Exige uma PR real; nenhuma execução para o SHA final foi observada.                                               |
-| Dependabot        | `.github/dependabot.yml`: verificações semanais para npm, Docker e GitHub Actions; limite de cinco PRs abertos por ecossistema.                                                      | Configuração conferida; não se afirma que alertas ou PRs foram criados.                                           |
+| Workflow                | Push              | Pull request      | `workflow_dispatch` / agenda     | Dependências de configuração                                                                                                                      |
+| ----------------------- | ----------------- | ----------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                | Todas as branches | Todas as branches | Dispatch manual; sem agenda      | Nenhuma configuração externa declarada no YAML. Regras de proteção/rulesets que tornem o job obrigatório dependem da configuração do repositório. |
+| `codeql.yml`            | `main`            | Destino `main`    | Dispatch manual e agenda semanal | Publicação de alertas depende das permissões efetivas do workflow e das configurações da plataforma.                                              |
+| `dependency-review.yml` | —                 | Destino `main`    | —                                | Só roda em uma PR real; regrasets podem exigir o resultado como status obrigatório.                                                               |
+| `pages.yml`             | `main`            | —                 | Dispatch manual                  | Pages precisa estar habilitado com Source = GitHub Actions; deploy também depende das permissões Pages efetivas.                                  |
+
+Trivy e geração/upload de SBOM são etapas de `ci.yml`; rodam quando o workflow CI é disparado e concluídas as etapas anteriores. Dependabot é configuração semanal em `.github/dependabot.yml`, não um workflow Actions deste repositório. YAML confirma somente gatilhos e etapas declaradas; não prova execução hospedada nem resultado. As regrasets e a configuração de Pages não são versionadas aqui e precisam ser conferidas nas configurações do repositório.
 
 ## Estado observado em 2026-11-02
 

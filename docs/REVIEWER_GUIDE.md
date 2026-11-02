@@ -1,5 +1,7 @@
 # Guia do avaliador
 
+> A cópia de referência em inglês é [REVIEWER_GUIDE.en.md](REVIEWER_GUIDE.en.md).
+
 Este guia mostra como verificar a solução em cerca de 40 minutos, sem orientação do autor. Cada afirmação aponta
 para o comando ou o arquivo que a prova. Quando um item não é provado, o guia diz isso.
 

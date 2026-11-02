@@ -492,13 +492,16 @@ function parseGateRecord(value: unknown): GateRecord {
   const data = object(value);
   if (
     data === undefined ||
-    data.schemaVersion !== 2 ||
+    data.schemaVersion !== 3 ||
+    typeof data.command !== 'string' ||
     (data.exitCode !== null && typeof data.exitCode !== 'number') ||
     typeof data.passed !== 'boolean' ||
     typeof data.valid !== 'boolean' ||
     typeof data.recordedAt !== 'string' ||
     (data.commitSha !== null && typeof data.commitSha !== 'string') ||
     (data.environment !== null && typeof data.environment !== 'string') ||
+    !Array.isArray(data.limitations) ||
+    !data.limitations.every((limitation) => typeof limitation === 'string') ||
     !Array.isArray(data.errors) ||
     !data.errors.every((error) => typeof error === 'string') ||
     !Array.isArray(data.suites)
@@ -579,10 +582,12 @@ function parseGateRecord(value: unknown): GateRecord {
     throw new Error('Registro do gate contém totais ou status inconsistentes');
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     recordedAt: data.recordedAt,
+    command: data.command,
     commitSha: data.commitSha,
     environment: data.environment,
+    limitations: data.limitations,
     exitCode: data.exitCode,
     valid: data.valid,
     passed: data.passed,

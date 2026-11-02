@@ -171,6 +171,7 @@ BEGIN
            ('wallet_ledger_entries', 'ledger_transaction_in_same_wallet_fk'),
            ('wallet_ledger_entries', 'ledger_wallet_currency_fk'),
            ('wallet_ledger_entries', 'wallet_ledger_entries_balance_check'),
+           ('wallet_ledger_entries', 'wallet_ledger_entries_continue_chain'),
            ('outbox_messages', 'outbox_messages_pkey'),
            ('outbox_messages', 'outbox_envelope_shape'),
            ('outbox_messages', 'outbox_messages_status_check'),

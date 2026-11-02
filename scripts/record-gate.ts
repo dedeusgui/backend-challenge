@@ -15,10 +15,12 @@ export interface SuiteResult {
 }
 
 export interface GateRecord {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly recordedAt: string;
+  readonly command: string;
   readonly commitSha: string | null;
   readonly environment: string | null;
+  readonly limitations: readonly string[];
   readonly exitCode: number | null;
   readonly valid: boolean;
   readonly passed: boolean;
@@ -78,6 +80,11 @@ const SUITES: readonly SuiteSpec[] = [
 ];
 
 const EMPTY_COUNTS: Counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+const CHECK_ALL_COMMAND =
+  '$ bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features';
+const CHECK_ALL_LIMITATIONS = [
+  'Cucumber scenarios tagged @bloqueado are excluded and are not counted as executed.',
+];
 
 function sectionBetween(log: string, start: number, end: number): string {
   return log.slice(start, end);
@@ -279,8 +286,10 @@ export function parseCheckAllLog(log: string, metadata: GateMetadata = {}): Gate
   const errors = [...metadataErrors(metadata)];
   const status = exitStatus(log);
   errors.push(...status.errors);
+  const commandMarkers = log.split(/\r?\n/).filter((line) => line.trim() === CHECK_ALL_COMMAND);
+  if (commandMarkers.length !== 1) errors.push('comando check:all ausente ou duplicado');
 
-  const commandMarkers = [
+  const suiteCommandMarkers = [
     ...log.matchAll(
       /^\$ bun (?:test test\/[^\r\n]+|--bun node_modules\/\.bin\/cucumber-js[^\r\n]*)/gm,
     ),
@@ -289,7 +298,7 @@ export function parseCheckAllLog(log: string, metadata: GateMetadata = {}): Gate
   let cucumber = { scenarios: EMPTY_COUNTS, steps: EMPTY_COUNTS };
 
   for (const spec of SUITES) {
-    const markers = commandMarkers.filter(
+    const markers = suiteCommandMarkers.filter(
       (item) => item.index !== undefined && log.startsWith(spec.marker, item.index),
     );
     if (markers.length === 0) {
@@ -309,7 +318,7 @@ export function parseCheckAllLog(log: string, metadata: GateMetadata = {}): Gate
       continue;
     }
     const nextMarker = SUITES.flatMap((candidate) =>
-      commandMarkers
+      suiteCommandMarkers
         .filter(
           (item) =>
             item.index !== undefined &&
@@ -338,10 +347,12 @@ export function parseCheckAllLog(log: string, metadata: GateMetadata = {}): Gate
     suites.length === SUITES.length &&
     suites.every((suite) => suite.status === 'passed');
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     recordedAt: metadata.recordedAt ?? new Date().toISOString(),
+    command: 'bun run check:all',
     commitSha: metadata.commitSha ?? null,
     environment: metadata.environment ?? null,
+    limitations: CHECK_ALL_LIMITATIONS,
     exitCode: status.exitCode,
     valid,
     passed,

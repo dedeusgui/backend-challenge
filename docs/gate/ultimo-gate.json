@@ -1,5 +1,6 @@
 {
   "recordedAt": "2026-11-01T22:26:40.041Z",
+  "command": "bun run check:all",
   "exitCode": null,
   "passed": false,
   "suites": [
@@ -72,9 +73,12 @@
       "skipped": 0
     }
   },
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "commitSha": null,
   "environment": null,
+  "limitations": [
+    "Cucumber scenarios tagged @bloqueado are excluded and are not counted as executed."
+  ],
   "valid": false,
   "errors": [
     "Registro histórico sem SHA do código testado e sem identificação do ambiente; não comprova aprovação do HEAD."

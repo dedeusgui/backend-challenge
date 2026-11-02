@@ -8,6 +8,7 @@ const METADATA = {
 };
 
 const APPROVED_LOG = `
+$ bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features
 $ bun test test/unit
  1 pass
  0 fail
@@ -57,6 +58,20 @@ describe('parseCheckAllLog', () => {
     expect(record.suites.find((suite) => suite.key === 'integration')?.status).toBe('not-run');
   });
 
+  test('requires the check:all command marker', () => {
+    const record = parseCheckAllLog(
+      APPROVED_LOG.replace(
+        '$ bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features\n',
+        '',
+      ),
+      METADATA,
+    );
+
+    expect(record.valid).toBe(false);
+    expect(record.passed).toBe(false);
+    expect(record.errors).toContain('comando check:all ausente ou duplicado');
+  });
+
   test('does not treat partial suites as approval', () => {
     const record = parseCheckAllLog(
       '$ bun test test/unit\n1 pass\n0 fail\nRan 1 tests across 1 file.\ncheck:all exit=0\n',
@@ -94,6 +109,11 @@ describe('parseCheckAllLog', () => {
     expect(record.valid).toBe(true);
     expect(record.passed).toBe(true);
     expect(record.exitCode).toBe(0);
+    expect(record.schemaVersion).toBe(3);
+    expect(record.command).toBe('bun run check:all');
+    expect(record.limitations).toContain(
+      'Cucumber scenarios tagged @bloqueado are excluded and are not counted as executed.',
+    );
     expect(record.commitSha).toBe(METADATA.commitSha);
     expect(record.environment).toBe(METADATA.environment);
     expect(record.suites).toHaveLength(6);

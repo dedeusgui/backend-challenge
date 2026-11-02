@@ -226,8 +226,17 @@ por seus testes unitários específicos. O quarto foi detectado por `money.prope
 falha com seed `20261102` e reduziu o contraexemplo a `[0n, 1n]` após 64 reduções.
 
 Resultado: 4 mutantes eliminados, 0 sobreviventes e 0 equivalentes. A execução ficou restrita aos testes unitários de
-Money; não foi uma campanha de mutação da suíte completa. `fast-check` foi adicionado para propriedades puras com
-300 casos e shrinking determinístico; as sequências financeiras existentes continuam cobrindo integrações reais.
+Money; não foi uma campanha de mutação da suíte completa. A propriedade pura de `Money` executa 300 casos com shrinking
+determinístico. O modelo financeiro gerado e limitado está descrito abaixo.
+
+### Modelo de referência financeiro (2026-11-02)
+
+`test/integration/model/financial-reference-model.test.ts` usa `fast-check` com seed `20261102`, 12 sequências e até
+12 operações por sequência. Um redutor puro e independente codifica D1–D4 para uma BET; cada WIN, LOSS, REFUND ou
+ROLLBACK gerado é comparado passo a passo com o use case e o PostgreSQL reais. A mesma identidade é reenviada após cada
+operação para conferir replay, saldo original, quantidade de lançamentos e reconciliação final. O escopo é uma única BET
+referenciada; as suítes existentes continuam cobrindo concorrência entre processos, referências fora de ordem e reversões
+de WIN/REFUND. O workload é limitado, não gera operações aleatórias ilimitadas no banco.
 
 ## Carga
 
@@ -300,3 +309,5 @@ nunca falhou comprova menos.
 | `scripts/sqs-worker-smoke.ts`                                   | dois envelopes FIFO distintos são processados pelo worker Compose e produzem uma BET; replay não duplica ledger nem débito       | uma fila FIFO descartável sem consumidor expirou no deadline e imprimiu estado do inbox, fila, serviços e logs do worker    |
 | `test/edge/protected-mode.test.ts` (proxy do runner)            | health, roteamento interno, limites e isolamento de clientes pelo edge                                                           | dois checks falharam porque o proxy HTTP do ambiente interceptava `wget`; após `-Y off`, 12 testes e 85 assertions passaram |
 | `test/unit/shared/domain/money.property.test.ts`                | aritmética de centavos gerada com seed reproduzível e shrinking                                                                  | a mutação de soma foi reduzida por fast-check a `[0n, 1n]`                                                                  |
+| `test/edge/protected-mode.test.ts` (barra final)                | `POST /wallets/` e `POST /wagering/transactions/` continuam sujeitos à cota de escrita                                           | antes do ajuste, 42 requests por rota produziram 0 respostas `429`; depois, 14 testes e 87 asserções passaram               |
+| `test/integration/model/financial-reference-model.test.ts`      | BET, WIN, LOSS, REFUND, ROLLBACK, replay, saldo e ledger comparados com um modelo independente                                   | seed `20261102`, 12 sequências limitadas; 429 asserções passaram no PostgreSQL real                                         |

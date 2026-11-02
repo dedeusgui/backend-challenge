@@ -3,12 +3,12 @@
 This document describes the versioned workflows and the limits of hosted evidence. A workflow's presence does not
 prove it ran successfully.
 
-| Check             | Repository configuration                                                                                                                                                                     | Evidence limit                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| CodeQL            | `.github/workflows/codeql.yml`: pushes and pull requests to `main`, weekly schedule and `workflow_dispatch`; analyzes JavaScript/TypeScript. The workflow requests `security-events: write`. | YAML inspected; CodeQL run for the final SHA is not confirmed.                           |
-| Trivy             | `.github/workflows/ci.yml`: scans the image and repository for `HIGH`/`CRITICAL` vulnerabilities; generates a CycloneDX image SBOM. Artifacts include the SHA and run id.                    | Configuration inspected; hosted scans and uploads for the final SHA are not confirmed.   |
-| Dependency Review | `.github/workflows/dependency-review.yml`: PRs targeting `main`; checkout does not persist credentials; fails from `low` severity.                                                           | Requires a real PR; no run for the final SHA was observed.                               |
-| Dependabot        | `.github/dependabot.yml`: weekly checks for npm, Docker and GitHub Actions; limit of five open pull requests per ecosystem.                                                                  | Configuration inspected; this does not assert that alerts or pull requests were created. |
+| Check             | Repository configuration                                                                                                                                                                     | Evidence limit                                                                                               |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| CodeQL            | `.github/workflows/codeql.yml`: pushes and pull requests to `main`, weekly schedule and `workflow_dispatch`; analyzes JavaScript/TypeScript. The workflow requests `security-events: write`. | YAML inspected; CodeQL run for the final SHA is not confirmed.                                               |
+| Trivy             | `.github/workflows/ci.yml`: scans the API image and repository for `HIGH`/`CRITICAL` vulnerabilities; generates a CycloneDX SBOM for the API image. Artifacts include the SHA and run id.    | The protected edge Nginx image is not scanned; hosted scans and uploads for the final SHA are not confirmed. |
+| Dependency Review | `.github/workflows/dependency-review.yml`: PRs targeting `main`; checkout does not persist credentials; fails from `low` severity.                                                           | Requires a real PR; no run for the final SHA was observed.                                                   |
+| Dependabot        | `.github/dependabot.yml`: weekly checks for npm, Docker and GitHub Actions; limit of five open pull requests per ecosystem.                                                                  | Configuration inspected; this does not assert that alerts or pull requests were created.                     |
 
 ## Observed status on 2026-11-02
 
@@ -35,3 +35,15 @@ Dependency Review result.
 
 Do not treat the local configuration as proof that the actions, permissions, result uploads or blocking rules worked
 on a hosted runner. Confirm these in a real push or pull request run before reporting that the checks passed.
+
+### Release verification started at `44a793bcb09d72620660339186a046311b4e549a`
+
+The [public checks page for this commit](https://github.com/dedeusgui/backend-challenge/commit/44a793bcb09d72620660339186a046311b4e549a/checks)
+reported no checks. The versioned workflow declares `push` and `workflow_dispatch`; that confirms its configuration,
+but does not explain the missing run. `gh run list` received `Forbidden` from `api.github.com` in this environment,
+and no authenticated session was available to dispatch CI or CodeQL. Repository/organization Actions settings and the
+push identity could not be inspected. Suppression due to `GITHUB_TOKEN` remains unproven.
+
+A maintainer must run CI and CodeQL from **Actions → Run workflow** for the release SHA to produce hosted evidence;
+Dependency Review requires a pull request targeting `main`. Until those runs exist, there is no hosted approval for
+CI, Testcontainers, runtime smoke, protected mode, Trivy or CodeQL on that SHA.

@@ -300,9 +300,20 @@ coverage after commit is in `test/concurrency/process-crash-and-shutdown.test.ts
 
 ## 7. How this review was checked
 
+> **Historical record:** the counts below belong to the round when this section was written; they are not the current
+> HEAD results. The latest local verification is in section 8.
+
 - Every file path cited in `docs/` and `ARCHITECTURE.md` was checked for existence: 0 missing.
 - The named tests in sections 3 and 4 were checked against the test files.
 - `bun run check:all` passed on the final code before the push: 178 unit, 111 integration, 21
   concurrency and 32 e2e tests.
 - Each database rule was checked with a probe that fails before its migration exists and passes
   after it (`schema-constraints.test.ts`).
+
+## 8. Final-round local verification (2026-11-02)
+
+Based on the checkout that started at `44a793bcb09d72620660339186a046311b4e549a`, the property
+`test/integration/model/financial-reference-model.test.ts` ran 12 generated sequences (seed `20261102`) against the
+use cases and real PostgreSQL, comparing status, failures, replay, balance, ledger-entry count and reconciliation.
+It passed with 429 assertions. The full suite results for this round are recorded in `docs/AUDITORIA_FINAL.en.md`;
+no hosted run was confirmed for this checkout.

@@ -299,9 +299,20 @@ constam literalmente no enunciado. A cobertura de crash HTTP após commit está 
 
 ## 7. Como esta revisão foi checada
 
+> **Registro histórico:** as contagens abaixo pertencem à rodada em que esta seção foi escrita; não são os resultados
+> atuais do HEAD. A verificação local mais recente está na seção 8.
+
 - Cada caminho de arquivo citado em `docs/` e `ARCHITECTURE.md` foi verificado quanto à existência: 0 ausentes.
 - Os testes nomeados nas seções 3 e 4 foram verificados contra os arquivos de teste.
 - `bun run check:all` passou no código final antes do push: 178 testes unitários, 111 de integração, 21
   de concorrência e 32 testes e2e.
 - Cada regra de banco de dados foi verificada com um probe que falha antes de sua migração existir e passa
   depois dela (`schema-constraints.test.ts`).
+
+## 8. Verificação local da rodada final (2026-11-02)
+
+Com base no checkout iniciado em `44a793bcb09d72620660339186a046311b4e549a`, a propriedade
+`test/integration/model/financial-reference-model.test.ts` executou 12 sequências geradas (seed `20261102`) contra os
+casos de uso e PostgreSQL real, comparando status, falhas, replay, saldo, quantidade de lançamentos e reconciliação.
+Ela passou com 429 asserções. Os resultados completos das suítes desta rodada estão em `docs/AUDITORIA_FINAL.md`;
+nenhuma execução hospedada foi confirmada para este checkout.

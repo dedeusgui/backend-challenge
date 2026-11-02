@@ -208,3 +208,30 @@ of CI on a published SHA.
   `api.github.com`. `GH_TOKEN` was invalid even though public `github.com` pages and the Git remote push worked. The
   push actor/credential and organization settings could not be inspected, so the missing workflow cause is unconfirmed.
   No hosted result for CI, Dependency Review, CodeQL, Trivy or the SBOM was observed for the current SHA.
+
+## 10. Release verification started at HEAD `44a793bcb09d72620660339186a046311b4e549a`
+
+This update preserves the historical sections above and records the latest local review. The [public checks page for the
+input HEAD](https://github.com/dedeusgui/backend-challenge/commit/44a793bcb09d72620660339186a046311b4e549a/checks) showed
+no runs. `gh run list` received `Forbidden` from `api.github.com`; the push identity and Actions settings could not be
+inspected. There is no evidence to attribute the missing runs to `GITHUB_TOKEN`.
+
+- **Protected mode:** reproduced the write-limit bypass for `POST /wallets/` and
+  `POST /wagering/transactions/` with trailing slashes. Before the fix, 42 simultaneous requests per route received
+  zero `429` responses; Nginx now applies the quota to both route forms, and the real edge suite passed with 14 tests
+  and 87 assertions.
+- **Financial/distributed review:** no new defect was found. D1–D4 remain unchanged; the existing post-commit HTTP
+  crash and replay test still proves one debit and one event.
+- **Financial model:** an independent reference model compares bounded BET, WIN, LOSS, REFUND and ROLLBACK sequences
+  with the use cases and PostgreSQL; seed `20261102`, 12 sequences, with replay after every action.
+- **Local gates:** `bun install --frozen-lockfile` passed; `bun run agent:verify` passed with 538 unit tests;
+  `bun run check:all` passed with 4 infrastructure tests, 261 integration, 26 concurrency, 104 e2e, and 73 Cucumber
+  scenarios/438 steps.
+- **Testcontainers:** passed with 20 tests and 94 assertions; this run took 24.03 s to start and 10.40 s to test.
+- **SQS runtime:** `bun run smoke:sqs-worker` sent two distinct FIFO envelopes to the real Compose worker, checked
+  status, `99.00` balance and ledger through PostgreSQL/API, and confirmed one debit after replay.
+- **SQL and Pages:** the verifier found zero violations in INV-1 through INV-11 and 17 expected migrations in INV-12.
+  `site:build` generated 7 files and checked 380 links in the working checkout.
+- **Hosted release blocker:** no hosted checks were observed for the input SHA. A maintainer still needs to dispatch CI
+  and CodeQL for the release SHA; Dependency Review requires a pull request to `main`. Until then, the release has no
+  CI/security approval associated with its final SHA.

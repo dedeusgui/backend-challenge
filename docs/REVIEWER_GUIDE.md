@@ -129,8 +129,11 @@ confere saldo, status e ledger pelo PostgreSQL/API e exige um único débito. El
   Ver [AUDITORIA_FINAL.md](AUDITORIA_FINAL.md).
 - **Prometheus e Grafana.** Não instalados. `/metrics` por processo e a superfície do worker cobrem a avaliação; um
   agregador exigiria coleta por instância, e isso ainda não está provado em execução.
-- **Testes de propriedade (`fast-check`).** Não adicionados: a biblioteca não traria prova que os testes existentes não
-  dão.
+- **Propriedades financeiras.** `fast-check` cobre aritmética em centavos com seed reproduzível e shrinking em
+  `test/unit/shared/domain/money.property.test.ts`. Um modelo independente também compara sequências financeiras
+  limitadas, replays e ledger com PostgreSQL real em `test/integration/model/financial-reference-model.test.ts`.
+  A evidência da mutação e os limites estão em [TEST_STRATEGY.md](TEST_STRATEGY.md); as sequências de integração
+  anteriores continuam em `test/integration/model/random-sequences.test.ts`.
 - **Comparação com as referências públicas.** Não reexecutada nesta sessão. Os números em `docs/LOAD_TEST_RESULTS.md`
   são de execuções anteriores, em uma VM de quatro vCPUs, e não devem ser comparados com outra máquina sem aviso.
 - **Medição local.** A linha de base em `docs/LOAD_TEST_BASELINE.md` mede 13 cenários na minha máquina, com as taxas

@@ -32,7 +32,8 @@ Distributed Wagering Processor. Read `ARCHITECTURE.md` before changing financial
 
 ## Workflow
 
-- Work in vertical slices. Each slice ends with `check:all` passing, a matrix update and one
+- Work in vertical slices. Each slice ends with its applicable gate (`agent:verify` for routine changes;
+  `check:all` for financial, persistence, infrastructure and final integration changes), a matrix update and one
   Conventional Commit.
 - Commit messages: Conventional Commits, for example `feat(wagering): ...`, `test(concurrency): ...`.
 - Do not rewrite history that has been pushed. Amending your own unpushed commit is fine.
@@ -43,8 +44,8 @@ Distributed Wagering Processor. Read `ARCHITECTURE.md` before changing financial
 - Implementation, review and fork reading run as Codex workers through Orca (`gpt-6-luna`), not
   as Claude subagents. Claude's budget is the scarce one. Check the commands with the `orca-cli`
   and `orchestration` skills before each use.
-- A parallel worker gets its own worktree and branch. The coordinator integrates its commit, runs
-  `bun run check:all` and only then accepts it. Workers do not push.
+- A parallel worker gets its own worktree and branch. The coordinator integrates its commit and runs the applicable
+  gate; final integration requires `bun run check:all`. Workers do not push.
 - When a worker has reported and its result is integrated, close its terminal. Confirm first with
   `orca worktree ps --json`: the agent's `state` must be `done`. Then run
   `orca terminal close --terminal <handle> --json`, one terminal at a time. Never close a terminal

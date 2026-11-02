@@ -227,8 +227,17 @@ unit tests. The fourth was caught by `money.property.test.ts`; fast-check reprod
 shrunk the counterexample to `[0n, 1n]` after 64 shrinks.
 
 Result: 4 mutants killed, 0 surviving and 0 equivalent. The run was limited to Money unit tests; it was not a full-suite
-mutation campaign. `fast-check` was added for pure properties with 300 cases and deterministic shrinking; the existing
-financial sequences continue to cover real integrations.
+mutation campaign. The pure `Money` property runs 300 cases with deterministic shrinking. The bounded financial reference
+model is described below.
+
+### Financial reference model (2026-11-02)
+
+`test/integration/model/financial-reference-model.test.ts` uses `fast-check` with seed `20261102`, 12 sequences and up
+to 12 operations per sequence. An independent pure reducer encodes D1–D4 for one BET; each generated WIN, LOSS, REFUND
+or ROLLBACK is compared step by step with the real use case and PostgreSQL. The same identity is resent after each
+operation to check replay, original balance, ledger entry count and final reconciliation. The scope is one referenced
+BET; existing suites continue to cover cross-process concurrency, out-of-order references and reversals of WIN/REFUND.
+The workload is bounded and does not generate unlimited random operations in the database.
 
 ## Load
 
@@ -301,3 +310,5 @@ has never failed proves less.
 | `scripts/sqs-worker-smoke.ts`                                   | two distinct FIFO envelopes are processed by the Compose worker and produce one BET; replay duplicates neither the ledger row nor debit | a disposable FIFO queue without a consumer timed out and printed inbox, queue, service and worker-log diagnostics          |
 | `test/edge/protected-mode.test.ts` (runner proxy)               | health, internal routing, limits and client isolation through the edge                                                                  | two checks failed because the environment HTTP proxy intercepted `wget`; after `-Y off`, 12 tests and 85 assertions passed |
 | `test/unit/shared/domain/money.property.test.ts`                | generated cent arithmetic with a reproducible seed and shrinking                                                                        | fast-check shrunk the intentionally broken addition to `[0n, 1n]`                                                          |
+| `test/edge/protected-mode.test.ts` (trailing slash)             | `POST /wallets/` and `POST /wagering/transactions/` remain subject to the write quota                                                   | before the fix, 42 requests per route returned 0 `429`s; after the fix, 14 tests and 87 assertions passed                  |
+| `test/integration/model/financial-reference-model.test.ts`      | BET, WIN, LOSS, REFUND, ROLLBACK, replay, balance and ledger compared with an independent model                                         | seed `20261102`, 12 bounded sequences; 429 assertions passed against real PostgreSQL                                       |

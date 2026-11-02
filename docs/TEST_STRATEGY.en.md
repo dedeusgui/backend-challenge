@@ -59,14 +59,18 @@ probe returned exit code 1, preserved `test-output.log`, `test-error.log`, `post
 #### Historical pilot results
 
 The two measurements below came from clean runs before commit `9eb46c0b0745879a34d37558a40fe932a90698ac` and before
-the small output-capture change. They are historical results with no association to the current SHA. A new run of the
-battery at that commit is pending; these numbers must not be used as evidence for it. Each earlier run passed 20/20
+the small output-capture change. They are historical results with no SHA association. Each earlier run passed 20/20
 tests, with 94 assertions in six files:
 
 | Run | Container startup |   Tests |
 | --- | ----------------: | ------: |
 | 1   |           22.96 s |  8.51 s |
 | 2   |           35.53 s | 10.27 s |
+
+#### Local rerun associated with the commit
+
+At commit `9eb46c0b0745879a34d37558a40fe932a90698ac`, the battery passed 20/20 tests, with 94 assertions in six
+files. Container startup: 35.95 s; tests: 9.52 s.
 
 A Compose comparison recorded 19.01 s for a single cold start plus 7.82 s of tests; with the Compose stack already
 warm, tests took 7.82 s. This is one observation, not a benchmark or a basis to claim that either option is faster.

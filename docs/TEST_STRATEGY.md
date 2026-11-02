@@ -57,14 +57,18 @@ deliberadamente falho retornou código 1, preservou `test-output.log`, `test-err
 #### Resultados históricos do piloto
 
 As duas medições abaixo foram feitas em execuções limpas antes do commit `9eb46c0b0745879a34d37558a40fe932a90698ac`
-e antes da pequena alteração de captura de saída. São resultados históricos sem associação ao SHA atual. Uma nova
-execução da bateria nesse commit está pendente; estes números não devem ser usados como evidência dela. Cada execução
+e antes da pequena alteração de captura de saída. São resultados históricos sem associação a um SHA. Cada execução
 anterior passou 20/20 testes, com 94 asserções em seis arquivos:
 
 | Execução | Inicialização dos containers |  Testes |
 | -------- | ---------------------------: | ------: |
 | 1        |                      22,96 s |  8,51 s |
 | 2        |                      35,53 s | 10,27 s |
+
+#### Reexecução local associada ao commit
+
+No commit `9eb46c0b0745879a34d37558a40fe932a90698ac`, a bateria passou 20/20 testes, com 94 asserções em seis
+arquivos. Inicialização dos containers: 35,95 s; testes: 9,52 s.
 
 Uma comparação com Compose registrou, em uma única medição, 19,01 s para inicialização fria mais 7,82 s de testes;
 com a stack Compose já aquecida, os testes levaram 7,82 s. É uma observação pontual, não um benchmark nem uma base

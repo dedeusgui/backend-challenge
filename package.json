@@ -15,6 +15,7 @@
     "check:fast": "bun run typecheck && bun run lint && bun run format:check && bun run test:unit",
     "infra:up": "docker compose up -d --wait postgres localstack",
     "test:integration": "bun test test/integration",
+    "test:containers": "bun run scripts/test-containers/run.ts",
     "check:all": "bun run check:fast && bun run test:infra && bun run test:integration && bun run test:concurrency && bun run test:e2e && bun run test:features",
     "test:concurrency": "bun test test/concurrency",
     "test:e2e": "bun test test/e2e",
@@ -54,10 +55,13 @@
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.3.0",
+    "@testcontainers/localstack": "11.11.0",
+    "@testcontainers/postgresql": "11.11.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^24.0.0",
     "oxlint": "^1.90.0",
     "prettier": "^3.6.2",
+    "testcontainers": "11.11.0",
     "typescript": "^6.0.2"
   }
 }

@@ -8,7 +8,12 @@ import { WagerCommandConsumer } from '../../../src/modules/messaging/application
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 
 const NOW = new Date('2026-07-29T15:00:00.000Z');
 
@@ -29,8 +34,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
-  sqs.destroy();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 describe('consumer shutdown', () => {

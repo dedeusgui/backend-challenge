@@ -16,7 +16,12 @@ import {
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { advanceOutboxClock } from '../support/outbox-clock';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 import { required } from '../../support/required';
 
 /**
@@ -41,7 +46,11 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 /** The real queue adapter, with one entry refused by the broker on its first request. Otherwise a pass-through. */

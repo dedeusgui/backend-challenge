@@ -5,7 +5,12 @@ import {
   SqsClientLifecycle,
 } from '../../../../src/shared/infrastructure/sqs/sqs-connection';
 
-const CREDENTIAL_VARIABLES = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'];
+const CREDENTIAL_VARIABLES = [
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AWS_PROFILE',
+];
 
 function settingsWith(endpoint: string | undefined): SqsSettings {
   return {
@@ -27,6 +32,7 @@ describe('createSqsClient credentials', () => {
     process.env.AWS_ACCESS_KEY_ID = 'chain-access-key';
     process.env.AWS_SECRET_ACCESS_KEY = 'chain-secret-key';
     delete process.env.AWS_SESSION_TOKEN;
+    delete process.env.AWS_PROFILE;
   });
 
   afterEach(() => {

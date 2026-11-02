@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { SQSClient } from '@aws-sdk/client-sqs';
-import { Given, Then, When } from '@cucumber/cucumber';
+import { After, Given, Then, When } from '@cucumber/cucumber';
 import { WagerCommandConsumer } from '../../../src/modules/messaging/application/inbound/wager-command-consumer';
 import type {
   MessageQueue,
@@ -14,11 +14,20 @@ import { Money } from '../../../src/shared/domain/money';
 import { assertReady, currentBalance, type WorldData } from './finance.steps';
 import {
   createTestQueues,
+  closeTestSqs,
   testSqsClient,
   type TestQueues,
 } from '../../integration/support/sqs-test-queues';
 
 import { state } from './state';
+
+After<WorldData>(async function () {
+  const scenario = state(this).messaging;
+  if (scenario !== undefined) {
+    await Promise.allSettled(scenario.pendingPolls);
+    await closeTestSqs(scenario.sqs, scenario.queues);
+  }
+});
 
 export interface MessagingScenario {
   sqs: SQSClient;
@@ -37,6 +46,7 @@ export interface MessagingScenario {
   executions?: Map<string, number>;
   redriveBlocked?: boolean;
   shutdownBlocked?: boolean;
+  pendingPolls: Promise<unknown>[];
 }
 
 const VISIBILITY_SECONDS = 2;
@@ -53,7 +63,7 @@ async function setupMessaging(world: WorldData): Promise<MessagingScenario> {
   if (world.messaging) return world.messaging;
   const sqs = testSqsClient();
   const queues = await createTestQueues(sqs);
-  const scenario: MessagingScenario = { sqs, queues };
+  const scenario: MessagingScenario = { sqs, queues, pendingPolls: [] };
   state(world).messaging = scenario;
   return scenario;
 }
@@ -135,7 +145,7 @@ Given<WorldData>(
         return this.processWager.execute(input);
       },
     });
-    void scenario.first.pollOnce();
+    scenario.pendingPolls.push(scenario.first.pollOnce());
     await sleep(300);
   },
 );
@@ -391,7 +401,7 @@ Given<WorldData>(
       },
     };
     scenario.first = consumer(this, slow);
-    void scenario.first.pollOnce();
+    scenario.pendingPolls.push(scenario.first.pollOnce());
   },
 );
 When<WorldData>('um segundo consumidor pesquisa aos três segundos e meio', async function () {

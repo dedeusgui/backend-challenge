@@ -13,7 +13,12 @@ import { WagerCommandConsumer } from '../../../src/modules/messaging/application
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
 import { MetricsRegistry } from '../../../src/shared/observability/metrics';
 import { createTestDatabase, type TestDatabase } from '../support/test-database';
-import { createTestQueues, testSqsClient, type TestQueues } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
 
 /**
  * A received batch is processed one message at a time. A message that waits for its turn must not
@@ -48,7 +53,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await database.drop();
+  try {
+    await database?.drop();
+  } finally {
+    await closeTestSqs(sqs, queues);
+  }
 });
 
 function sleep(ms: number): Promise<void> {

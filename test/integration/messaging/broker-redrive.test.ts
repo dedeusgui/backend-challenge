@@ -1,12 +1,25 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
   GetQueueAttributesCommand,
-  type SQSClient,
+  SQSClient,
   SetQueueAttributesCommand,
 } from '@aws-sdk/client-sqs';
 import { SqsQueue } from '../../../src/modules/messaging/infrastructure/sqs/sqs-queue';
-import { createTestQueues, queueUrlByName, testSqsClient } from '../support/sqs-test-queues';
+import {
+  closeTestSqs,
+  createTestQueues,
+  queueUrlByName,
+  testSqsClient,
+  type TestQueues,
+} from '../support/sqs-test-queues';
+
+let client: SQSClient | undefined;
+let queues: TestQueues | undefined;
+
+afterAll(async () => {
+  await closeTestSqs(client, queues);
+});
 
 /**
  * The command queue that Compose provisions has a redrive policy: after ten deliveries the
@@ -19,8 +32,9 @@ import { createTestQueues, queueUrlByName, testSqsClient } from '../support/sqs-
  */
 describe('broker redrive of the provisioned command queue', () => {
   test('the command queue redrives to the dead-letter queue after ten deliveries', async () => {
-    const client = testSqsClient();
-    const attributes = await client.send(
+    const sqs = testSqsClient();
+    client = sqs;
+    const attributes = await sqs.send(
       new GetQueueAttributesCommand({
         QueueUrl: queueUrlByName('wager-transactions.fifo'),
         AttributeNames: ['RedrivePolicy'],
@@ -34,24 +48,25 @@ describe('broker redrive of the provisioned command queue', () => {
     expect(policy.deadLetterTargetArn?.endsWith(':wager-transactions-dlq.fifo')).toBe(true);
 
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
-    const queues = await createTestQueues(client, {
+    const testQueues = await createTestQueues(sqs, {
       command: `redrive-${suffix}`,
       deadLetter: `redrive-dlq-${suffix}`,
       events: `redrive-events-${suffix}`,
     });
-    await client.send(
+    queues = testQueues;
+    await sqs.send(
       new SetQueueAttributesCommand({
-        QueueUrl: queues.commandQueueUrl,
+        QueueUrl: testQueues.commandQueueUrl,
         Attributes: {
           RedrivePolicy: JSON.stringify({
-            deadLetterTargetArn: await arnOf(client, queues.deadLetterQueueUrl),
+            deadLetterTargetArn: await arnOf(sqs, testQueues.deadLetterQueueUrl),
             maxReceiveCount: String(policy.maxReceiveCount),
           }),
         },
       }),
     );
-    const command = new SqsQueue(client, queues.commandQueueUrl);
-    const dead = new SqsQueue(client, queues.deadLetterQueueUrl);
+    const command = new SqsQueue(sqs, testQueues.commandQueueUrl);
+    const dead = new SqsQueue(sqs, testQueues.deadLetterQueueUrl);
     const group = `redrive-${randomUUID()}`;
     const marker = `redrive-${randomUUID()}`;
     await command.send(marker, group, marker);
@@ -87,8 +102,8 @@ describe('broker redrive of the provisioned command queue', () => {
   }, 60_000);
 });
 
-async function arnOf(client: SQSClient, queueUrl: string): Promise<string> {
-  const found = await client.send(
+async function arnOf(sqsClient: SQSClient, queueUrl: string): Promise<string> {
+  const found = await sqsClient.send(
     new GetQueueAttributesCommand({ QueueUrl: queueUrl, AttributeNames: ['QueueArn'] }),
   );
   const arn = found.Attributes?.QueueArn;

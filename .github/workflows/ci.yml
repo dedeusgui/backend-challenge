@@ -32,7 +32,30 @@ jobs:
       - name: Start PostgreSQL and LocalStack
         run: bun run infra:up
       - name: Full gate (typecheck, lint, format, unit, integration, concurrency, e2e, features)
-        run: bun run check:all
+        id: full-gate
+        continue-on-error: true
+        run: |
+          set +e
+          bun run check:all 2>&1 | tee "$RUNNER_TEMP/check-all.log"
+          check_status=${PIPESTATUS[0]}
+          set -e
+          printf '\ncheck:all exit=%s\n' "$check_status" >> "$RUNNER_TEMP/check-all.log"
+          exit "$check_status"
+      - name: Record commit-bound gate evidence
+        if: always()
+        id: gate-evidence
+        run: >-
+          bun run gate:registrar "$RUNNER_TEMP/check-all.log" "$GITHUB_SHA"
+          "github-actions/ubuntu-latest" "$RUNNER_TEMP/ultimo-gate.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: check-all-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/check-all.log
+            ${{ runner.temp }}/ultimo-gate.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Capture service diagnostics
         if: always()
         run: |
@@ -101,5 +124,4 @@ jobs:
           image-ref: wagering-api:ci
           format: table
           severity: HIGH,CRITICAL
-          ignore-unfixed: true
           exit-code: '1'

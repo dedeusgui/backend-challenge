@@ -25,7 +25,7 @@ BEGIN
       GROUP BY reference_transaction_id HAVING COUNT(*) > 1
   ) AS duplicate_identities;
   RAISE NOTICE 'INV-01 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-01'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-01=%s', violation_count)); END IF;
 
   -- INV-02: the ledger is arithmetically continuous and reconstructs each materialized balance.
   WITH ledger_chain AS (
@@ -51,7 +51,7 @@ BEGIN
     SELECT wallet_id FROM ledger_chain WHERE balance_before <> prior_balance
   ) AS broken_ledger;
   RAISE NOTICE 'INV-02 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-02'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-02=%s', violation_count)); END IF;
 
   -- INV-03: persisted monetary columns use the exact NUMERIC(20,2) representation.
   WITH expected(table_name, column_name) AS (
@@ -71,7 +71,7 @@ BEGIN
       OR c.numeric_precision <> 20
       OR c.numeric_scale <> 2;
   RAISE NOTICE 'INV-03 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-03'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-03=%s', violation_count)); END IF;
 
   -- INV-04: the persistent idempotency key is backed by a validated unique constraint.
   SELECT COUNT(*) INTO violation_count
@@ -82,14 +82,14 @@ BEGIN
         AND c.conname = expected.constraint_name AND c.contype = 'u' AND c.convalidated
    );
   RAISE NOTICE 'INV-04 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-04'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-04=%s', violation_count)); END IF;
 
   -- INV-05: committed outbox rows have a coherent delivery state and timestamp.
   SELECT COUNT(*) INTO violation_count
     FROM outbox_messages
    WHERE (status = 'PUBLISHED') IS DISTINCT FROM (published_at IS NOT NULL);
   RAISE NOTICE 'INV-05 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-05'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-05=%s', violation_count)); END IF;
 
   -- INV-06: ledger mutation guards exist and are enabled for ordinary sessions.
   WITH expected(table_name, trigger_name) AS (
@@ -108,7 +108,7 @@ BEGIN
     violation_count := violation_count + 1;
   END IF;
   RAISE NOTICE 'INV-06 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-06'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-06=%s', violation_count)); END IF;
 
   -- INV-07: wallet identity is scoped by player and currency, with no duplicate stored wallets.
   SELECT COUNT(*) INTO violation_count FROM (
@@ -122,7 +122,7 @@ BEGIN
     violation_count := violation_count + 1;
   END IF;
   RAISE NOTICE 'INV-07 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-07'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-07=%s', violation_count)); END IF;
 
   -- INV-08: wallet versions remain valid and the database guard enforces balance/version coupling.
   SELECT COUNT(*) INTO violation_count FROM wallets WHERE version < 1;
@@ -134,7 +134,7 @@ BEGIN
     violation_count := violation_count + 1;
   END IF;
   RAISE NOTICE 'INV-08 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-08'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-08=%s', violation_count)); END IF;
 
   -- INV-09: resolved references still point to the same provider, wallet, round and external ID.
   SELECT COUNT(*) INTO violation_count
@@ -149,7 +149,7 @@ BEGIN
           AND target.external_transaction_id = source.reference_external_transaction_id
      );
   RAISE NOTICE 'INV-09 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-09'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-09=%s', violation_count)); END IF;
 
   -- INV-10: the database's core financial and messaging constraints are present and validated.
   WITH expected(table_name, constraint_name) AS (
@@ -185,7 +185,7 @@ BEGIN
      AND c.convalidated
    WHERE c.oid IS NULL;
   RAISE NOTICE 'INV-10 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-10'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-10=%s', violation_count)); END IF;
 
   -- INV-11: wallet-row locking has a primary-key target and ledger rows are unique per wallet/transaction.
   SELECT COUNT(*) INTO violation_count FROM (
@@ -199,7 +199,7 @@ BEGIN
     violation_count := violation_count + 1;
   END IF;
   RAISE NOTICE 'INV-11 violations=%', violation_count;
-  IF violation_count <> 0 THEN violations := array_append(violations, 'INV-11'); END IF;
+  IF violation_count <> 0 THEN violations := array_append(violations, format('INV-11=%s', violation_count)); END IF;
 
   -- INV-12 is informational. 17 is the expected migration count after the current chain correction.
   SELECT COUNT(*) INTO migration_count FROM mikro_orm_migrations;

@@ -20,6 +20,22 @@ afterAll(async () => {
 describe('financial invariant verifier', () => {
   test('accepts a migrated database with consistent financial state', async () => {
     await assertFinancialInvariants(database.orm);
+
+    const child = Bun.spawn([process.execPath, 'run', 'scripts/check-financial-invariants.ts'], {
+      env: { ...process.env, DATABASE_URL: database.url },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('INV-01 violations=0');
+    expect(stdout).toContain('INV-12 migrations=17 expected=17 (informational)');
+    expect(stderr).toBe('');
   });
 
   test('accepts a WIN and ROLLBACK that both reference the same BET', async () => {

@@ -16,7 +16,8 @@ import { connect, type Socket } from 'bun';
  */
 
 const REPO = join(import.meta.dir, '..', '..');
-const PUBLIC_URL = process.env.EDGE_URL ?? 'http://localhost:3000';
+const EDGE_HOST_PORT = process.env.EDGE_HOST_PORT ?? '3000';
+const PUBLIC_URL = process.env.EDGE_URL ?? `http://localhost:${EDGE_HOST_PORT}`;
 const NETWORK = process.env.EDGE_NETWORK ?? 'backend-challenge_default';
 const COMPOSE = [
   'docker',
@@ -153,8 +154,10 @@ describe('protected mode: the edge is the only way in', () => {
       '--format',
       '{{json .NetworkSettings.Ports}}',
     ]);
-    // The edge binds loopback only. It used to bind every interface, which this test pinned until the infra fix.
-    expect(edge.stdout).toContain('"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"3000"}]');
+    // The edge binds loopback only. A selected host port lets the suite run beside other local services.
+    expect(JSON.parse(edge.stdout)).toMatchObject({
+      '8080/tcp': [{ HostIp: '127.0.0.1', HostPort: EDGE_HOST_PORT }],
+    });
   });
 
   test('PostgreSQL and LocalStack publish no port in protected mode, at run time', async () => {
@@ -304,7 +307,7 @@ describe('protected mode: the edge is the only way in', () => {
       for (let index = 0; index < 60; index += 1) {
         const socket = await connect({
           hostname: 'localhost',
-          port: 3000,
+          port: Number(EDGE_HOST_PORT),
           socket: { data() {}, error() {}, close() {} },
         });
         // Complete headers and a body that never comes: the request stays in progress, and so does its connection.

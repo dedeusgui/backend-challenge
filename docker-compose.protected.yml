@@ -2,8 +2,8 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.protected.yml up --build
 #
-# The API is not published in this mode, so the edge is the only way in. The public port is the same,
-# 3000, so the examples in the README work in both modes. The default mode is docker-compose.yml alone.
+# The API is not published in this mode, so the edge is the only way in. The public port defaults to 3000
+# so the examples in the README work in both modes; EDGE_HOST_PORT selects a free port when needed.
 # Limits are per client address, and a benchmark may raise them with the variables below.
 # In this mode PostgreSQL and LocalStack publish no port either: the edge is the only host entry, and it
 # binds PUBLISH_HOST (127.0.0.1 by default). The database and the queue stay on the internal network.
@@ -34,7 +34,7 @@ services:
         condition: service_started
     environment: *edge-limits
     ports:
-      - '${PUBLISH_HOST:-127.0.0.1}:3000:8080'
+      - '${PUBLISH_HOST:-127.0.0.1}:${EDGE_HOST_PORT:-3000}:8080'
     volumes:
       - ./docker/edge/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./docker/edge/proxy.conf:/etc/nginx/edge/proxy.conf:ro

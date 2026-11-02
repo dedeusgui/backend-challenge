@@ -1,56 +1,69 @@
 {
   "recordedAt": "2026-11-01T22:26:40.041Z",
-  "exitCode": 0,
-  "passed": true,
+  "exitCode": null,
+  "passed": false,
   "suites": [
     {
       "key": "unit",
       "name": "Unitária",
       "passed": 516,
       "failed": 0,
-      "total": 516
+      "total": 516,
+      "status": "passed",
+      "skipped": 0
     },
     {
       "key": "infra",
       "name": "Infraestrutura",
       "passed": 4,
       "failed": 0,
-      "total": 4
+      "total": 4,
+      "status": "passed",
+      "skipped": 0
     },
     {
       "key": "integration",
       "name": "Integração",
       "passed": 248,
       "failed": 0,
-      "total": 248
+      "total": 248,
+      "status": "passed",
+      "skipped": 0
     },
     {
       "key": "concurrency",
       "name": "Concorrência",
       "passed": 23,
       "failed": 0,
-      "total": 23
+      "total": 23,
+      "status": "passed",
+      "skipped": 0
     },
     {
       "key": "e2e",
       "name": "E2E",
       "passed": 104,
       "failed": 0,
-      "total": 104
+      "total": 104,
+      "status": "passed",
+      "skipped": 0
     },
     {
       "key": "features",
       "name": "Cenários Gherkin",
       "passed": 73,
       "failed": 0,
-      "total": 73
+      "total": 73,
+      "status": "passed",
+      "skipped": 0
     }
   ],
   "cucumber": {
     "scenarios": {
       "total": 73,
       "passed": 73,
-      "failed": 0
+      "failed": 0,
+      "skipped": 0
     },
     "steps": {
       "total": 365,
@@ -58,5 +71,12 @@
       "failed": 0,
       "skipped": 0
     }
-  }
+  },
+  "schemaVersion": 2,
+  "commitSha": null,
+  "environment": null,
+  "valid": false,
+  "errors": [
+    "Registro histórico sem SHA do código testado e sem identificação do ambiente; não comprova aprovação do HEAD."
+  ]
 }

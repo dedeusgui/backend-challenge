@@ -40,6 +40,10 @@ function numeric(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function isSuiteStatus(value: unknown): value is GateRecord['suites'][number]['status'] {
+  return value === 'not-run' || value === 'incomplete' || value === 'passed' || value === 'failed';
+}
+
 export function escapeXml(value: string): string {
   return value.replace(/[<>&"']/g, (character) => {
     switch (character) {
@@ -389,28 +393,37 @@ export function renderGateSuitesSvg(gate: GateRecord, blockedScenarios?: number)
   const suiteLabels = gate.suites.map((suite) =>
     suite.key === 'features'
       ? `${gate.cucumber.scenarios.passed} cenários · ${gate.cucumber.steps.passed} passos`
-      : `${suite.passed} passou · ${suite.failed} falhou`,
+      : suite.status === 'not-run'
+        ? 'não executada'
+        : `${suite.passed} passou · ${suite.failed} falhou · ${suite.skipped} ignorados`,
   );
   const maxLabelLen = Math.max(1, ...suiteLabels.map((l) => l.length));
   const maxLabelWidth = Math.ceil(0.6 * 11 * maxLabelLen);
   const rightMargin = maxLabelWidth + 24;
   const xMax = width - rightMargin;
   const max = Math.max(1, ...gate.suites.map((suite) => suite.total));
+  const gateStatus = !gate.valid ? 'sem evidência' : gate.passed ? 'aprovado' : 'reprovado';
   const body = [
-    xmlStart(
-      `Gate ${gate.passed ? 'aprovado' : 'reprovado'} · exit code ${gate.exitCode}`,
-      width,
-      height,
+    xmlStart(`Gate ${gateStatus} · exit code ${gate.exitCode ?? 'ausente'}`, width, height),
+    text(
+      x0,
+      64,
+      `Testes por suíte (${gate.valid ? 'registro válido' : 'registro sem SHA/ambiente verificáveis'})`,
+      12,
     ),
-    text(x0, 64, 'Testes por suíte (total)', 12),
     axis(x0, top, xMax, top + gate.suites.length * rowHeight),
   ];
   gate.suites.forEach((suite, index) => {
     const y = top + index * rowHeight + 22;
     body.push(text(24, y + 4, suite.name));
     const end = linearScale(suite.total, 0, max, x0, xMax);
-    const color = suite.failed > 0 ? ORANGE : BLUE;
-    const label = suiteLabels[index] ?? `${suite.passed} passou · ${suite.failed} falhou`;
+    const color =
+      suite.status === 'not-run' || suite.status === 'incomplete'
+        ? LINE
+        : suite.failed > 0 || suite.skipped > 0
+          ? ORANGE
+          : BLUE;
+    const label = suiteLabels[index] ?? 'resumo incompleto';
     body.push(
       `<rect x="${x0}" y="${y - 8}" width="${Math.max(1, end - x0)}" height="16" fill="${color}"/>`,
       text(end + 6, y + 4, label, 11),
@@ -424,9 +437,13 @@ export function renderGateSuitesSvg(gate: GateRecord, blockedScenarios?: number)
 }
 
 function renderSeloGateSvg(gate: GateRecord): string {
-  const label = gate.passed ? 'GATE APROVADO' : 'GATE REPROVADO';
-  const color = gate.passed ? GREEN : '#a52f24';
-  return `${xmlStart(label, 290, 82)}<rect x="16" y="45" width="258" height="24" rx="6" fill="${color}"/><text x="145" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">${label} · exit ${gate.exitCode}</text></svg>`;
+  const label = !gate.valid
+    ? 'GATE SEM EVIDÊNCIA'
+    : gate.passed
+      ? 'GATE APROVADO'
+      : 'GATE REPROVADO';
+  const color = !gate.valid ? LINE : gate.passed ? GREEN : '#a52f24';
+  return `${xmlStart(label, 320, 82)}<rect x="16" y="45" width="288" height="24" rx="6" fill="${color}"/><text x="160" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">${label} · exit ${gate.exitCode ?? 'ausente'}</text></svg>`;
 }
 
 function renderSeloCenariosSvg(gate: GateRecord): string {
@@ -475,23 +492,60 @@ function parseGateRecord(value: unknown): GateRecord {
   const data = object(value);
   if (
     data === undefined ||
-    typeof data.exitCode !== 'number' ||
+    data.schemaVersion !== 2 ||
+    (data.exitCode !== null && typeof data.exitCode !== 'number') ||
     typeof data.passed !== 'boolean' ||
+    typeof data.valid !== 'boolean' ||
+    typeof data.recordedAt !== 'string' ||
+    (data.commitSha !== null && typeof data.commitSha !== 'string') ||
+    (data.environment !== null && typeof data.environment !== 'string') ||
+    !Array.isArray(data.errors) ||
+    !data.errors.every((error) => typeof error === 'string') ||
     !Array.isArray(data.suites)
   ) {
     throw new Error('docs/gate/ultimo-gate.json tem formato inválido');
   }
-  const suites = data.suites.filter((item): item is GateRecord['suites'][number] => {
+  const suites = data.suites.map((item): GateRecord['suites'][number] => {
     const suite = object(item);
-    return (
+    if (
       suite !== undefined &&
       typeof suite.key === 'string' &&
       typeof suite.name === 'string' &&
+      isSuiteStatus(suite.status) &&
       typeof suite.passed === 'number' &&
       typeof suite.failed === 'number' &&
-      typeof suite.total === 'number'
-    );
+      typeof suite.skipped === 'number' &&
+      typeof suite.total === 'number' &&
+      Number.isSafeInteger(suite.passed) &&
+      Number.isSafeInteger(suite.failed) &&
+      Number.isSafeInteger(suite.skipped) &&
+      Number.isSafeInteger(suite.total) &&
+      suite.passed >= 0 &&
+      suite.failed >= 0 &&
+      suite.skipped >= 0 &&
+      suite.total === suite.passed + suite.failed + suite.skipped &&
+      (suite.status !== 'passed' || (suite.total > 0 && suite.passed === suite.total)) &&
+      (suite.status !== 'not-run' || suite.total === 0)
+    ) {
+      return {
+        key: suite.key,
+        name: suite.name,
+        status: suite.status,
+        passed: suite.passed,
+        failed: suite.failed,
+        skipped: suite.skipped,
+        total: suite.total,
+      };
+    }
+    throw new Error('docs/gate/ultimo-gate.json contém suíte inválida');
   });
+  const expectedKeys = ['unit', 'infra', 'integration', 'concurrency', 'e2e', 'features'];
+  if (
+    suites.length !== expectedKeys.length ||
+    expectedKeys.some((key) => suites.filter((suite) => suite.key === key).length !== 1)
+  ) {
+    throw new Error('docs/gate/ultimo-gate.json não contém todas as suítes uma vez');
+  }
   const cucumberData = object(data.cucumber);
   const scenarios = object(cucumberData?.scenarios);
   const steps = object(cucumberData?.steps);
@@ -500,6 +554,7 @@ function parseGateRecord(value: unknown): GateRecord {
   const scenarioTotal = numeric(scenarios.total);
   const scenarioPassed = numeric(scenarios.passed);
   const scenarioFailed = numeric(scenarios.failed);
+  const scenarioSkipped = numeric(scenarios.skipped);
   const stepTotal = numeric(steps.total);
   const stepPassed = numeric(steps.passed);
   const stepFailed = numeric(steps.failed);
@@ -508,19 +563,38 @@ function parseGateRecord(value: unknown): GateRecord {
     scenarioTotal === undefined ||
     scenarioPassed === undefined ||
     scenarioFailed === undefined ||
+    scenarioSkipped === undefined ||
     stepTotal === undefined ||
     stepPassed === undefined ||
     stepFailed === undefined ||
     stepSkipped === undefined
   )
     throw new Error('Registro do gate contém contagem inválida');
+  if (
+    scenarioTotal !== scenarioPassed + scenarioFailed + scenarioSkipped ||
+    stepTotal !== stepPassed + stepFailed + stepSkipped ||
+    (data.passed &&
+      (!data.valid || data.exitCode !== 0 || suites.some((suite) => suite.status !== 'passed')))
+  ) {
+    throw new Error('Registro do gate contém totais ou status inconsistentes');
+  }
   return {
-    recordedAt: typeof data.recordedAt === 'string' ? data.recordedAt : '',
+    schemaVersion: 2,
+    recordedAt: data.recordedAt,
+    commitSha: data.commitSha,
+    environment: data.environment,
     exitCode: data.exitCode,
+    valid: data.valid,
     passed: data.passed,
+    errors: data.errors,
     suites,
     cucumber: {
-      scenarios: { total: scenarioTotal, passed: scenarioPassed, failed: scenarioFailed },
+      scenarios: {
+        total: scenarioTotal,
+        passed: scenarioPassed,
+        failed: scenarioFailed,
+        skipped: scenarioSkipped,
+      },
       steps: { total: stepTotal, passed: stepPassed, failed: stepFailed, skipped: stepSkipped },
     },
   };

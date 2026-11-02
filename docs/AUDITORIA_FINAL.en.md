@@ -192,18 +192,19 @@ of CI on a published SHA.
   `bun run check:all` and `bun run check:financial-invariants` passed. Cucumber produced 73/73 scenarios and 438/438
   steps passed; two `@bloqueado` scenarios remain excluded. The SQL verifier returned zero for INV-1 through INV-11
   and expected 17 migrations in INV-12.
-- **Testcontainers:** `bun run test:containers` passed with 20 tests and 94 assertions; on the final rerun at `47617e7`,
-  startup was 22.17 s and tests 8.32 s. The point-in-time Compose comparison remains a non-benchmark.
+- **Testcontainers:** `bun run test:containers` passed with 20 tests and 94 assertions. Recorded runs: 22.17 s startup
+  and 8.32 s tests on `47617e7`; 24.85 s and 8.77 s, respectively, on `2284a9d`. The point-in-time Compose
+  comparison remains a non-benchmark.
 - **Runtime and protection smoke:** `demo:finance` and `smoke:sqs-worker` passed against the already-running Compose
   stack; the latter sent two distinct envelopes to the real worker and verified one BET, balance 99.00 and a
   reconciled ledger. `test/edge/protected-mode.test.ts` passed 12 tests and 85 assertions in an isolated project.
-- **Pages:** `bun run site:build` passed on `47617e7` and checked 378 repository links; the run after this
+- **Pages:** `bun run site:build` passed on `2284a9d` and checked 379 repository links; the run after this
   documentation update is recorded with the final SHA in the release report.
 - **Image build limit:** the versioned Dockerfile stayed at `bun install` for over two minutes even with proxy and CA
   configured; the build was stopped without producing an image. The SQS smoke used the real stack already available,
   so it does not prove a rebuild of this round's Dockerfile.
-- **GitHub Actions and security:** the push of `47617e7` to `main` was accepted, but its public checks page still had no
-  checks. CI declares `push` and `workflow_dispatch`; an explicit dispatch attempt received `Forbidden` from
+- **GitHub Actions and security:** pushes of `47617e7` and `2284a9d` to `main` were accepted, but neither public checks
+  page showed checks. CI declares `push` and `workflow_dispatch`; an explicit dispatch attempt received `Forbidden` from
   `api.github.com`. `GH_TOKEN` was invalid even though public `github.com` pages and the Git remote push worked. The
   push actor/credential and organization settings could not be inspected, so the missing workflow cause is unconfirmed.
-  No hosted result for CI, Dependency Review, CodeQL, Trivy or the SBOM was observed.
+  No hosted result for CI, Dependency Review, CodeQL, Trivy or the SBOM was observed for the current SHA.

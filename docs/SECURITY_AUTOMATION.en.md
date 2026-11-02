@@ -14,8 +14,9 @@ prove it ran successfully.
 
 The public checks page for `37ff489977e817ecac98b9c86efc5ba9a5fe5932` said “There are no checks for this commit”; the
 inspected list ended with runs for SHA `2a2fb182`. Later, the push of `47617e76f5c44507a92e7a6fe80b1a2403bd40ca` to
-`main` was accepted, but that commit's public checks page also said “There are no checks for this commit”. The
-versioned CI workflow declares an unfiltered `push` trigger and `workflow_dispatch`; no workflow in this repository
+`main` was accepted, but that commit's public checks page also said “There are no checks for this commit”. The later
+commit `2284a9d3664c71126e2529368552a94fa635cace`, which updated this evidence, was also pushed and still had no public
+checks. The versioned CI workflow declares an unfiltered `push` trigger and `workflow_dispatch`; no workflow in this repository
 commits or pushes back. The exact cause of the missing run is unconfirmed.
 
 The main CI and CodeQL workflows support `workflow_dispatch` as well as automatic triggers. In this review, `GH_TOKEN`
@@ -23,8 +24,8 @@ was rejected as invalid, `gh` had no authenticated session without that variable
 received `Forbidden` from `api.github.com`. Public `github.com` pages and the Git remote push were available. The push
 actor or credential type and the repository's Actions settings could not be inspected; suppression of runs from
 `GITHUB_TOKEN` pushes is a possibility, not a confirmed cause. Dependency Review still requires a pull request
-targeting `main`. No hosted result for the published SHA was observed for CI, CodeQL, Trivy, Dependency Review or manual
-dispatch.
+targeting `main`. No hosted result for published SHA `2284a9d` was observed for CI, CodeQL, Trivy, Dependency Review or
+manual dispatch.
 
 ## How to review
 

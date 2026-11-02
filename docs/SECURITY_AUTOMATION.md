@@ -14,8 +14,9 @@ não prova que ele foi executado com sucesso.
 
 A página pública de checks de `37ff489977e817ecac98b9c86efc5ba9a5fe5932` informou “There are no checks for this commit”; a
 lista consultada terminava em execuções do SHA `2a2fb182`. Depois, o push de `47617e76f5c44507a92e7a6fe80b1a2403bd40ca`
-para `main` foi aceito, mas a página pública desse commit também informou “There are no checks for this commit”. O
-workflow CI versionado declara `push` sem filtro de branch e `workflow_dispatch`; não há workflow neste repositório que
+para `main` foi aceito, mas a página pública desse commit também informou “There are no checks for this commit”. O commit
+posterior `2284a9d3664c71126e2529368552a94fa635cace`, que atualizou esta evidência, também foi enviado e permaneceu sem
+checks públicos. O workflow CI versionado declara `push` sem filtro de branch e `workflow_dispatch`; não há workflow neste repositório que
 faça commit ou push de volta. A causa exata da ausência de execução não foi comprovada.
 
 O CI geral e o CodeQL aceitam `workflow_dispatch`, além dos gatilhos automáticos. Nesta revisão, `GH_TOKEN` foi
@@ -24,7 +25,7 @@ rejeitado como inválido, `gh` não tinha sessão autenticada sem essa variável
 tipo de credencial usado no push e as configurações de Actions da organização não puderam ser inspecionados; a supressão
 de execuções em pushes feitos com `GITHUB_TOKEN` é uma possibilidade, não uma causa confirmada. Dependency Review
 continua exigindo uma pull request destinada a `main`. CodeQL, Trivy, Dependency Review e dispatch manual não tiveram
-resultados hospedados observados para o SHA publicado.
+resultados hospedados observados para o SHA publicado `2284a9d`.
 
 ## Como revisar
 

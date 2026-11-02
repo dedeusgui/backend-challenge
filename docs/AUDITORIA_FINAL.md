@@ -192,18 +192,21 @@ desta rodada, não resultados hospedados nem prova de CI em um SHA publicado.
   `bun run check:all` e `bun run check:financial-invariants` passaram. O Cucumber gerou 73/73 cenários e 438/438
   passos aprovados; dois cenários `@bloqueado` permanecem fora da execução. O verificador SQL retornou zero em INV-1
   a INV-11 e esperava 17 migrations em INV-12.
-- **Testcontainers:** `bun run test:containers` passou com 20 testes e 94 assertions; no rerun final em `47617e7`,
-  startup foi 22,17 s e testes 8,32 s. A comparação pontual com Compose continua não sendo benchmark.
+- **Testcontainers:** `bun run test:containers` passou com 20 testes e 94 assertions. Execuções registradas: 22,17 s de
+  startup e 8,32 s de testes em `47617e7`; 24,85 s e 8,77 s, respectivamente, em `2284a9d`. A comparação pontual
+  com Compose continua não sendo benchmark.
 - **Smoke e proteção:** `demo:finance` e `smoke:sqs-worker` passaram contra a stack Compose já em execução; o segundo
   publicou dois envelopes distintos ao worker real e verificou uma única BET, saldo 99.00 e ledger reconciliado.
   `test/edge/protected-mode.test.ts` passou 12 testes e 85 assertions em um projeto isolado.
-- **Pages:** `bun run site:build` passou em `47617e7` e validou 378 links do repositório; a execução após este ajuste
+- **Pages:** `bun run site:build` passou em `2284a9d` e validou 379 links do repositório; a execução após este ajuste
   de documentação é registrada junto ao SHA final no relatório de release.
 - **Limite de imagem:** o Dockerfile versionado permaneceu por mais de dois minutos parado em `bun install` mesmo com
   proxy e CA configurados; o build foi interrompido sem produzir uma imagem. O smoke SQS usou a stack real já
   disponível, portanto não comprova rebuild do Dockerfile desta rodada.
-- **GitHub Actions e segurança:** o push de `47617e7` para `main` foi aceito, mas sua página pública continuou sem
-  checks. O CI declara `push` e `workflow_dispatch`; a tentativa manual recebeu `Forbidden` de `api.github.com`. O
+- **GitHub Actions e segurança:** os pushes de `47617e7` e `2284a9d` para `main` foram aceitos, mas as páginas públicas
+  de checks de ambos continuaram sem checks. O CI declara `push` e `workflow_dispatch`; a tentativa manual recebeu
+  `Forbidden` de `api.github.com`. O
   `GH_TOKEN` era inválido, embora as páginas públicas de `github.com` e o push Git remoto estivessem acessíveis. Não
   foi possível inspecionar o ator/credencial do push nem as configurações da organização, então a causa da ausência de
-  workflow não está comprovada. Nenhum resultado hospedado de CI, Dependency Review, CodeQL, Trivy ou SBOM foi observado.
+  workflow não está comprovada. Nenhum resultado hospedado de CI, Dependency Review, CodeQL, Trivy ou SBOM foi observado
+  para o SHA atual.

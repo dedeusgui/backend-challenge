@@ -199,7 +199,6 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: protected-${{ github.run_id }}-${{ github.run_attempt }}
       EDGE_NETWORK: protected-${{ github.run_id }}-${{ github.run_attempt }}_default
-      EDGE_DIAGNOSTICS_DIR: ${{ runner.temp }}/protected-edge-diagnostics
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -218,6 +217,8 @@ jobs:
           port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
           printf 'EDGE_HOST_PORT=%s\n' "$port" >> "$GITHUB_ENV"
       - name: Run protected mode checks
+        env:
+          EDGE_DIAGNOSTICS_DIR: ${{ runner.temp }}/protected-edge-diagnostics
         run: bun run edge:check
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

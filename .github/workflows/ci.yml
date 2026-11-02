@@ -3,6 +3,7 @@ name: CI gates
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -131,8 +132,9 @@ jobs:
           API_URL: http://127.0.0.1:3000
           DATABASE_URL: postgresql://wagering:wagering@127.0.0.1:5432/wagering
       - name: Exercise an SQS command and replay
-        run: bun test test/integration/messaging/http-and-queue-replay.test.ts
+        run: bun run smoke:sqs-worker
         env:
+          API_URL: http://127.0.0.1:3000
           DATABASE_URL: postgresql://wagering:wagering@127.0.0.1:5432/wagering
           SQS_ENDPOINT: http://127.0.0.1:4566
       - name: Verify read-only financial invariants
@@ -190,6 +192,41 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  protected-edge:
+    name: Protected mode edge checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      COMPOSE_PROJECT_NAME: protected-${{ github.run_id }}-${{ github.run_attempt }}
+      EDGE_NETWORK: protected-${{ github.run_id }}-${{ github.run_attempt }}_default
+      EDGE_DIAGNOSTICS_DIR: ${{ runner.temp }}/protected-edge-diagnostics
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.4'
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Select a free loopback port
+        run: |
+          port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+          printf 'EDGE_HOST_PORT=%s\n' "$port" >> "$GITHUB_ENV"
+      - name: Run protected mode checks
+        run: bun run edge:check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: protected-edge-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/protected-edge-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+
   security:
     name: Security scans
     runs-on: ubuntu-latest
@@ -199,6 +236,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build API image for scanning
+        id: build-image
         run: docker build -t wagering-api:ci .
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -210,6 +248,13 @@ jobs:
           format: json
           output: trivy-image-results.json
           exit-code: '1'
+      - name: Generate CycloneDX image SBOM
+        if: always() && steps.build-image.outcome == 'success'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wagering-api:ci
+          format: cyclonedx
+          output: image-sbom.cyclonedx.json
       - name: Scan repository dependencies and secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -225,6 +270,8 @@ jobs:
         if: always()
         with:
           name: trivy-results-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
-          path: trivy-*-results.json
+          path: |
+            trivy-*-results.json
+            image-sbom.cyclonedx.json
           if-no-files-found: warn
           retention-days: 30

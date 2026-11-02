@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { OpenWallet } from '../../../src/modules/wallet/application/open-wallet.use-case';
+import { ProcessWagerTransaction } from '../../../src/modules/wagering/application/process-wager-transaction.use-case';
+import { Money } from '../../../src/shared/domain/money';
+import { MikroOrmFinancialUnitOfWork } from '../../../src/shared/infrastructure/database/mikro-orm-financial-unit-of-work';
 import { assertFinancialInvariants } from '../../../scripts/check-financial-invariants';
 import { type TestDatabase, createTestDatabase } from '../support/test-database';
 
@@ -15,6 +19,45 @@ afterAll(async () => {
 
 describe('financial invariant verifier', () => {
   test('accepts a migrated database with consistent financial state', async () => {
+    await assertFinancialInvariants(database.orm);
+  });
+
+  test('accepts a WIN and ROLLBACK that both reference the same BET', async () => {
+    const unitOfWork = new MikroOrmFinancialUnitOfWork(database.orm);
+    const dependencies = {
+      unitOfWork,
+      clock: () => new Date('2026-11-01T12:00:00.000Z'),
+      newId: randomUUID,
+    };
+    const openWallet = new OpenWallet(dependencies);
+    const processWager = new ProcessWagerTransaction(dependencies);
+    const playerId = `player-${randomUUID()}`;
+    const { walletId } = await openWallet.execute({
+      playerId,
+      initialBalance: Money.from({ amount: '100.00', currency: 'BRL' }),
+    });
+    const betId = `bet-${randomUUID()}`;
+    const submit = (kind: 'BET' | 'WIN' | 'ROLLBACK', amount: string, reference?: string) => {
+      const externalTransactionId = `${kind.toLowerCase()}-${randomUUID()}`;
+      return processWager.execute({
+        idempotencyKey: `provider-a:${externalTransactionId}`,
+        providerId: 'provider-a',
+        externalTransactionId: kind === 'BET' ? betId : externalTransactionId,
+        playerId,
+        walletId,
+        roundId: 'round-987',
+        gameId: 'fortune-chimp',
+        kind,
+        money: Money.from({ amount, currency: 'BRL' }),
+        referenceExternalTransactionId: reference,
+        correlationId: `corr-${randomUUID()}`,
+      });
+    };
+
+    await submit('BET', '25.00');
+    await submit('WIN', '50.00', betId);
+    await submit('ROLLBACK', '25.00', betId);
+
     await assertFinancialInvariants(database.orm);
   });
 

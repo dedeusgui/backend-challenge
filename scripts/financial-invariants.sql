@@ -17,7 +17,11 @@ BEGIN
     SELECT 1 FROM wallet_ledger_entries GROUP BY wallet_id, transaction_id HAVING COUNT(*) > 1
     UNION ALL
     SELECT 1 FROM wager_transactions
-      WHERE status = 'PROCESSED' AND kind IN ('REFUND', 'ROLLBACK', 'WIN', 'LOSS')
+      WHERE status = 'PROCESSED' AND kind IN ('REFUND', 'WIN', 'LOSS')
+      GROUP BY reference_transaction_id HAVING COUNT(*) > 1
+    UNION ALL
+    SELECT 1 FROM wager_transactions
+      WHERE status = 'PROCESSED' AND kind = 'ROLLBACK'
       GROUP BY reference_transaction_id HAVING COUNT(*) > 1
   ) AS duplicate_identities;
   RAISE NOTICE 'INV-01 violations=%', violation_count;

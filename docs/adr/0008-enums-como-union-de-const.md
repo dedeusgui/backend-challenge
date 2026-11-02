@@ -1,4 +1,4 @@
-# ADR 0003: Enums como união de tipos com const
+# ADR 0008: Enums como união de tipos com const
 
 **Status:** aceito
 

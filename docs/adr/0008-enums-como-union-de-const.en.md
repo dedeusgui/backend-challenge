@@ -1,6 +1,6 @@
-# ADR 0003: Enums as const union types
+# ADR 0008: Enums as const union types
 
-> English reference copy. The main version, in Portuguese, is [0003-enums-como-union-de-const.md](0003-enums-como-union-de-const.md).
+> English reference copy. The main version, in Portuguese, is [0008-enums-como-union-de-const.md](0008-enums-como-union-de-const.md).
 
 **Status:** accepted
 

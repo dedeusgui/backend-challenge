@@ -9,7 +9,7 @@ These rules apply to all documentation. The documentation is part of the grading
 
 - The **main version is in Portuguese (pt-BR)**. It is the one the evaluator reads first.
 - Each main document has an **English reference copy**, with the suffix `.en.md`, like the pair
-  [README.en.md](../README.en.md) and [README.en.en.md](../README.en.md). Examples: `ARCHITECTURE.md` and `ARCHITECTURE.en.md`,
+  [README.en.md](../README.en.md) and [README.en.md](../README.en.md). Examples: `ARCHITECTURE.md` and `ARCHITECTURE.en.md`,
   `DECISIONS.md` and `DECISIONS.en.md`, `docs/adr/0001-pessimistic-wallet-lock.md` and its `.en.md`.
 - The English copy points to the Portuguese version at the top, and its internal links point to the English copies.
 - **When you change a document that has a pair, update both in the same commit.** The Portuguese version is the source of truth.

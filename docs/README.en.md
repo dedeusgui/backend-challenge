@@ -43,7 +43,7 @@ Audits, extensive matrices, benchmarks, mutation experiments, histories, public 
 observability documentation are reference material for specific questions.
 
 **English versions:** each main document has an English reference copy, with the `.en.md` suffix, such as
-[README.en.en.md](../README.en.md) and [ARCHITECTURE.en.en.md](../ARCHITECTURE.en.md). The content is the same.
+[README.en.md](../README.en.md) and [ARCHITECTURE.en.md](../ARCHITECTURE.en.md). The content is the same.
 
 ## Documentation divisions
 

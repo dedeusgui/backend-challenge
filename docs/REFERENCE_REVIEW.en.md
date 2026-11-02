@@ -133,7 +133,7 @@ Based on practices identified across the references, the following solutions wer
 
 3. **Domain monetary representation using `bigint` fractional units:**
    - _Identified pattern:_ Present across multiple repositories operating on cents via integers and converting text strings with string replacement routines.
-   - _Reason for rejection:_ String parsing to convert scales introduces maintenance fragilities. An immutable value object backed by `decimal.js` guarantees exact arbitrary-precision arithmetic, strict two-decimal scale validation, and clean alignment with PostgreSQL `NUMERIC(20,2)`. Documented in [docs/adr/0002-money-representation.en.en.md](adr/0002-money-representation.en.md).
+   - _Reason for rejection:_ String parsing to convert scales introduces maintenance fragilities. An immutable value object backed by `decimal.js` guarantees exact arbitrary-precision arithmetic, strict two-decimal scale validation, and clean alignment with PostgreSQL `NUMERIC(20,2)`. Documented in [docs/adr/0002-money-representation.en.md](adr/0002-money-representation.en.md).
 
 4. **Circuit breaker pattern on transport calls:**
    - _Identified pattern:_ Present in 4 repositories (`circuit_breaker` cluster in dados brutos não versionados).

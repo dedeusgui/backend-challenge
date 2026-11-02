@@ -1,4 +1,4 @@
-_The main document is in Portuguese: [COESAO.md](COESAO.md)._
+_The main document is in Portuguese: [COESAO.en.md](COESAO.en.md)._
 
 # Cohesion analysis based on change history
 

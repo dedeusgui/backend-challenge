@@ -48,6 +48,16 @@ Provedor ──SQS──> inbox/worker ─────────────�
 
 A mesma regra de liquidação atende HTTP e fila; o banco controla as invariantes e a outbox publica após o commit. Detalhes e fluxos: [ARCHITECTURE.md](ARCHITECTURE.md).
 
+Fluxos principais, em imagem (gerados por `scripts/export-diagrams.ts`; rótulos em português, como a documentação principal):
+
+![Aposta pela HTTP: da chave de API ao resultado](docs/diagrams/bet-over-http.svg)
+
+![Comando pela fila: validação, DLQ e mesmo caso de uso da HTTP](docs/diagrams/queued-command.svg)
+
+![Resultados e efeitos: PROCESSED, REJECTED e aguardando referência](docs/diagrams/outcome-entities.svg)
+
+A [vitrine estática no GitHub Pages](https://dedeusgui.github.io/backend-challenge/) reúne a mesma arquitetura com mais contexto: fluxos, garantias, testes, desempenho medido, decisões e limitações, com os gráficos de carga e o registro do gate.
+
 ## 5. Garantias financeiras e distribuídas
 
 | Garantia                                                           | Evidência principal                                                                                                      |

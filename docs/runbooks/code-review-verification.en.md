@@ -1,6 +1,6 @@
 # Code review and verification
 
-Português: [Revisão e verificação](code-review-verification.md).
+Português: [Revisão e verificação](code-review-verification.en.md).
 
 ## Context
 
@@ -16,10 +16,10 @@ Use this guide to review a change, prepare its completion report, or record veri
 
 ## Invariants and evidence
 
-- Binding architecture and rules live in [CLAUDE.md](../../CLAUDE.md) and [ARCHITECTURE.md](../../ARCHITECTURE.en.md); do not duplicate them here.
-- Documentation conventions require verifiable paths and commands: [CONVENCOES_DOCUMENTACAO.md](../CONVENCOES_DOCUMENTACAO.en.md).
+- Binding architecture and rules live in [CLAUDE.md](../../CLAUDE.md) and [ARCHITECTURE.en.md](../../ARCHITECTURE.en.md); do not duplicate them here.
+- Documentation conventions require verifiable paths and commands: [CONVENCOES_DOCUMENTACAO.en.md](../CONVENCOES_DOCUMENTACAO.en.md).
 - Fast and full gates are defined in `package.json`; suites are under `test/unit/` and `test/integration/`.
-- A suite that was not run does not prove behavior; the requirements matrix is [REQUIREMENTS_MATRIX.md](../REQUIREMENTS_MATRIX.md).
+- A suite that was not run does not prove behavior; the requirements matrix is [REQUIREMENTS_MATRIX.en.md](../REQUIREMENTS_MATRIX.en.md).
 
 ## Work coordination
 

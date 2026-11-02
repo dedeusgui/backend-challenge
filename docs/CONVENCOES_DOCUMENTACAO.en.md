@@ -9,7 +9,7 @@ These rules apply to all documentation. The documentation is part of the grading
 
 - The **main version is in Portuguese (pt-BR)**. It is the one the evaluator reads first.
 - Each main document has an **English reference copy**, with the suffix `.en.md`, like the pair
-  [README.md](../README.md) and [README.en.md](../README.en.md). Examples: `ARCHITECTURE.md` and `ARCHITECTURE.en.md`,
+  [README.en.md](../README.en.md) and [README.en.en.md](../README.en.md). Examples: `ARCHITECTURE.md` and `ARCHITECTURE.en.md`,
   `DECISIONS.md` and `DECISIONS.en.md`, `docs/adr/0001-pessimistic-wallet-lock.md` and its `.en.md`.
 - The English copy points to the Portuguese version at the top, and its internal links point to the English copies.
 - **When you change a document that has a pair, update both in the same commit.** The Portuguese version is the source of truth.
@@ -37,11 +37,11 @@ reference: `ARCHITECTURE.md`, `DECISIONS.md`, `docs/REQUIREMENTS_MATRIX.md`, `do
 
 ## Indexes that must follow the changes
 
-- [docs/README.md](README.md): the central index, the evaluator questions and the main reading path. Update it when a
+- [docs/README.en.md](README.en.md): the central index, the evaluator questions and the main reading path. Update it when a
   document is created, removed or changes role.
-- [DECISIONS.md](../DECISIONS.md): the consolidated index of decisions, by group. A new decision goes into the right
+- [DECISIONS.en.md](../DECISIONS.en.md): the consolidated index of decisions, by group. A new decision goes into the right
   group, and the index count is updated. If it has an ADR, the ADR is also created or updated.
-- [docs/adr/README.md](adr/README.md): the ADR index. A superseded ADR keeps its file, with a supersession note at the top.
+- [docs/adr/README.en.md](adr/README.en.md): the ADR index. A superseded ADR keeps its file, with a supersession note at the top.
 
 ## Every claim of proof points to something that exists
 

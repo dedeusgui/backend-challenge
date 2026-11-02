@@ -2,13 +2,13 @@
 
 > English reference copy. The main version, in Portuguese, is [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
-> **Appendix.** The log of the slices, kept as history. Where it differs from [ARCHITECTURE.md](../ARCHITECTURE.en.md),
+> **Appendix.** The log of the slices, kept as history. Where it differs from [ARCHITECTURE.en.md](../ARCHITECTURE.en.md),
 > ARCHITECTURE.md is the current reading.
 >
 > The load figures on this page come from an earlier round and are superseded. The current values are in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md).
 
 The [challenge specification](CHALLENGE.md) is authoritative. The
-[requirements matrix](REQUIREMENTS_MATRIX.md) is the detailed status. This page
+[requirements matrix](REQUIREMENTS_MATRIX.en.md) is the detailed status. This page
 summarises the slices and what each one proved.
 
 ## Foundation and tooling

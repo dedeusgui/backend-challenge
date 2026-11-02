@@ -3,7 +3,7 @@
 > English reference copy. The main version, in Portuguese, is [FLOW_MATRIX.md](FLOW_MATRIX.md).
 
 > **Appendix.** A reference for a reviewer who traces one operation through the code. The overview is in
-> [ARCHITECTURE.md](../ARCHITECTURE.en.md), sections 1 and 5.
+> [ARCHITECTURE.en.md](../ARCHITECTURE.en.md), sections 1 and 5.
 
 One document for the flow of data through the system: which entity each step touches, which
 function does it, what the step decides, and what response or record each outcome leaves behind.

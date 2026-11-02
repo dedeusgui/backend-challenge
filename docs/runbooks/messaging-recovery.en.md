@@ -1,6 +1,6 @@
 # Messaging recovery
 
-Português: [Recuperação de mensageria](messaging-recovery.md).
+Português: [Recuperação de mensageria](messaging-recovery.en.md).
 
 ## Context
 

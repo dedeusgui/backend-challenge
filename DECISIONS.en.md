@@ -2,7 +2,7 @@
 
 > English reference copy. The main version, in Portuguese, is [DECISIONS.md](DECISIONS.md).
 
-> **Appendix.** Read after [ARCHITECTURE.md](ARCHITECTURE.en.md). Each row is a decision with its reason, trade-off and
+> **Appendix.** Read after [ARCHITECTURE.en.md](ARCHITECTURE.en.md). Each row is a decision with its reason, trade-off and
 > evidence. The main decisions are gathered in ARCHITECTURE's table at its start.
 
 Every technical decision of this project, with the reason, the trade-off, the evidence and the

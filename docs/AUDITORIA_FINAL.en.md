@@ -1,6 +1,6 @@
 # Final audit
 
-> Reference copy in English. The primary document is [AUDITORIA_FINAL.md](AUDITORIA_FINAL.md).
+> Reference copy in English. The primary document is [AUDITORIA_FINAL.en.md](AUDITORIA_FINAL.en.md).
 
 Final audit record for the historical review scope: audited code, verification methods, quality bar, findings, decisions then recorded as open, known test gaps, and simulated reviews.
 
@@ -17,14 +17,14 @@ claim they were reviewed or validated.
 
 ## 2. How it was verified
 
-| Verification                 | Command                                                                | Result                                                                                                                                                                                                             |
-| :--------------------------- | :--------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Validation gate              | `bun run check:all`                                                    | Older records reported 937 and later 516 passes, but had no SHA or environment. The current file marks them invalid; they are historical evidence and do not prove this HEAD.                                      |
-| Static and unit verification | `bun run check:fast`                                                   | Historical record: 512 unit tests, `tsc --noEmit`, `oxlint` and `prettier --check` were reported as passing. No associated SHA or environment means this does not prove the current HEAD.                          |
-| Load and capacity            | `bun run test:load`                                                    | Cloud campaign in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md); local baseline in [LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md), with 13 scenarios. These are earlier measurements, not a run of this HEAD. |
-| Financial demonstration      | `bun run demo:finance`                                                 | ExitCode 0 against the container stack: validates BET, WIN, REFUND, ROLLBACK, replay, and reconciliation.                                                                                                          |
-| HTTP API contract            | `bun test test/unit/openapi/` and `test/e2e/openapi-responses.test.ts` | Routes, schemas, and live responses validated against `docs/openapi.json`.                                                                                                                                         |
-| Static showcase              | `bun test test/unit/site/static-showcase.test.ts`                      | Static generation validated, published, and returning HTTP 200 via GitHub Pages.                                                                                                                                   |
+| Verification                 | Command                                                                | Result                                                                                                                                                                                                                |
+| :--------------------------- | :--------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation gate              | `bun run check:all`                                                    | Older records reported 937 and later 516 passes, but had no SHA or environment. The current file marks them invalid; they are historical evidence and do not prove this HEAD.                                         |
+| Static and unit verification | `bun run check:fast`                                                   | Historical record: 512 unit tests, `tsc --noEmit`, `oxlint` and `prettier --check` were reported as passing. No associated SHA or environment means this does not prove the current HEAD.                             |
+| Load and capacity            | `bun run test:load`                                                    | Cloud campaign in [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md); local baseline in [LOAD_TEST_BASELINE.en.en.md](LOAD_TEST_BASELINE.en.md), with 13 scenarios. These are earlier measurements, not a run of this HEAD. |
+| Financial demonstration      | `bun run demo:finance`                                                 | ExitCode 0 against the container stack: validates BET, WIN, REFUND, ROLLBACK, replay, and reconciliation.                                                                                                             |
+| HTTP API contract            | `bun test test/unit/openapi/` and `test/e2e/openapi-responses.test.ts` | Routes, schemas, and live responses validated against `docs/openapi.json`.                                                                                                                                            |
+| Static showcase              | `bun test test/unit/site/static-showcase.test.ts`                      | Static generation validated, published, and returning HTTP 200 via GitHub Pages.                                                                                                                                      |
 
 ## 3. Status of each quality bar item (docs/CHALLENGE.md §14)
 
@@ -106,7 +106,7 @@ Confirmation of closure for F-06 is found in migration 12 history (`git log --on
 | :--- | :------------------------------------------------------------ | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-09 | Ledger query plan depends on PostgreSQL planner statistics    | Open   | Requires monitoring with `EXPLAIN` in production. Measured queries: sequential scan at 1,000 entries (0.68 ms), index scan at 100,000 (0.44 ms) and 1,000,000 (0.50 ms).                   |
 | F-10 | `ROLLBACK` of BET after `ROLLBACK` of REFUND is rejected      | Open   | Contract decision (D4) is an open decision, owned by the challenge owner. Code enforces rejection with `REFERENCE_ALREADY_REVERSED`, fixed in tests.                                       |
-| F-11 | Results without reference cannot be bounded to one per BET    | Open   | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md).                                     |
+| F-11 | Results without reference cannot be bounded to one per BET    | Open   | Contract decision (D1) inherent to specification (§6.3, §7). Documented in `ARCHITECTURE.md` §13 and [INVARIANT_REVIEW.en.en.md](INVARIANT_REVIEW.en.md).                                  |
 | F-12 | Repository Docker image does not build in sandbox environment | Open   | Sandbox TLS proxy emits self-signed certificate (`SELF_SIGNED_CERT_IN_CHAIN`) during `bun install`. Bypassed in sandbox using an external test image; build verified in GitHub Actions CI. |
 
 ## 5. Decisions recorded as open in that snapshot
@@ -131,8 +131,8 @@ Technical limitations of the test suites and measurements:
   1. Line 71: "Uma mensagem que falha em dez entregas vai para a DLQ pelo redrive" (`@edge:QU-04`). Reason: the isolated BDD harness does not receive SQS redrive policy; real coverage is proven in `test/integration/messaging/broker-redrive.test.ts`.
   2. Line 91: "SIGTERM durante um lote conclui o item atual e devolve o restante" (`@edge:QU-07`). Reason: the BDD harness cannot control OS processes; real coverage is proven in `test/concurrency/process-crash-and-shutdown.test.ts`.
 - **Edge matrix IDs without `@edge:` tag:** The matrix [EDGE_CASE_MATRIX.md](audit/EDGE_CASE_MATRIX.md) lists 92 identifiers. In `test/features/*.feature`, 70 identifiers have the `@edge:` tag. The 22 identifiers without the tag are: `CF-01`, `CL-01`, `DB-01`, `DB-02`, `DB-03`, `DB-04`, `DB-05`, `EV-01`, `FA-01`, `LC-01`, `LC-02`, `LC-03`, `RS-01`, `RS-02`, `SC-01`, `SC-02`, `SC-03`, `SC-04`, `SC-05`, `SC-06`, `SC-07`, and `VW-01`. Each of these cases is tested by unit, integration, or concurrency suites, but was not expressed as Gherkin scenarios.
-- **Load test environments:** The cloud baseline ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) was measured on a virtual machine by an agent. The local baseline ([LOAD_TEST_BASELINE.en.md](LOAD_TEST_BASELINE.en.md)) was measured on a separate physical machine. Both measurements took place on distinct computing environments with different hardware. Do not compare one measurement with the other.
-- **Mutation testing:** Mutation testing results evaluated against `test/concurrency/distributed-contention.test.ts` (recorded in [TEST_STRATEGY.en.md](TEST_STRATEGY.en.md), section "Mutation evidence"):
+- **Load test environments:** The cloud baseline ([LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md)) was measured on a virtual machine by an agent. The local baseline ([LOAD_TEST_BASELINE.en.en.md](LOAD_TEST_BASELINE.en.md)) was measured on a separate physical machine. Both measurements took place on distinct computing environments with different hardware. Do not compare one measurement with the other.
+- **Mutation testing:** Mutation testing results evaluated against `test/concurrency/distributed-contention.test.ts` (recorded in [TEST_STRATEGY.en.en.md](TEST_STRATEGY.en.md), section "Mutation evidence"):
   - Mutant M1 (removing pessimistic row lock `FOR UPDATE` in `findForUpdate`): Killed. The test without retries failed with three lost updates.
   - Mutant M2 (removing single-reversal guard in `TransactionSettlement`): Killed. The refund with rollbacks test and the test without retries failed.
   - Mutant M3 (removing `SKIP LOCKED` clause in outbox claim): Survived. The mutant is equivalent in terms of safety: the second publisher waits on row lock and re-evaluates lease condition without corrupting data. Because no test measures wait duration, the mutant survived and is recorded as a known gap.
@@ -144,7 +144,7 @@ History of simulated reviews with internal estimated scores (not an evaluation p
 
 ### 7.1 Round 1 (Invariant Review and Adversarial Audit)
 
-- **Estimated score:** 80/100 in invariant review ([INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md)) and 85/100 in adversarial audit ([FINDINGS.md](audit/FINDINGS.md)), both marked as internal estimates.
+- **Estimated score:** 80/100 in invariant review ([INVARIANT_REVIEW.en.en.md](INVARIANT_REVIEW.en.md)) and 85/100 in adversarial audit ([FINDINGS.md](audit/FINDINGS.md)), both marked as internal estimates.
 - **Highest severity findings and fixes:**
   - Duplicate stake credit across multiple WINs or REFUND after result: resolved with unique index in commit `ce1cb62`.
   - Missing relational validation for currency and round in database: resolved with composite foreign keys and constraints in commit `f9eb95b`.
@@ -169,7 +169,7 @@ History of simulated reviews with internal estimated scores (not an evaluation p
 ## 8. Security automation
 
 CodeQL, Trivy, Dependency Review and Dependabot workflows are configured; their configuration and triggers are
-documented in [SECURITY_AUTOMATION.en.md](SECURITY_AUTOMATION.en.md). Hosted GitHub results and pull request runs
+documented in [SECURITY_AUTOMATION.en.en.md](SECURITY_AUTOMATION.en.md). Hosted GitHub results and pull request runs
 were not executed or reviewed in this audit.
 
 ## 9. Final review update (2026-11-02)
@@ -249,9 +249,9 @@ update records evidence observed after pushing `440fc22`; it does not claim chec
 
 Sections 1–8 preserve the historical review record for `bffe108`. After that review, Money properties using `fast-check` were added in `e486d38`, and the independent financial reference model with generated sequences was added in `7bb288f`; the trailing-slash route limit was fixed in `01ec4a1`; workflows were adjusted in `b85af0e`, `17edca1` and `a3abbae`. This does not rewrite historical results or claim hosted validation for those commits.
 
-- **Confirmed technical decisions:** D1–D4 were confirmed on 2026-11-01 and are catalogued as R-01, R-04/R-05, R-03 and R-06 in [DECISIONS.en.md](../DECISIONS.en.md). They are implemented and tested interpretations, not awaiting internal approval.
+- **Confirmed technical decisions:** D1–D4 were confirmed on 2026-11-01 and are catalogued as R-01, R-04/R-05, R-03 and R-06 in [DECISIONS.en.en.md](../DECISIONS.en.md). They are implemented and tested interpretations, not awaiting internal approval.
 - **Additional interpretation of the brief:** D1 keeps the WIN/LOSS reference optional, and D4 limits a reference to one effective reversal although rule 4 mentions repetition “by the same operation type.” Both were confirmed for this implementation.
 - **Known limitation:** An unreferenced WIN cannot be associated with a BET to prove uniqueness per bet. A ROLLBACK of a BET after a WIN is individual: it returns the stake and does not reverse the WIN; each transaction requires its own reversal.
 - **Question for Jungle Gaming:** only Jungle Gaming can clarify whether it intended different semantics for these ambiguities or other contract questions (such as HTTP 404 status and the `WagerTransactionFailed` event). No internal decision is waiting for that confirmation.
-- **Current evidence:** `test/unit/shared/domain/money.property.test.ts`, `test/integration/model/financial-reference-model.test.ts`, `test/integration/model/random-sequences.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` and [TEST_STRATEGY.en.md](TEST_STRATEGY.en.md). Local verification claims are those recorded in earlier updates; this addendum makes no hosted-result claim for current HEAD.
+- **Current evidence:** `test/unit/shared/domain/money.property.test.ts`, `test/integration/model/financial-reference-model.test.ts`, `test/integration/model/random-sequences.test.ts`, `test/concurrency/process-crash-and-shutdown.test.ts` and [TEST_STRATEGY.en.en.md](TEST_STRATEGY.en.md). Local verification claims are those recorded in earlier updates; this addendum makes no hosted-result claim for current HEAD.
 - **Remaining risks:** no hosted run is confirmed for current SHA; image build remains limited by the observed proxy; association of an unreferenced WIN remains impossible and SQS visibility renewal has a 300 s ceiling.

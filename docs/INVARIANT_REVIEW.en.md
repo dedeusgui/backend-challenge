@@ -3,7 +3,7 @@
 > English reference copy. The main version, in Portuguese, is [INVARIANT_REVIEW.md](INVARIANT_REVIEW.md).
 
 > **Appendix.** The owner's review of every invariant and constraint. The decisions confirmed on 2026-11-01 are
-> listed in [ARCHITECTURE.md](../ARCHITECTURE.en.md) section 13.
+> listed in [ARCHITECTURE.en.md](../ARCHITECTURE.en.md) section 13.
 
 Historical record of the finalization branch review, before its integration into `main`. The review covered every invariant of the
 requirements matrix, every database constraint in the migrations, and every

@@ -1,6 +1,6 @@
 # Database migration
 
-Português: [Migração de banco de dados](database-migration.md).
+Português: [Migração de banco de dados](database-migration.en.md).
 
 ## Context
 

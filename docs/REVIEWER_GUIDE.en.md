@@ -26,7 +26,7 @@ see [ARCHITECTURE.md §14](../ARCHITECTURE.en.md) for the limitation observed in
 
 ## 2. Read the architecture through the decision table (5 min)
 
-[ARCHITECTURE.md](../ARCHITECTURE.en.md), the table at the beginning. Each decision has its reason, accepted cost, test
+[ARCHITECTURE.en.md](../ARCHITECTURE.en.md), the table at the beginning. Each decision has its reason, accepted cost, test
 that proves it, and ADR with alternatives. Sections 5 to 9 develop concurrency, idempotency, messaging, the outbox, and
 out-of-order references.
 
@@ -43,7 +43,7 @@ the SHA and runner, and do not treat old measurements as current.
 
 The recommended command remains the gate against the Compose stack. For an alternative local pilot, use
 `bun run test:containers`; to choose files, append `-- <arquivo>`. Measured results and pilot limits are in
-[TEST_STRATEGY.md](TEST_STRATEGY.en.md), including failure points covered with `SIGKILL`.
+[TEST_STRATEGY.en.md](TEST_STRATEGY.en.md), including failure points covered with `SIGKILL`.
 
 ### Read-only SQL checker
 
@@ -57,7 +57,7 @@ The command uses `DATABASE_URL` when defined; otherwise, it uses the local defau
 gate and the dead-code check; financial, persistence, or infrastructure changes also require `bun run check:all`. The
 SQL command does not change data or replace tests. The SQL queries alone do not prove behavioral properties such as the
 use of `Money` in TypeScript, the absence of a global lock, or publication after commit. See
-[INVARIANT_REVIEW.md](INVARIANT_REVIEW.en.md) for the full limits.
+[INVARIANT_REVIEW.en.md](INVARIANT_REVIEW.en.md) for the full limits.
 
 ## 4. The three most important tests (5 min)
 
@@ -68,7 +68,7 @@ use of `Money` in TypeScript, the absence of a global lock, or publication after
 | Worker killed after commit and before ACK      | `bun test test/concurrency/three-processes.test.ts -t "crashes after commit and before ACK"`         | redelivery applies once; balance and ledger match        |
 | API killed after commit and before response    | `bun test test/concurrency/process-crash-and-shutdown.test.ts -t "HTTP process killed after commit"` | retry returns replay; debit and event are not duplicated |
 
-To see that the concurrency tests are not empty, see the mutations recorded in [TEST_STRATEGY.md](TEST_STRATEGY.en.md),
+To see that the concurrency tests are not empty, see the mutations recorded in [TEST_STRATEGY.en.md](TEST_STRATEGY.en.md),
 in the "Mutation evidence" section: removing the lock or version guard makes the test fail.
 
 For any other guarantee, the [audit/README.md](audit/README.md) index points to the test that proves it.
@@ -77,7 +77,7 @@ For any other guarantee, the [audit/README.md](audit/README.md) index points to 
 
 - `test/e2e/auth-http.test.ts`: what each role can do.
 - `test/e2e/authorization-adversarial.test.ts`: 28 attempts to bypass the rule, by route, header, identifier, and revoked key.
-- The applied decision: a provider key requesting another provider's transaction by internal id receives `404`, just like a nonexistent id. The adversarial test proves isolation and prevents revealing existence. Implementation finding F-03 is closed; the historical contract question is recorded in [AUDITORIA_FINAL.md](AUDITORIA_FINAL.en.md).
+- The applied decision: a provider key requesting another provider's transaction by internal id receives `404`, just like a nonexistent id. The adversarial test proves isolation and prevents revealing existence. Implementation finding F-03 is closed; the historical contract question is recorded in [AUDITORIA_FINAL.en.md](AUDITORIA_FINAL.en.md).
 
 ## 6. HTTP contract (5 min)
 
@@ -128,13 +128,13 @@ status, and ledger through PostgreSQL/API, and requires a single debit. It does 
   [PERFORMANCE_COMPARISON.md](audit/PERFORMANCE_COMPARISON.md), experiments 2 and 4.
 - **Engineering console and load lab.** Not built in this iteration. The telemetry that a console would show became true
   only with the worker surface; a dashboard over the current numbers would be premature. See
-  [AUDITORIA_FINAL.md](AUDITORIA_FINAL.en.md).
+  [AUDITORIA_FINAL.en.md](AUDITORIA_FINAL.en.md).
 - **Prometheus and Grafana.** Not installed. Per-process `/metrics` and the worker surface cover the evaluation; an
   aggregator would require collection per instance, and that has not yet been proven in execution.
 - **Financial properties.** `fast-check` covers cent arithmetic with a reproducible seed and shrinking in
   `test/unit/shared/domain/money.property.test.ts`. An independent model also compares bounded financial sequences,
   replays, and ledger with real PostgreSQL in `test/integration/model/financial-reference-model.test.ts`. Mutation
-  evidence and limits are in [TEST_STRATEGY.md](TEST_STRATEGY.en.md); earlier integration sequences remain in
+  evidence and limits are in [TEST_STRATEGY.en.md](TEST_STRATEGY.en.md); earlier integration sequences remain in
   `test/integration/model/random-sequences.test.ts`.
 - **Comparison with public references.** Not rerun in this session. The numbers in `docs/LOAD_TEST_RESULTS.md` are from
   previous runs on a four-vCPU VM and should not be compared with another machine without noting that.
@@ -155,4 +155,4 @@ counted as a second credit. A second settlement of the same BET is rejected with
 ## 11. Security automation
 
 CodeQL, Trivy, Dependency Review, and Dependabot are configured in the workflows. Hosted results on GitHub and PR runs
-were not executed or reviewed in this session. See [SECURITY_AUTOMATION.md](SECURITY_AUTOMATION.en.md).
+were not executed or reviewed in this session. See [SECURITY_AUTOMATION.en.md](SECURITY_AUTOMATION.en.md).

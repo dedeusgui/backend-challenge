@@ -2,7 +2,7 @@
 
 > English reference copy. The main version, in Portuguese, is [TEST_STRATEGY.md](TEST_STRATEGY.md).
 
-Each guarantee in the [requirements matrix](REQUIREMENTS_MATRIX.md) names the suite that
+Each guarantee in the [requirements matrix](REQUIREMENTS_MATRIX.en.md) names the suite that
 proves it. A row is `PASSING` only after its suite has run and passed. This document says how
 the suites are organised, what each may and may not replace, which failures they inject, and
 what mutation evidence says about whether they can fail.
@@ -272,7 +272,7 @@ were:
 
 The predicted ceiling (the CPUs divided by the CPU per request) was 120 req/s on one CPU and 276 on two, against
 first failing rates of 125 and 300. The 4-CPU ceiling is above 400 in this measurement. The paired before-and-after
-runs, and the baseline they compare with, are in [LOAD_TEST_HISTORY.md](LOAD_TEST_HISTORY.en.md).
+runs, and the baseline they compare with, are in [LOAD_TEST_HISTORY.en.md](LOAD_TEST_HISTORY.en.md).
 
 **What these runs prove, and what they do not:**
 

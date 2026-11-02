@@ -3,7 +3,7 @@
 > English reference copy. The main version, in Portuguese, is [README.md](README.md).
 
 Each record gives the context, the decision, the alternatives and the consequences.
-[ARCHITECTURE.md](../../ARCHITECTURE.en.md) states the main decisions in one table and links here for the
+[ARCHITECTURE.en.md](../../ARCHITECTURE.en.md) states the main decisions in one table and links here for the
 reasoning.
 
 | Record                                                | Decision                                                                | Status             |

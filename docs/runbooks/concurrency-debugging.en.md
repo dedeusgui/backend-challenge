@@ -1,6 +1,6 @@
 # Concurrency debugging
 
-Português: [Depuração de concorrência](concurrency-debugging.md).
+Português: [Depuração de concorrência](concurrency-debugging.en.md).
 
 ## Context
 

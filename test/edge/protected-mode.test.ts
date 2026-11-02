@@ -16,9 +16,10 @@ import { connect, type Socket } from 'bun';
  */
 
 const REPO = join(import.meta.dir, '..', '..');
+const PROJECT_NAME = process.env.COMPOSE_PROJECT_NAME ?? 'backend-challenge';
 const EDGE_HOST_PORT = process.env.EDGE_HOST_PORT ?? '3000';
 const PUBLIC_URL = process.env.EDGE_URL ?? `http://localhost:${EDGE_HOST_PORT}`;
-const NETWORK = process.env.EDGE_NETWORK ?? 'backend-challenge_default';
+const NETWORK = process.env.EDGE_NETWORK ?? `${PROJECT_NAME}_default`;
 const COMPOSE = [
   'docker',
   'compose',
@@ -56,6 +57,10 @@ async function fromClient(script: string): Promise<string> {
     'sh',
     '--network',
     NETWORK,
+    '-e',
+    'NO_PROXY=localhost,127.0.0.1,::1,api,edge',
+    '-e',
+    'no_proxy=localhost,127.0.0.1,::1,api,edge',
     CLIENT_IMAGE,
     '-c',
     script,
@@ -139,7 +144,7 @@ describe('protected mode: the edge is the only way in', () => {
     const inspect = await run([
       'docker',
       'inspect',
-      'backend-challenge-api-1',
+      `${PROJECT_NAME}-api-1`,
       '--format',
       '{{json .NetworkSettings.Ports}}',
     ]);
@@ -150,7 +155,7 @@ describe('protected mode: the edge is the only way in', () => {
     const edge = await run([
       'docker',
       'inspect',
-      'backend-challenge-edge-1',
+      `${PROJECT_NAME}-edge-1`,
       '--format',
       '{{json .NetworkSettings.Ports}}',
     ]);
@@ -161,7 +166,7 @@ describe('protected mode: the edge is the only way in', () => {
   });
 
   test('PostgreSQL and LocalStack publish no port in protected mode, at run time', async () => {
-    for (const container of ['backend-challenge-postgres-1', 'backend-challenge-localstack-1']) {
+    for (const container of [`${PROJECT_NAME}-postgres-1`, `${PROJECT_NAME}-localstack-1`]) {
       const inspect = await run([
         'docker',
         'inspect',
@@ -179,7 +184,7 @@ describe('protected mode: the edge is the only way in', () => {
   });
 
   test('the API is reachable on the internal network, so only the edge stands in front of it', async () => {
-    const internal = await fromClient('wget -q -O - http://api:3000/health/live');
+    const internal = await fromClient('wget -Y off -q -O - http://api:3000/health/live');
 
     expect(internal).toContain('"status":"ok"');
   });
@@ -290,8 +295,8 @@ describe('protected mode: the edge is the only way in', () => {
     await sleep(QUOTA_WINDOW_MS);
     // The flood lasts four seconds and keeps the quota empty. The quiet client starts inside that time, so
     // a quota shared between the two addresses would refuse it. A flood that ended first would prove nothing.
-    const flood = `end=$(( $(date +%s) + 4 )); while [ $(date +%s) -lt $end ]; do seq 1 30 | xargs -P 30 -I{} sh -c 'wget -S -q -O /dev/null "http://edge:8080${readPath}" 2>&1 | head -n 1'; done`;
-    const quietRequests = `sleep 1; seq 1 10 | xargs -P 10 -I{} sh -c 'wget -S -q -O /dev/null "http://edge:8080${readPath}" 2>&1 | head -n 1'`;
+    const flood = `end=$(( $(date +%s) + 4 )); while [ $(date +%s) -lt $end ]; do seq 1 30 | xargs -P 30 -I{} sh -c 'wget -Y off -S -q -O /dev/null "http://edge:8080${readPath}" 2>&1 | head -n 1'; done`;
+    const quietRequests = `sleep 1; seq 1 10 | xargs -P 10 -I{} sh -c 'wget -Y off -S -q -O /dev/null "http://edge:8080${readPath}" 2>&1 | head -n 1'`;
 
     const [noisy, quiet] = await Promise.all([fromClient(flood), fromClient(quietRequests)]);
 

@@ -302,6 +302,107 @@ describe('an HTTP process killed inside a transaction, before commit', () => {
   }, 120_000);
 });
 
+describe('an HTTP process killed after commit, before response', () => {
+  test('a retry returns the committed result without applying it or emitting events twice', async () => {
+    const wallet = await openWalletWith('100.00');
+    const externalTransactionId = `http-post-commit-${randomUUID()}`;
+    const providerKey = (
+      await new CreateApiClient({
+        repository: new MikroOrmApiClientRepository(cluster.database.orm),
+        clock: () => NOW,
+        newId: randomUUID,
+      }).execute({
+        name: 'crash-after-commit-provider',
+        role: 'PROVIDER',
+        providerId: 'provider-a',
+      })
+    ).apiKey;
+    const apiUrl = await cluster.startApi(
+      'http-killed-after-commit',
+      'test/support/crashing-after-commit-api.ts',
+    );
+    const requestBody = {
+      providerId: 'provider-a',
+      externalTransactionId,
+      playerId: wallet.playerId,
+      walletId: wallet.walletId,
+      roundId: 'round-987',
+      gameId: 'fortune-chimp',
+      kind: 'BET',
+      money: { amount: '25.00', currency: 'BRL' },
+    };
+    const headers = {
+      authorization: `Bearer ${providerKey}`,
+      'content-type': 'application/json',
+      'idempotency-key': `provider-a:${externalTransactionId}`,
+    };
+    const api = required(
+      cluster.processes.find(({ name }) => name === 'http-killed-after-commit'),
+      'the HTTP process under test',
+    );
+
+    const firstAttempt = await fetch(`${apiUrl}/wagering/transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    }).then(
+      (response) => ({ status: response.status }),
+      (error: unknown) => ({ error }),
+    );
+    expect('error' in firstAttempt).toBe(true);
+    expect(await exitOrTimeout(api, 5_000)).toBe(137);
+
+    expect(await scalar(`SELECT balance::text FROM wallets WHERE id = ?`, [wallet.walletId])).toBe(
+      '75.00',
+    );
+    expect(
+      await scalar(
+        `SELECT count(*)::text FROM wager_transactions WHERE wallet_id = ? AND external_transaction_id = ? AND status = 'PROCESSED'`,
+        [wallet.walletId, externalTransactionId],
+      ),
+    ).toBe('1');
+    expect(
+      await scalar(`SELECT count(*)::text FROM wallet_ledger_entries WHERE wallet_id = ?`, [
+        wallet.walletId,
+      ]),
+    ).toBe('2');
+    expect(
+      await scalar(`SELECT count(*)::text FROM outbox_messages WHERE payload::text LIKE ?`, [
+        `%${externalTransactionId}%`,
+      ]),
+    ).toBe('1');
+
+    const retryApi = await cluster.startApi('http-retry-after-lost-response');
+    const replay = await fetch(`${retryApi}/wagering/transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({
+      status: 'PROCESSED',
+      idempotentReplay: true,
+      balance: { amount: '75.00' },
+    });
+    expect(
+      await scalar(
+        `SELECT count(*)::text FROM wager_transactions WHERE wallet_id = ? AND external_transaction_id = ? AND status = 'PROCESSED'`,
+        [wallet.walletId, externalTransactionId],
+      ),
+    ).toBe('1');
+    expect(
+      await scalar(`SELECT count(*)::text FROM wallet_ledger_entries WHERE wallet_id = ?`, [
+        wallet.walletId,
+      ]),
+    ).toBe('2');
+    expect(
+      await scalar(`SELECT count(*)::text FROM outbox_messages WHERE payload::text LIKE ?`, [
+        `%${externalTransactionId}%`,
+      ]),
+    ).toBe('1');
+  }, 120_000);
+});
+
 describe('a worker stopped with SIGTERM during a batch', () => {
   test('finishes and acknowledges the batch in progress, and a restarted worker applies the rest exactly once', async () => {
     const wallet = await openWalletWith('500.00');

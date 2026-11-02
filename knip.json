@@ -11,6 +11,7 @@
     "test/features/steps/**/*.ts",
     "src/shared/infrastructure/database/migrations/**/*.ts",
     "test/support/crashing-before-commit-worker.ts",
+    "test/support/crashing-after-commit-api.ts",
     "test/support/crashing-worker.ts",
     "test/support/slow-worker.ts"
   ],

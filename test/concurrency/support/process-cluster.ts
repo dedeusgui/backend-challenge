@@ -117,11 +117,11 @@ export class ProcessCluster {
    * The port is reserved by the kernel and released before the child binds it, so another
    * process can take it in between. A child that exits before it is ready is retried on a new port.
    */
-  async startApi(name: string): Promise<string> {
+  async startApi(name: string, script = 'src/main.ts'): Promise<string> {
     const attempts = 3;
     for (let attempt = 1; ; attempt++) {
       const port = freePort();
-      const managed = this.spawn(name, 'src/main.ts', { PORT: String(port) });
+      const managed = this.spawn(name, script, { PORT: String(port) });
       const baseUrl = `http://127.0.0.1:${port}`;
       try {
         await waitUntilReady(baseUrl, managed);

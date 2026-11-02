@@ -235,3 +235,12 @@ inspected. There is no evidence to attribute the missing runs to `GITHUB_TOKEN`.
 - **Hosted release blocker:** no hosted checks were observed for the input SHA. A maintainer still needs to dispatch CI
   and CodeQL for the release SHA; Dependency Review requires a pull request to `main`. Until then, the release has no
   CI/security approval associated with its final SHA.
+
+## 11. Hosted status after push (`440fc2240cac979c28f68c268ecc295255cbf04b`)
+
+The push to `main` succeeded, and `git ls-remote` confirmed this SHA as the remote tip. The [public checks page](https://github.com/dedeusgui/backend-challenge/commit/440fc2240cac979c28f68c268ecc295255cbf04b/checks)
+said “There are no checks for this commit”; the [Actions list](https://github.com/dedeusgui/backend-challenge/actions)
+showed no run for this SHA. `gh` has no valid session (`GH_TOKEN` is invalid), and the proxy blocked `api.github.com`
+with 403; that host is absent from the observed allowlist. The cause of the missing workflow is still unproven. A
+maintainer must run CI and CodeQL for the release SHA in GitHub’s UI and open a PR to obtain Dependency Review. This
+update records evidence observed after pushing `440fc22`; it does not claim checks for the commit that records it.

@@ -237,3 +237,12 @@ puderam ser inspecionadas. Não há evidência para atribuir a ausência a `GITH
 - **Bloqueio hospedado:** não foram observados checks hospedados para o SHA de entrada. Um mantenedor ainda precisa
   disparar CI e CodeQL para o SHA de release; Dependency Review requer uma pull request para `main`. Até isso ocorrer,
   a release não tem aprovação de CI/segurança associada ao SHA final.
+
+## 11. Estado hospedado depois do push (`440fc2240cac979c28f68c268ecc295255cbf04b`)
+
+O push de `main` foi aceito e `git ls-remote` confirmou esse SHA como ponta remota. A [página pública de checks](https://github.com/dedeusgui/backend-challenge/commit/440fc2240cac979c28f68c268ecc295255cbf04b/checks)
+respondeu “There are no checks for this commit”; a [lista de Actions](https://github.com/dedeusgui/backend-challenge/actions)
+não mostrou run desse SHA. O `gh` não tem sessão válida (`GH_TOKEN` inválido), e o proxy bloqueou `api.github.com` com
+403; esse host não consta na allowlist observada. A causa de não haver workflow continua sem comprovação. Um mantenedor
+precisa executar CI e CodeQL no SHA de release pela interface do GitHub e abrir uma PR para obter Dependency Review.
+Esta atualização registra evidência posterior ao push de `440fc22`; não afirma checks para o commit que a registra.

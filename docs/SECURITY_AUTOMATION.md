@@ -49,3 +49,11 @@ sem comprovação.
 Para gerar a evidência hospedada que falta, um mantenedor deve executar CI e CodeQL em **Actions → Run workflow**, no
 SHA de release; Dependency Review exige uma pull request destinada a `main`. Até essas execuções existirem, não há
 aprovação hospedada de CI, Testcontainers, runtime smoke, modo protegido, Trivy ou CodeQL para esse SHA.
+
+### Resultado após o push
+
+`main` foi atualizado para `440fc2240cac979c28f68c268ecc295255cbf04b`. A [página pública de checks](https://github.com/dedeusgui/backend-challenge/commit/440fc2240cac979c28f68c268ecc295255cbf04b/checks)
+informa “There are no checks for this commit”; a [lista de Actions](https://github.com/dedeusgui/backend-challenge/actions)
+não apresenta execução para ele. O push funcionou, mas sua identidade não pôde ser inspecionada. O token `GH_TOKEN` é
+inválido, e a API do GitHub não está disponível pela allowlist de rede deste ambiente. Não há evidência para atribuir
+isso à supressão de workflows pelo `GITHUB_TOKEN` ou a configurações de Actions desabilitadas.

@@ -47,3 +47,11 @@ push identity could not be inspected. Suppression due to `GITHUB_TOKEN` remains 
 A maintainer must run CI and CodeQL from **Actions → Run workflow** for the release SHA to produce hosted evidence;
 Dependency Review requires a pull request targeting `main`. Until those runs exist, there is no hosted approval for
 CI, Testcontainers, runtime smoke, protected mode, Trivy or CodeQL on that SHA.
+
+### Status after the push
+
+`main` was updated to `440fc2240cac979c28f68c268ecc295255cbf04b`. The [public checks page](https://github.com/dedeusgui/backend-challenge/commit/440fc2240cac979c28f68c268ecc295255cbf04b/checks)
+says “There are no checks for this commit”; the [Actions list](https://github.com/dedeusgui/backend-challenge/actions)
+shows no run for it. The push succeeded, but its identity could not be inspected. `GH_TOKEN` is invalid, and the
+GitHub API is unavailable under this environment’s network allowlist. There is no evidence to attribute the missing
+runs to `GITHUB_TOKEN` workflow suppression or disabled Actions settings.

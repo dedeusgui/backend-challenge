@@ -8,6 +8,12 @@ teste ou verificação executado), `BLOCKED`. Uma linha é `PASSING` só quando 
 comando do teste listado foi executado e passou. Atualize este arquivo no mesmo
 commit da fatia que altera uma linha.
 
+O verificador complementar `bun run scripts/check-financial-invariants.ts` executa consultas SQL em transação
+read-only para `INV-01` a `INV-11`; `INV-12` é apenas informativo. Ele verifica estado e estrutura visíveis no banco,
+mas não prova sozinho o uso de `Money` em TypeScript, a ausência de lock global ou a publicação após commit. Consulte
+[a revisão de invariantes](INVARIANT_REVIEW.md) para o escopo e os limites. A presença do comando nesta documentação
+não significa que ele foi executado no HEAD atual.
+
 ## Invariantes e restrições (§3, §5, §8)
 
 | ID     | Requisito (§) | Garantia / invariante                                                                    | Componente                                    | Constraint no banco                                                                                                                   | Testes                                      | Status  | Observações                                                                                                                                                                                                                                 |

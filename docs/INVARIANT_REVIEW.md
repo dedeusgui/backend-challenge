@@ -41,6 +41,25 @@ Verificado por leitura de código, não por teste: que `Wallet.credit` não veri
 liquidação verifica `canCredit` primeiro, e o banco recusa o excedente); que o worker de referências adquire o lock da carteira
 antes de reler uma transação retida; que o consumidor confirma (ACK) apenas após o retorno da unidade de trabalho.
 
+### Verificação SQL read-only
+
+O verificador `scripts/check-financial-invariants.ts` executa `scripts/financial-invariants.sql` dentro de uma
+transação `READ ONLY`. Com PostgreSQL disponível e o schema migrado, rode da raiz do repositório:
+
+```bash
+bun run scripts/check-financial-invariants.ts
+```
+
+O `DATABASE_URL` pode apontar para outro banco; sem ele, o comando usa o padrão local do projeto. O SQL verifica
+`INV-01` a `INV-11` usando dados, constraints e triggers visíveis no PostgreSQL. `INV-12` apenas informa a
+contagem de migrações e não falha se ela diferir do valor esperado.
+
+Este verificador é uma inspeção pontual do estado e da estrutura observáveis no banco. Não prova sozinho que o tipo
+`Money` é usado no TypeScript (`INV-03`), que não existe lock global (`INV-07`), que o lock correto é aplicado em cada
+fluxo (`INV-08`, `INV-11`), nem que a publicação ocorre após o commit (`INV-05`). Esses comportamentos dependem de
+leitura de código e dos testes correspondentes. O resultado SQL também não substitui o gate de testes nem uma execução
+em CI.
+
 ## 1. Defeitos encontrados nesta revisão e suas correções
 
 | #   | Defeito                                                                                | Correção                                                                                                                                             | Commit    |

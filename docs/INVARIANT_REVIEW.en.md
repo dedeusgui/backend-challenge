@@ -43,6 +43,24 @@ Checked by reading the code, not by a test: that `Wallet.credit` does not check 
 settlement checks `canCredit` first, and the database refuses the rest); that the reference worker takes the wallet
 lock before it re-reads a held transaction; that the consumer acknowledges only after the unit of work returns.
 
+### Read-only SQL verification
+
+The verifier `scripts/check-financial-invariants.ts` runs `scripts/financial-invariants.sql` inside a `READ ONLY`
+transaction. With PostgreSQL available and the schema migrated, run it from the repository root:
+
+```bash
+bun run scripts/check-financial-invariants.ts
+```
+
+`DATABASE_URL` can point to another database; when unset, the command uses the project's local default. The SQL checks
+`INV-01` through `INV-11` using data, constraints and triggers visible to PostgreSQL. `INV-12` only reports
+the migration count and does not fail when it differs from the expected value.
+
+This verifier is a point-in-time inspection of database state and structure. It does not by itself prove that the
+TypeScript `Money` type is used (`INV-03`), that there is no global lock (`INV-07`), that every flow applies the
+correct lock (`INV-08`, `INV-11`), or that publication happens after commit (`INV-05`). Those behaviors require code
+review and the corresponding tests. The SQL result also does not replace the test gate or a CI run.
+
 ## 1. Defects found in this review, and their fixes
 
 | #   | Defect                                                                     | Fix                                                                                                                                                  | Commit    |

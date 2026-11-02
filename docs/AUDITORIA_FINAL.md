@@ -8,19 +8,20 @@ Os dados brutos de execução não são versionados no repositório.
 
 ## 1. Código auditado
 
-- **Commit:** `bffe108`
+- **Commit revisado naquela auditoria:** `bffe108`
 - **Comando de obtenção:** `git log -1 --format=%h -- src test`
 - **Data:** 2026-11-01 (19:21:49 -0300)
 
-Commits posteriores a esse hash alteraram exclusivamente documentação e arquivos de catálogo.
+Este é o escopo histórico daquela revisão. O HEAD atual contém alterações posteriores de código e CI; este registro não
+afirma que elas foram revisadas nem validadas.
 
 ## 2. Como foi verificado
 
 | Verificação                     | Comando                                                              | Resultado                                                                                                                                                                                                                                                                                           |
 | :------------------------------ | :------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gate de validação               | `bun run check:all`                                                  | Registrado em `docs/gate/ultimo-gate.json` (2026-11-01T20:40:46.191Z, exitCode 0). 937 testes sem falhas: 490 unitários, 4 de infraestrutura, 247 de integração, 23 de concorrência, 100 e2e e 73 cenários Gherkin (365 passos).                                                                    |
-| Verificação estática e unitária | `bun run check:fast`                                                 | Sucesso em 512 testes unitários (0 falhas), `tsc --noEmit` sem erros, `oxlint` sem avisos em 256 arquivos e `prettier --check` aprovado.                                                                                                                                                            |
-| Carga e capacidade              | `bun run test:load`                                                  | Benchmarks registrados em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md), e a linha de base local em [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md) (medição na nuvem em 1, 2 e 4 CPUs com 100, 200 e 400 req/s) e em [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md) (medição local com 13 cenários). |
+| Gate de validação               | `bun run check:all`                                                  | O registro legado em `docs/gate/ultimo-gate.json` contém 937 aprovações, mas não identifica SHA nem ambiente. O validador o marca como inválido; portanto, é evidência histórica e não comprova o HEAD nem uma execução atual.                                                                                                                                    |
+| Verificação estática e unitária | `bun run check:fast`                                                 | Registro histórico: 512 testes unitários, `tsc --noEmit`, `oxlint` e `prettier --check` foram reportados como aprovados. Sem SHA e ambiente associados, não comprova o HEAD atual.                                                                                                                        |
+| Carga e capacidade              | `bun run test:load`                                                  | Campanha de nuvem em [LOAD_TEST_RESULTS.md](LOAD_TEST_RESULTS.md); linha de base local em [LOAD_TEST_BASELINE.md](LOAD_TEST_BASELINE.md), com 13 cenários. Os resultados são medições anteriores, não execução deste HEAD.                                                                                                                                    |
 | Demonstração financeira         | `bun run demo:finance`                                               | ExitCode 0 contra a pilha de contêineres: validação de BET, WIN, REFUND, ROLLBACK, replay e reconciliação.                                                                                                                                                                                          |
 | Contrato da API HTTP            | `bun test test/unit/openapi/` e `test/e2e/openapi-responses.test.ts` | Rotas, esquemas e respostas reais validados contra `docs/openapi.json`.                                                                                                                                                                                                                             |
 | Vitrine estática                | `bun test test/unit/site/static-showcase.test.ts`                    | Geração estática validada, publicada e com resposta HTTP 200 via GitHub Pages.                                                                                                                                                                                                                      |
@@ -62,8 +63,8 @@ Estimativas citadas da barra de avaliação interna (meta estimada de 90/100 pon
 ### 3.6 Testes
 
 - **Pontos da barra:** 10 pontos no enunciado (§14). Meta estimada na revisão simulada: 9 pontos.
-- **Evidência:** 937 testes sem mocks de PostgreSQL ou LocalStack nas suítes de integração, concorrência e e2e (`docs/gate/ultimo-gate.json`); 73 cenários Gherkin executáveis cobrindo 365 passos (`test/features/`); injeção de falhas com encerramento de processos reais via `SIGKILL` e `SIGTERM` (`test/concurrency/three-processes.test.ts` e `test/concurrency/process-crash-and-shutdown.test.ts`).
-- **Lacuna conhecida:** Dois cenários com tag `@bloqueado` em `test/features/mensageria.feature` não rodam no gate de features; 22 IDs da matriz `docs/audit/EDGE_CASE_MATRIX.md` não possuem a tag `@edge:` nos arquivos de feature; não há teste cobrindo ROLLBACK antes do BET com aplicação posterior (§13.7); sem testes contínuos de mutação no CI.
+- **Evidência histórica:** O registro legado de `docs/gate/ultimo-gate.json` mostra 937 aprovações, incluindo 73 cenários Gherkin e 365 passos, mas não contém SHA nem ambiente e é marcado como inválido. Não o use como prova de validação do HEAD. A cobertura de ROLLBACK retido antes da BET existe em `test/integration/wagering/pending-reference.test.ts` (`a held ROLLBACK is applied once its BET has been processed, and balances the ledger`).
+- **Lacuna conhecida:** Dois cenários com tag `@bloqueado` em `test/features/mensageria.feature` não rodam no gate de features; 22 IDs da matriz `docs/audit/EDGE_CASE_MATRIX.md` não possuem a tag `@edge:` nos arquivos de feature; sem testes contínuos de mutação no CI.
 
 ### 3.7 Observabilidade
 
@@ -125,7 +126,7 @@ Oito decisões permanecem abertas aguardando confirmação do dono do desafio. O
 
 Limitações técnicas da suíte de testes e das medições realizadas:
 
-- **§13.7 (ROLLBACK antes da referência):** Para a chegada de REFUND antes do BET, existe teste automatizado em `test/integration/wagering/pending-reference.test.ts`. Para a chegada de ROLLBACK antes do BET com posterior liquidação bem-sucedida após a chegada da aposta, não existe teste no repositório. O teste existente em `test/integration/wagering/database-clock-references.test.ts` (linhas 158 a 191) cobre apenas a retenção e a rejeição após o esgotamento de tentativas.
+- **§13.7 (referência fora de ordem):** A chegada de REFUND antes da BET é coberta em `test/integration/wagering/pending-reference.test.ts`. A chegada de ROLLBACK antes da BET e sua liquidação após a chegada da aposta também é coberta no mesmo arquivo (`a held ROLLBACK is applied once its BET has been processed, and balances the ledger`). `database-clock-references.test.ts` cobre, separadamente, a retenção e a rejeição após o esgotamento de tentativas.
 - **Cenários Gherkin com tag `@bloqueado`:** O comando `grep -c "@bloqueado" test/features/*.feature` registra 2 cenários no arquivo `test/features/mensageria.feature`:
   1. Linha 71: "Uma mensagem que falha em dez entregas vai para a DLQ pelo redrive" (`@edge:QU-04`). Motivo: o harness BDD isolado não recebe a política de redrive do SQS. A cobertura real é provada em `test/integration/messaging/broker-redrive.test.ts`.
   2. Linha 91: "SIGTERM durante um lote conclui o item atual e devolve o restante" (`@edge:QU-07`). Motivo: o harness BDD não controla processos do sistema operacional. A cobertura real é provada em `test/concurrency/process-crash-and-shutdown.test.ts`.
@@ -164,3 +165,9 @@ Histórico das revisões simuladas com notas estimadas internas (não constituem
   - Acoplamento em portas de infraestrutura: corrigido pela segregação de portas em `application/ports/` e separação dos fluxos de entrada e saída no commit `ef390fe`.
   - Métrica `retries_total` ausente (§12): implementada e exposta em `/metrics` no commit `4ee8f72`.
   - Ausência de suíte BDD executável rastreável à matriz de borda: implementada com 73 cenários Gherkin em `test/features/` nos commits `3620d74` e `c8320ea`.
+
+## 8. Automação de segurança
+
+Os workflows de CodeQL, Trivy, Dependency Review e Dependabot estão configurados; a configuração e seus gatilhos
+estão descritos em [SECURITY_AUTOMATION.md](SECURITY_AUTOMATION.md). Resultados hospedados do GitHub e execuções
+de PR não foram executados nem revisados nesta auditoria.

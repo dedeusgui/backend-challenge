@@ -40,6 +40,19 @@ o e2e, contra PostgreSQL 17 e LocalStack reais. Os números de cada suíte mudam
 exige que todos passem. Neste ambiente, as suítes levaram cerca de 100 s: unitários 6 s, integração 61 s, concorrência
 26 s e e2e 3 s, sem contar a subida da infraestrutura.
 
+### Verificador SQL read-only
+
+Com a stack em execução e as migrações aplicadas, este comando inspeciona o banco em uma transação read-only:
+
+```bash
+bun run scripts/check-financial-invariants.ts
+```
+
+O comando usa `DATABASE_URL` quando definida; sem ela, usa o padrão local. O projeto não define um script
+`agent:verify`; invoque o arquivo diretamente como acima. O comando não altera dados nem substitui os testes. As consultas SQL não provam sozinhas propriedades de comportamento como o uso
+de `Money` em TypeScript, a ausência de lock global ou a publicação após commit. Veja
+[INVARIANT_REVIEW.md](INVARIANT_REVIEW.md) para os limites completos.
+
 ## 4. Os três testes que mais importam (5 min)
 
 | Requisito                                        | Comando                                                                                      | O que observar                                         |
@@ -121,3 +134,8 @@ nomear a BET, é contado como segundo crédito. Uma segunda liquidação da mesm
 
 - Uma mensagem em voo que roda além de 300 s é liberada, e dois consumidores podem processar o mesmo comando ao mesmo
   tempo. A identidade da transação mantém o efeito em um (`slow-message-hold.test.ts`).
+
+## 11. Automação de segurança
+
+CodeQL, Trivy, Dependency Review e Dependabot estão configurados nos workflows. Resultados hospedados no GitHub e
+execuções de PR não foram executados nem revisados nesta sessão. Veja [SECURITY_AUTOMATION.md](SECURITY_AUTOMATION.md).
